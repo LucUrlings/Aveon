@@ -1,0 +1,43 @@
+# Node / frontend
+node_modules
+dist
+.vite
+.env
+.env.*
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Generated
+generated/
+models/openapi/
+
+# pnpm
+.pnpm-store
+
+# misc
+coverage
+
+# .NET
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / VS
+*.idea/
+.vs/

@@ -1,0 +1,12 @@
+{
+  "name": "aveon",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "pnpm --dir apps/frontend dev",
+    "dev:backend": "dotnet run --project apps/backend",
+    "dev": "concurrently \"pnpm dev:frontend\" \"pnpm dev:backend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
