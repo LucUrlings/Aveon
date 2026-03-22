@@ -1,13 +1,16 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>971f7b2c-13fa-4ab1-a99b-f6927f318d96</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.24" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.5" />
   </ItemGroup>
 
 </Project>

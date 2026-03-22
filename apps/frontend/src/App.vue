@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import HelloWorld from './components/HelloWorld.vue'
+import FlightSearch from './components/FlightSearch.vue'
 </script>
 
 <template>
-  <HelloWorld />
+  <FlightSearch />
 </template>

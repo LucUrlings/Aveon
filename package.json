@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev:frontend": "pnpm --dir apps/frontend dev",
-    "dev:backend": "dotnet run --project apps/backend",
+    "dev:backend": "dotnet watch run --project apps/backend",
     "dev": "concurrently \"pnpm dev:frontend\" \"pnpm dev:backend\""
   },
   "devDependencies": {
