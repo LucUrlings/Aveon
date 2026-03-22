@@ -10,6 +10,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       FlightApi__ApiKey: ${FLIGHTAPI_API_KEY}
       Redis__ConnectionString: redis:6379
+      Redis__FlightApiOneWayTtlMinutes: ${REDIS_FLIGHT_API_ONE_WAY_TTL_MINUTES:-30}
+      Redis__AirportDataTtlMinutes: ${REDIS_AIRPORT_DATA_TTL_MINUTES:-10080}
     networks:
       - aveon
 
