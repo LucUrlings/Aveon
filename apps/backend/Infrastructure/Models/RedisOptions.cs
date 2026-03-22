@@ -9,4 +9,6 @@ public record RedisOptions
     public int FlightApiOneWayTtlMinutes { get; init; } = 30;
 
     public int AirportDataTtlMinutes { get; init; } = 10080;
+
+    public int SearchSessionTtlMinutes { get; init; } = 60;
 }

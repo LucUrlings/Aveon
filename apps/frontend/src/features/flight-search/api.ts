@@ -4,6 +4,7 @@ import type {
   SearchMetadata,
   SearchRequest,
   SearchResponse,
+  SearchSessionResponse,
   SearchResult,
   SearchResultLeg,
   SearchResultPriceOption,
@@ -19,6 +20,7 @@ type ApiSearchResult = components['schemas']['SearchResult']
 type ApiSearchResultLeg = components['schemas']['SearchResultLeg']
 type ApiSearchResultPriceOption = components['schemas']['SearchResultPriceOption']
 type ApiSearchResultSegment = components['schemas']['SearchResultSegment']
+type ApiSearchSessionResponse = components['schemas']['SearchSessionResponse']
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
 const apiBaseUrl = configuredApiBaseUrl
@@ -85,6 +87,18 @@ const normalizeSearchResponse = (response: ApiSearchResponse): SearchResponse =>
   metadata: normalizeMetadata(response.metadata),
 })
 
+const normalizeSearchSessionResponse = (session: ApiSearchSessionResponse): SearchSessionResponse => {
+  return {
+    searchId: session.searchId ?? '',
+    status: session.status ?? 'running',
+    totalCombinations: session.totalCombinations ?? 0,
+    completedCombinations: session.completedCombinations ?? 0,
+    failedCombinations: session.failedCombinations ?? 0,
+    response: normalizeSearchResponse(session.response ?? {}),
+    errorMessage: session.errorMessage ?? null,
+  }
+}
+
 export const fetchAirportSuggestions = async (query: string) => {
   const res = await fetch(`${apiBaseUrl}/api/v1/airports?query=${encodeURIComponent(query)}`)
   if (!res.ok) {
@@ -109,5 +123,16 @@ export const searchFlightsRequest = async (request: SearchRequest) => {
     throw new Error(message || `HTTP ${res.status}`)
   }
 
-  return normalizeSearchResponse((await res.json()) as ApiSearchResponse)
+  return normalizeSearchSessionResponse((await res.json()) as ApiSearchSessionResponse)
+}
+
+export const getSearchSession = async (searchId: string) => {
+  const res = await fetch(`${apiBaseUrl}/api/v1/search/${encodeURIComponent(searchId)}`)
+
+  if (!res.ok) {
+    const message = await res.text()
+    throw new Error(message || `HTTP ${res.status}`)
+  }
+
+  return normalizeSearchSessionResponse((await res.json()) as ApiSearchSessionResponse)
 }

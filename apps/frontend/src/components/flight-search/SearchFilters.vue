@@ -48,16 +48,16 @@ const selectedProviders = defineModel<string[]>('selectedProviders', { required:
 
 .filters-card {
   border: 1px solid rgba(29, 34, 40, 0.08);
-  border-radius: 28px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.88);
   box-shadow: 0 24px 60px rgba(41, 49, 61, 0.08);
   backdrop-filter: blur(18px);
-  padding: 22px 18px;
+  padding: 12px;
 }
 
 .eyebrow {
-  margin: 0 0 10px;
-  font-size: 0.78rem;
+  margin: 0 0 6px;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -65,27 +65,29 @@ const selectedProviders = defineModel<string[]>('selectedProviders', { required:
 }
 
 h3 {
-  margin: 0 0 18px;
+  margin: 0 0 8px;
   color: #1d2228;
-  font-size: 1.25rem;
+  font-size: 0.96rem;
+  font-weight: 600;
 }
 
 .filter-row {
   display: grid;
-  gap: 10px;
-  margin-bottom: 18px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .filter-toggle {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 0.88rem;
 }
 
 .filter-label,
 .filter-row span {
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -93,7 +95,7 @@ h3 {
 }
 
 .provider-filter-group {
-  padding-top: 14px;
+  padding-top: 8px;
   border-top: 1px solid rgba(29, 34, 40, 0.08);
 }
 </style>

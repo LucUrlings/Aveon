@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import FlightSearchBar from './flight-search/FlightSearchBar.vue'
 import SearchFilters from './flight-search/SearchFilters.vue'
 import SearchResultCard from './flight-search/SearchResultCard.vue'
-import { fetchAirportSuggestions, searchFlightsRequest } from '../features/flight-search/api'
+import { fetchAirportSuggestions, getSearchSession, searchFlightsRequest } from '../features/flight-search/api'
 import {
   cabinOptions,
   flexibilityOptions,
   type AirportOption,
   type SearchRequest,
   type SearchResponse,
+  type SearchSessionResponse,
 } from '../features/flight-search/types'
 
 const originInput = ref('')
@@ -32,6 +33,7 @@ const destinationSuggestions = ref<AirportOption[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 const response = ref<SearchResponse | null>(null)
+const searchSession = ref<SearchSessionResponse | null>(null)
 const expandedResultIds = ref<string[]>([])
 const isSearchCollapsed = ref(false)
 
@@ -41,6 +43,7 @@ const maxPrice = ref(800)
 
 let originRequestId = 0
 let destinationRequestId = 0
+let pollingTimer: number | null = null
 
 const providerFilters = computed(() => {
   if (!response.value) {
@@ -84,6 +87,18 @@ const searchSummary = computed(() => {
 
   return `${filteredResults.value.length} flights after filters`
 })
+
+const progressPercentage = computed(() => {
+  if (!searchSession.value || searchSession.value.totalCombinations === 0) {
+    return 0
+  }
+
+  return Math.round((searchSession.value.completedCombinations / searchSession.value.totalCombinations) * 100)
+})
+
+const isPolling = computed(() =>
+  searchSession.value?.status === 'running',
+)
 
 const compactSearchSummary = computed(() => {
   const origins = originAirports.value.map((airport) => airport.code).join(', ')
@@ -187,10 +202,47 @@ onMounted(() => {
   void fetchAirportSuggestions(destinationAirports.value[0].code)
 })
 
+onBeforeUnmount(() => {
+  stopPolling()
+})
+
+const stopPolling = () => {
+  if (pollingTimer !== null) {
+    window.clearTimeout(pollingTimer)
+    pollingTimer = null
+  }
+}
+
+const pollSearchSession = async (searchId: string) => {
+  try {
+    const session = await getSearchSession(searchId)
+    searchSession.value = session
+    response.value = session.response
+
+    if (session.errorMessage) {
+      error.value = session.errorMessage
+    }
+
+    if (session.status === 'running') {
+      pollingTimer = window.setTimeout(() => {
+        void pollSearchSession(searchId)
+      }, 1000)
+      return
+    }
+
+    stopPolling()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Unknown error'
+    stopPolling()
+  }
+}
+
 const searchFlights = async () => {
+  stopPolling()
   loading.value = true
   error.value = null
   response.value = null
+  searchSession.value = null
   expandedResultIds.value = []
 
   try {
@@ -205,12 +257,21 @@ const searchFlights = async () => {
       cabinClass: cabinClass.value,
     }
 
-    response.value = await searchFlightsRequest(request)
+    const session = await searchFlightsRequest(request)
+    searchSession.value = session
+    response.value = session.response
     isSearchCollapsed.value = true
+    loading.value = false
+
+    if (session.status === 'running') {
+      await pollSearchSession(session.searchId)
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Unknown error'
   } finally {
-    loading.value = false
+    if (!isPolling.value) {
+      loading.value = false
+    }
   }
 }
 
@@ -277,6 +338,23 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
 
     <p v-if="error" class="error-message">{{ error }}</p>
 
+    <Transition name="progress-shell">
+      <section v-if="isPolling && searchSession" class="progress-shell">
+        <div class="progress-copy">
+          <p class="eyebrow">Search Progress</p>
+          <strong>
+            {{ searchSession.completedCombinations }} / {{ searchSession.totalCombinations }} combinations
+          </strong>
+          <span v-if="searchSession.failedCombinations > 0">
+            {{ searchSession.failedCombinations }} failed
+          </span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-bar-fill" :style="{ width: `${progressPercentage}%` }" />
+        </div>
+      </section>
+    </Transition>
+
     <section class="results-grid" :class="{ 'results-only': !response }">
       <SearchFilters
         v-if="response"
@@ -304,7 +382,7 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
             </div>
           </div>
 
-          <div class="results-list">
+          <TransitionGroup name="result-list" tag="div" class="results-list">
             <SearchResultCard
               v-for="result in filteredResults"
               :key="result.id"
@@ -312,7 +390,7 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
               :expanded="isExpanded(result.id)"
               @toggle-expanded="toggleExpanded"
             />
-          </div>
+          </TransitionGroup>
         </div>
       </section>
     </section>
@@ -322,7 +400,7 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
 <style scoped>
 .search-page {
   min-height: 100vh;
-  padding: 38px 24px 72px;
+  padding: 18px 18px 28px;
   background:
     radial-gradient(circle at top left, rgba(255, 196, 61, 0.22), transparent 24%),
     radial-gradient(circle at top right, rgba(44, 123, 229, 0.18), transparent 26%),
@@ -332,6 +410,7 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
 
 .hero-panel,
 .search-bar-wrap,
+.progress-shell,
 .results-grid,
 .error-message {
   width: min(1520px, 100%);
@@ -339,12 +418,12 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
 }
 
 .hero-panel {
-  margin-bottom: 18px;
+  margin-bottom: 8px;
 }
 
 .eyebrow {
-  margin: 0 0 10px;
-  font-size: 0.78rem;
+  margin: 0 0 8px;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -360,33 +439,72 @@ h2 {
 h1 {
   max-width: 12ch;
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: clamp(3rem, 7vw, 5.2rem);
-  line-height: 0.95;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  line-height: 1;
   letter-spacing: -0.05em;
 }
 
 .lead {
   max-width: 58rem;
-  margin: 16px 0 0;
-  font-size: 1.06rem;
-  line-height: 1.7;
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
   color: #4b5661;
 }
 
 .error-message {
   margin-top: 0;
-  margin-bottom: 18px;
-  padding: 14px 16px;
-  border-radius: 16px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
   background: #fff0ef;
   color: #a53a2a;
   border: 1px solid rgba(165, 58, 42, 0.16);
 }
 
+.progress-shell {
+  margin: 0 auto 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(29, 34, 40, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 20px rgba(41, 49, 61, 0.04);
+}
+
+.progress-copy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.progress-copy strong {
+  font-size: 0.95rem;
+}
+
+.progress-copy span {
+  color: #5b6570;
+}
+
+.progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #e8edf3;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #1f5fbf 0%, #2c7be5 100%);
+  transition: width 0.4s ease;
+}
+
 .results-grid {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
 }
 
@@ -396,32 +514,86 @@ h1 {
 
 .results-shell {
   border: 1px solid rgba(29, 34, 40, 0.08);
-  border-radius: 28px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 24px 60px rgba(41, 49, 61, 0.08);
+  box-shadow: 0 10px 28px rgba(41, 49, 61, 0.05);
   backdrop-filter: blur(18px);
-  padding: 24px;
+  padding: 14px;
 }
 
 .results-header {
   display: flex;
   justify-content: space-between;
   align-items: end;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .results-stats {
   display: flex;
   flex-wrap: wrap;
   justify-content: end;
-  gap: 12px;
+  gap: 6px;
   color: #5b6570;
+  font-size: 0.82rem;
+}
+
+.results-stats span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #eef2f6;
 }
 
 .results-list {
   display: grid;
   gap: 16px;
+}
+
+.progress-shell-enter-active,
+.progress-shell-leave-active {
+  transition:
+    opacity 0.28s ease,
+    transform 0.28s ease,
+    max-height 0.28s ease,
+    margin-bottom 0.28s ease;
+  overflow: hidden;
+}
+
+.progress-shell-enter-from,
+.progress-shell-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+  max-height: 0;
+  margin-bottom: 0;
+}
+
+.progress-shell-enter-to,
+.progress-shell-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 120px;
+  margin-bottom: 10px;
+}
+
+.result-list-enter-active,
+.result-list-leave-active {
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.result-list-move {
+  transition: transform 0.16s ease;
+}
+
+.result-list-enter-from {
+  opacity: 0;
+  transform: translateY(6px) scale(0.995);
+}
+
+.result-list-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.995);
 }
 
 @media (max-width: 960px) {

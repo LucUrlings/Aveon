@@ -1,3 +1,8 @@
+import type { components } from '../../api/generated'
+
+type GeneratedSearchRequest = components['schemas']['SearchRequest']
+type GeneratedSearchSessionResponse = components['schemas']['SearchSessionResponse']
+
 export type AirportOption = {
   code: string
   name: string | null
@@ -56,15 +61,25 @@ export type SearchResponse = {
   metadata: SearchMetadata
 }
 
+export type SearchSessionResponse = {
+  searchId: NonNullable<GeneratedSearchSessionResponse['searchId']>
+  status: NonNullable<GeneratedSearchSessionResponse['status']>
+  totalCombinations: NonNullable<GeneratedSearchSessionResponse['totalCombinations']>
+  completedCombinations: NonNullable<GeneratedSearchSessionResponse['completedCombinations']>
+  failedCombinations: NonNullable<GeneratedSearchSessionResponse['failedCombinations']>
+  response: SearchResponse
+  errorMessage: GeneratedSearchSessionResponse['errorMessage']
+}
+
 export type SearchRequest = {
-  originAirports: string[]
-  destinationAirports: string[]
-  departDateFrom: string
-  departDateTo: string
-  returnDateFrom: string | null
-  returnDateTo: string | null
-  adults: number
-  cabinClass: string
+  originAirports: NonNullable<GeneratedSearchRequest['originAirports']>
+  destinationAirports: NonNullable<GeneratedSearchRequest['destinationAirports']>
+  departDateFrom: NonNullable<GeneratedSearchRequest['departDateFrom']>
+  departDateTo: NonNullable<GeneratedSearchRequest['departDateTo']>
+  returnDateFrom: GeneratedSearchRequest['returnDateFrom']
+  returnDateTo: GeneratedSearchRequest['returnDateTo']
+  adults: NonNullable<GeneratedSearchRequest['adults']>
+  cabinClass: NonNullable<GeneratedSearchRequest['cabinClass']>
 }
 
 export const cabinOptions = [

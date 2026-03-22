@@ -129,57 +129,59 @@ const isDirectFlight = (result: SearchResult) =>
       </button>
     </div>
 
-    <div v-if="props.result.priceOptions.length > 1 && props.expanded" class="other-fares">
-      <p class="other-fares-title">Other fare options</p>
-      <ul class="other-fares-list">
-        <li
-          v-for="option in props.result.priceOptions.slice(1)"
-          :key="option.id"
-          class="other-fare-item"
-        >
-          <div>
-            <strong>{{ formatProviderName(option.provider) }}</strong>
-            <span>{{ option.totalPrice.currency }} {{ option.totalPrice.amount.toFixed(2) }}</span>
-          </div>
-          <a
-            v-if="option.deepLink"
-            :href="option.deepLink"
-            target="_blank"
-            rel="noreferrer"
+    <Transition name="fare-expand">
+      <div v-if="props.result.priceOptions.length > 1 && props.expanded" class="other-fares">
+        <p class="other-fares-title">Other fare options</p>
+        <ul class="other-fares-list">
+          <li
+            v-for="option in props.result.priceOptions.slice(1)"
+            :key="option.id"
+            class="other-fare-item"
           >
-            View fare
-          </a>
-        </li>
-      </ul>
-    </div>
+            <div>
+              <strong>{{ formatProviderName(option.provider) }}</strong>
+              <span>{{ option.totalPrice.currency }} {{ option.totalPrice.amount.toFixed(2) }}</span>
+            </div>
+            <a
+              v-if="option.deepLink"
+              :href="option.deepLink"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View fare
+            </a>
+          </li>
+        </ul>
+      </div>
+    </Transition>
   </article>
 </template>
 
 <style scoped>
 .result-card {
-  padding: 20px;
+  padding: 10px 12px;
   border: 1px solid rgba(29, 34, 40, 0.08);
-  border-radius: 24px;
+  border-radius: 10px;
   background: #fff;
-  box-shadow: 0 12px 30px rgba(41, 49, 61, 0.06);
+  box-shadow: 0 6px 16px rgba(41, 49, 61, 0.04);
 }
 
 .details-header {
   display: flex;
   justify-content: space-between;
-  gap: 18px;
+  gap: 10px;
   align-items: start;
-  margin-bottom: 18px;
+  margin-bottom: 8px;
 }
 
 .details-main {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .details-timing {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   justify-items: end;
   color: #5b6570;
   text-align: right;
@@ -191,22 +193,23 @@ const isDirectFlight = (result: SearchResult) =>
 }
 
 .provider {
-  font-size: 1.05rem;
-  font-weight: 700;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .route {
   color: #5b6570;
+  font-size: 0.84rem;
 }
 
 .leg-block + .leg-block {
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 .leg-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) auto;
-  gap: 16px;
+  gap: 10px;
   align-items: center;
 }
 
@@ -217,30 +220,33 @@ const isDirectFlight = (result: SearchResult) =>
 
 .leg-route {
   font-weight: 700;
+  font-size: 0.88rem;
 }
 
 .leg-times {
   color: #5b6570;
   white-space: nowrap;
+  font-size: 0.82rem;
 }
 
 .segment-list {
   list-style: none;
-  margin: 12px 0 0;
+  margin: 6px 0 0;
   padding: 0;
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .segment-item {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.75fr) minmax(0, 1fr);
-  gap: 16px;
+  gap: 10px;
   align-items: center;
-  padding: 12px 14px;
-  border-radius: 16px;
+  padding: 6px 8px;
+  border-radius: 8px;
   background: #f5f7fa;
   color: #33404d;
+  font-size: 0.82rem;
 }
 
 .segment-airline,
@@ -261,22 +267,23 @@ const isDirectFlight = (result: SearchResult) =>
 
 .fare-stack {
   width: 100%;
-  margin-top: 18px;
+  margin-top: 8px;
 }
 
 .fare-summary {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
   align-items: center;
-  padding: 16px 18px;
-  border-radius: 18px 18px 0 0;
+  padding: 9px 10px;
+  border-radius: 8px 8px 0 0;
   background: linear-gradient(135deg, #fff3da 0%, #fdf7ea 100%);
 }
 
 .fare-provider {
   display: grid;
-  gap: 6px;
+  gap: 4px;
+  font-size: 0.82rem;
 }
 
 .fare-provider-label {
@@ -285,45 +292,49 @@ const isDirectFlight = (result: SearchResult) =>
 
 .price-block {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   justify-items: end;
 }
 
 .price-block strong {
-  font-size: 1.4rem;
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .primary-fare-link,
 .other-fare-item a {
   color: #1f5fbf;
-  font-weight: 700;
+  font-weight: 600;
   text-decoration: none;
+  font-size: 0.84rem;
 }
 
 .attached-expand {
   width: 100%;
   border: 1px solid rgba(31, 95, 191, 0.18);
   border-top: none;
-  border-radius: 0 0 18px 18px;
-  padding: 12px 16px;
+  border-radius: 0 0 8px 8px;
+  padding: 7px 10px;
   background: #f7fbff;
   color: #1f5fbf;
   font: inherit;
-  font-weight: 700;
+  font-weight: 600;
   text-align: center;
   cursor: pointer;
+  font-size: 0.84rem;
 }
 
 .other-fares {
-  margin-top: 12px;
-  padding: 14px 16px;
-  border-radius: 18px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
   background: #f7f8fb;
 }
 
 .other-fares-title {
-  margin: 0 0 10px;
-  font-weight: 700;
+  margin: 0 0 6px;
+  font-weight: 600;
+  font-size: 0.84rem;
 }
 
 .other-fares-list {
@@ -331,22 +342,49 @@ const isDirectFlight = (result: SearchResult) =>
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .other-fare-item {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
-  padding: 12px 14px;
-  border-radius: 14px;
+  padding: 6px 8px;
+  border-radius: 8px;
   background: #fff;
+  font-size: 0.82rem;
 }
 
 .other-fare-item div {
   display: grid;
-  gap: 4px;
+  gap: 2px;
+}
+
+.fare-expand-enter-active,
+.fare-expand-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    max-height 0.18s ease,
+    margin-top 0.18s ease;
+  overflow: hidden;
+}
+
+.fare-expand-enter-from,
+.fare-expand-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+  max-height: 0;
+  margin-top: 0;
+}
+
+.fare-expand-enter-to,
+.fare-expand-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 240px;
+  margin-top: 8px;
 }
 
 @media (max-width: 720px) {

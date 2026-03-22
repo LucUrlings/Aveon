@@ -20,7 +20,8 @@ builder.Services.Configure<FlightApiOptions>(
 builder.Services.Configure<RedisOptions>(
     builder.Configuration.GetSection(RedisOptions.SectionName));
 builder.Services.AddScoped<IAirportService, AirportService>();
-builder.Services.AddScoped<ISearchService, SearchService>();
+builder.Services.AddSingleton<ISearchSessionStore, RedisSearchSessionStore>();
+builder.Services.AddSingleton<ISearchService, SearchService>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(serviceProvider =>
 {
     var options = serviceProvider

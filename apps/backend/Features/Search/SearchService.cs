@@ -1,31 +1,173 @@
 using backend.Features.Search.Models;
+using backend.Infrastructure.Caching;
 using backend.Infrastructure.Models;
 using backend.Infrastructure.Providers.FlightApi;
 using backend.Infrastructure.Providers.FlightApi.Models;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace backend.Features.Search;
 
-public sealed class SearchService(IFlightSearchProvider flightSearchProvider) : ISearchService
+public sealed class SearchService(
+    IServiceScopeFactory serviceScopeFactory,
+    ISearchSessionStore searchSessionStore,
+    ILogger<SearchService> logger) : ISearchService
 {
     private const int MaxSearchCombinations = 60;
+    private const int MaxConcurrentProviderCalls = 5;
     private const int MaxResults = 2000;
     private const string ProviderName = "FlightApi";
+    private const string StatusRunning = "running";
+    private const string StatusCompleted = "completed";
+    private const string StatusFailed = "failed";
 
-    public async Task<SearchResponse> SearchAsync(
+    public async Task<SearchSessionResponse> StartSearchAsync(
         SearchRequest request,
         CancellationToken cancellationToken)
     {
         Validate(request);
 
         var combinations = ExpandOneWaySearches(request).ToList();
+        var searchId = Guid.NewGuid().ToString("N");
+
+        var initialSession = new SearchSessionResponse(
+            searchId,
+            StatusRunning,
+            combinations.Count,
+            0,
+            0,
+            BuildSearchResponse(combinations.Count, new List<SearchFareOption>()),
+            null);
+
+        await searchSessionStore.SetAsync(initialSession, cancellationToken);
+
+        _ = Task.Run(() => RunSearchAsync(searchId, combinations), CancellationToken.None);
+
+        return initialSession;
+    }
+
+    public Task<SearchSessionResponse?> GetSearchAsync(string searchId, CancellationToken cancellationToken) =>
+        searchSessionStore.GetAsync(searchId, cancellationToken);
+
+    private async Task RunSearchAsync(string searchId, IReadOnlyList<ProviderSearchRequest> combinations)
+    {
+        using var concurrencyGate = new SemaphoreSlim(MaxConcurrentProviderCalls);
+
+        var sync = new object();
+        var fareOptions = new List<SearchFareOption>();
+        var completedCombinations = 0;
+        var failedCombinations = 0;
+
         var providerTasks = combinations
-            .Select(candidate => flightSearchProvider.SearchOneWayAsync(candidate, cancellationToken))
+            .Select(async candidate =>
+            {
+                await concurrencyGate.WaitAsync();
+                try
+                {
+                    using var scope = serviceScopeFactory.CreateScope();
+                    var flightSearchProvider = scope.ServiceProvider.GetRequiredService<IFlightSearchProvider>();
+
+                    try
+                    {
+                        var providerResponse = await flightSearchProvider.SearchOneWayAsync(candidate, CancellationToken.None);
+                        var mappedFareOptions = MapToSearchFareOptions(providerResponse).ToList();
+
+                        SearchSessionResponse snapshot;
+                        lock (sync)
+                        {
+                            fareOptions.AddRange(mappedFareOptions);
+                            completedCombinations += 1;
+                            snapshot = BuildSessionSnapshot(
+                                searchId,
+                                StatusRunning,
+                                combinations.Count,
+                                completedCombinations,
+                                failedCombinations,
+                                fareOptions,
+                                null);
+                        }
+
+                        await searchSessionStore.SetAsync(snapshot, CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(
+                            ex,
+                            "FlightApi search failed for {OriginAirport} -> {DestinationAirport} on {DepartureDate}",
+                            candidate.OriginAirport,
+                            candidate.DestinationAirport,
+                            candidate.DepartureDate);
+
+                        SearchSessionResponse snapshot;
+                        lock (sync)
+                        {
+                            completedCombinations += 1;
+                            failedCombinations += 1;
+                            snapshot = BuildSessionSnapshot(
+                                searchId,
+                                StatusRunning,
+                                combinations.Count,
+                                completedCombinations,
+                                failedCombinations,
+                                fareOptions,
+                                null);
+                        }
+
+                        await searchSessionStore.SetAsync(snapshot, CancellationToken.None);
+                    }
+                }
+                finally
+                {
+                    concurrencyGate.Release();
+                }
+            })
             .ToArray();
 
-        var providerResponses = await Task.WhenAll(providerTasks);
+        await Task.WhenAll(providerTasks);
 
-        var groupedResults = providerResponses
-            .SelectMany(MapToSearchFareOptions)
+        SearchSessionResponse finalSession;
+        lock (sync)
+        {
+            var status = completedCombinations == failedCombinations ? StatusFailed : StatusCompleted;
+            var errorMessage = status == StatusFailed
+                ? "No results could be retrieved from the flight provider."
+                : null;
+
+            finalSession = BuildSessionSnapshot(
+                searchId,
+                status,
+                combinations.Count,
+                completedCombinations,
+                failedCombinations,
+                fareOptions,
+                errorMessage);
+        }
+
+        await searchSessionStore.SetAsync(finalSession, CancellationToken.None);
+    }
+
+    private static SearchSessionResponse BuildSessionSnapshot(
+        string searchId,
+        string status,
+        int totalCombinations,
+        int completedCombinations,
+        int failedCombinations,
+        List<SearchFareOption> fareOptions,
+        string? errorMessage) =>
+        new(
+            searchId,
+            status,
+            totalCombinations,
+            completedCombinations,
+            failedCombinations,
+            BuildSearchResponse(totalCombinations, fareOptions),
+            errorMessage);
+
+    private static SearchResponse BuildSearchResponse(
+        int searchCombinationCount,
+        List<SearchFareOption> fareOptions)
+    {
+        var groupedResults = fareOptions
             .GroupBy(BuildFlightGroupingKey)
             .Select(group =>
             {
@@ -61,8 +203,8 @@ public sealed class SearchService(IFlightSearchProvider flightSearchProvider) : 
         return new SearchResponse(
             groupedResults,
             new SearchMetadata(
-                combinations.Count,
-                providerResponses.Sum(GetProviderResultCount),
+                searchCombinationCount,
+                fareOptions.Count,
                 groupedResults.Count,
                 stopCounts.DirectFlightCount,
                 stopCounts.OneStopFlightCount,
@@ -163,10 +305,6 @@ public sealed class SearchService(IFlightSearchProvider flightSearchProvider) : 
             }
         }
     }
-
-    private static int GetProviderResultCount(FlightApiOneWayResponse response) =>
-        response.Itineraries.Sum(itinerary =>
-            itinerary.PricingOptions.Sum(option => Math.Max(option.Items.Count, 1)));
 
     private static IEnumerable<SearchFareOption> MapPricingItems(
         FlightApiItinerary itinerary,
