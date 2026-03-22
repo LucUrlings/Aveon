@@ -20,7 +20,12 @@ type ApiSearchResultLeg = components['schemas']['SearchResultLeg']
 type ApiSearchResultPriceOption = components['schemas']['SearchResultPriceOption']
 type ApiSearchResultSegment = components['schemas']['SearchResultSegment']
 
-const apiBaseUrl = 'http://localhost:5200'
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
+const apiBaseUrl = configuredApiBaseUrl
+  ? configuredApiBaseUrl.replace(/\/$/, '')
+  : import.meta.env.DEV
+    ? 'http://localhost:5200'
+    : ''
 
 const normalizeAirportOption = (airport: ApiAirportOption): AirportOption => ({
   code: airport.code ?? '',
