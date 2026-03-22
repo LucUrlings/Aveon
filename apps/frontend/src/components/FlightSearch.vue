@@ -1,65 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-
-type AirportOption = {
-  code: string
-  name: string | null
-  displayLabel: string
-}
-
-type SearchResultSegment = {
-  marketingCarrierName: string
-  marketingCarrierCode: string
-  flightNumber: string
-  originAirport: string
-  destinationAirport: string
-  departureUtc: string
-  arrivalUtc: string
-  durationMinutes: number
-}
-
-type SearchResultLeg = {
-  originAirport: string
-  destinationAirport: string
-  departureUtc: string
-  arrivalUtc: string
-  durationMinutes: number
-  segments: SearchResultSegment[]
-}
-
-type SearchResultPriceOption = {
-  id: string
-  provider: string
-  totalPrice: {
-    amount: number
-    currency: string
-  }
-  deepLink: string
-}
-
-type SearchResult = {
-  id: string
-  isRoundTrip: boolean
-  legs: SearchResultLeg[]
-  totalDurationMinutes: number
-  priceOptions: SearchResultPriceOption[]
-}
-
-type SearchResponse = {
-  results: SearchResult[]
-  metadata: {
-    searchCombinationCount: number
-    providerResultCount: number
-    returnedResultCount: number
-    returnedDirectFlightCount: number
-    returnedOneStopFlightCount: number
-    returnedTwoPlusStopFlightCount: number
-  }
-}
-
-type AirportLookupResponse = {
-  airports: AirportOption[]
-}
+import FlightSearchBar from './flight-search/FlightSearchBar.vue'
+import SearchFilters from './flight-search/SearchFilters.vue'
+import SearchResultCard from './flight-search/SearchResultCard.vue'
+import { fetchAirportSuggestions, searchFlightsRequest } from '../features/flight-search/api'
+import {
+  cabinOptions,
+  flexibilityOptions,
+  type AirportOption,
+  type SearchRequest,
+  type SearchResponse,
+} from '../features/flight-search/types'
 
 const originInput = ref('')
 const destinationInput = ref('')
@@ -88,19 +39,8 @@ const directFlightsOnly = ref(true)
 const selectedProviders = ref<string[]>([])
 const maxPrice = ref(800)
 
-const cabinOptions = [
-  { label: 'Economy', value: 'economy' },
-  { label: 'Business', value: 'business' },
-  { label: 'First', value: 'first' },
-  { label: 'Premium Economy', value: 'premium_economy' },
-]
-
-const flexibilityOptions = [
-  { label: 'Exact', value: 0 },
-  { label: '±1 day', value: 1 },
-  { label: '±2 days', value: 2 },
-  { label: '±3 days', value: 3 },
-]
+let originRequestId = 0
+let destinationRequestId = 0
 
 const providerFilters = computed(() => {
   if (!response.value) {
@@ -113,9 +53,6 @@ const providerFilters = computed(() => {
     ),
   )].sort((left, right) => left.localeCompare(right))
 })
-
-let originRequestId = 0
-let destinationRequestId = 0
 
 const filteredResults = computed(() => {
   if (!response.value) {
@@ -155,61 +92,26 @@ const compactSearchSummary = computed(() => {
   return `${origins} to ${destinations} on ${departureDate.value} (${flexibilityLabel})`
 })
 
-const formatDateTime = (value: string) =>
-  {
-    const date = new Date(value)
-    const weekday = new Intl.DateTimeFormat('en-IE', {
-      weekday: 'short',
-      timeZone: 'UTC',
-    }).format(date).slice(0, 2)
-
-    const rest = new Intl.DateTimeFormat('en-IE', {
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-      timeZone: 'UTC',
-    }).format(date)
-
-    return `${weekday} ${rest}`
-  }
-
-const formatDuration = (totalMinutes: number) => {
-  const hours = Math.floor(totalMinutes / 60)
-  const minutes = totalMinutes % 60
-  return `${hours}h ${minutes}m`
-}
-
 const addDays = (dateString: string, days: number) => {
   const date = new Date(`${dateString}T00:00:00Z`)
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
 
-const formatProviderName = (provider: string) => provider.replace(/^FlightApi:/, '').trim()
-
-const getAirlineSummary = (result: SearchResult) => {
-  const airlines = [...new Set(
-    result.legs.flatMap((leg) =>
-      leg.segments.map((segment) => segment.marketingCarrierName),
-    ),
-  )].filter(Boolean)
-
-  return airlines.join(', ') || 'Unknown airline'
-}
-
 const isSelected = (items: AirportOption[], code: string) =>
   items.some((item) => item.code === code)
 
-const removeAirport = (items: typeof originAirports, code: string) => {
+const removeAirport = (
+  items: typeof originAirports | typeof destinationAirports,
+  code: string,
+) => {
   items.value = items.value.filter((item) => item.code !== code)
 }
 
 const addAirport = (
-  items: typeof originAirports,
-  input: typeof originInput,
-  suggestions: typeof originSuggestions,
+  items: typeof originAirports | typeof destinationAirports,
+  input: typeof originInput | typeof destinationInput,
+  suggestions: typeof originSuggestions | typeof destinationSuggestions,
   airport: AirportOption,
 ) => {
   if (isSelected(items.value, airport.code)) {
@@ -224,9 +126,9 @@ const addAirport = (
 }
 
 const tryAddFromInput = (
-  items: typeof originAirports,
-  input: typeof originInput,
-  suggestions: typeof originSuggestions,
+  items: typeof originAirports | typeof destinationAirports,
+  input: typeof originInput | typeof destinationInput,
+  suggestions: typeof originSuggestions | typeof destinationSuggestions,
 ) => {
   const trimmed = input.value.trim()
   if (!trimmed) {
@@ -243,19 +145,10 @@ const tryAddFromInput = (
   }
 }
 
-const fetchAirports = async (query: string) => {
-  const res = await fetch(`http://localhost:5200/api/v1/airports?query=${encodeURIComponent(query)}`)
-  if (!res.ok) {
-    throw new Error(`Airport lookup failed with HTTP ${res.status}`)
-  }
-
-  return (await res.json()) as AirportLookupResponse
-}
-
 const updateSuggestions = async (
   query: string,
-  items: typeof originAirports,
-  suggestions: typeof originSuggestions,
+  items: typeof originAirports | typeof destinationAirports,
+  suggestions: typeof originSuggestions | typeof destinationSuggestions,
   requestId: number,
   getLatestRequestId: () => number,
 ) => {
@@ -266,12 +159,12 @@ const updateSuggestions = async (
   }
 
   try {
-    const lookup = await fetchAirports(trimmed)
+    const lookup = await fetchAirportSuggestions(trimmed)
     if (requestId !== getLatestRequestId()) {
       return
     }
 
-    suggestions.value = lookup.airports.filter((airport) => !isSelected(items.value, airport.code))
+    suggestions.value = lookup.filter((airport) => !isSelected(items.value, airport.code))
   } catch {
     if (requestId === getLatestRequestId()) {
       suggestions.value = []
@@ -290,8 +183,8 @@ watch(destinationInput, (value) => {
 })
 
 onMounted(() => {
-  void fetchAirports(originAirports.value[0].code)
-  void fetchAirports(destinationAirports.value[0].code)
+  void fetchAirportSuggestions(originAirports.value[0].code)
+  void fetchAirportSuggestions(destinationAirports.value[0].code)
 })
 
 const searchFlights = async () => {
@@ -301,29 +194,18 @@ const searchFlights = async () => {
   expandedResultIds.value = []
 
   try {
-    const res = await fetch('http://localhost:5200/api/v1/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        originAirports: originAirports.value.map((airport) => airport.code),
-        destinationAirports: destinationAirports.value.map((airport) => airport.code),
-        departDateFrom: addDays(departureDate.value, -flexibleDays.value),
-        departDateTo: addDays(departureDate.value, flexibleDays.value),
-        returnDateFrom: null,
-        returnDateTo: null,
-        adults: adults.value,
-        cabinClass: cabinClass.value,
-      }),
-    })
-
-    if (!res.ok) {
-      const message = await res.text()
-      throw new Error(message || `HTTP ${res.status}`)
+    const request: SearchRequest = {
+      originAirports: originAirports.value.map((airport) => airport.code),
+      destinationAirports: destinationAirports.value.map((airport) => airport.code),
+      departDateFrom: addDays(departureDate.value, -flexibleDays.value),
+      departDateTo: addDays(departureDate.value, flexibleDays.value),
+      returnDateFrom: null,
+      returnDateTo: null,
+      adults: adults.value,
+      cabinClass: cabinClass.value,
     }
 
-    response.value = (await res.json()) as SearchResponse
+    response.value = await searchFlightsRequest(request)
     isSearchCollapsed.value = true
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Unknown error'
@@ -364,165 +246,45 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
       </div>
     </section>
 
-    <section class="search-shell" :class="{ collapsed: isSearchCollapsed }">
-      <div class="search-shell-header">
-        <div>
-          <p class="eyebrow">Search</p>
-          <h2>{{ isSearchCollapsed ? compactSearchSummary : 'Build a one-way search' }}</h2>
-        </div>
-        <button
-          v-if="response"
-          type="button"
-          class="collapse-toggle"
-          @click="isSearchCollapsed = !isSearchCollapsed"
-        >
-          {{ isSearchCollapsed ? 'Edit search' : 'Collapse' }}
-        </button>
-      </div>
-
-      <form v-show="!isSearchCollapsed" class="search-form" @submit.prevent="searchFlights">
-        <div class="search-layout">
-          <div class="airport-grid">
-            <div class="field">
-              <span>Origin airports</span>
-              <div class="airport-picker">
-                <div class="chip-row">
-                  <button
-                    v-for="airport in originAirports"
-                    :key="airport.code"
-                    type="button"
-                    class="airport-chip"
-                    @click="removeOriginAirport(airport.code)"
-                  >
-                    {{ airport.code }}
-                  </button>
-                </div>
-                <input
-                  v-model="originInput"
-                  placeholder="Add airport or city"
-                  @keydown.enter.prevent="confirmOriginInput"
-                />
-                <ul v-if="originSuggestions.length" class="suggestions-list">
-                  <li v-for="airport in originSuggestions" :key="airport.code">
-                    <button
-                      type="button"
-                      class="suggestion-button"
-                      @click="addOriginAirport(airport)"
-                    >
-                      {{ airport.displayLabel }}
-                    </button>
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <div class="field">
-              <span>Destination airports</span>
-              <div class="airport-picker">
-                <div class="chip-row">
-                  <button
-                    v-for="airport in destinationAirports"
-                    :key="airport.code"
-                    type="button"
-                    class="airport-chip"
-                    @click="removeDestinationAirport(airport.code)"
-                  >
-                    {{ airport.code }}
-                  </button>
-                </div>
-                <input
-                  v-model="destinationInput"
-                  placeholder="Add airport or city"
-                  @keydown.enter.prevent="confirmDestinationInput"
-                />
-                <ul v-if="destinationSuggestions.length" class="suggestions-list">
-                  <li v-for="airport in destinationSuggestions" :key="airport.code">
-                    <button
-                      type="button"
-                      class="suggestion-button"
-                      @click="addDestinationAirport(airport)"
-                    >
-                      {{ airport.displayLabel }}
-                    </button>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div class="settings-grid">
-            <label class="field">
-              <span>Departure date</span>
-              <input v-model="departureDate" type="date" />
-            </label>
-
-            <label class="field">
-              <span>Flexible days</span>
-              <select v-model.number="flexibleDays">
-                <option
-                  v-for="option in flexibilityOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
-
-            <label class="field field-compact">
-              <span>Adults</span>
-              <input v-model.number="adults" type="number" min="1" max="9" />
-            </label>
-
-            <label class="field">
-              <span>Cabin class</span>
-              <select v-model="cabinClass">
-                <option v-for="option in cabinOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
-          </div>
-        </div>
-
-        <button class="search-button" type="submit" :disabled="loading">
-          {{ loading ? 'Searching...' : 'Search flights' }}
-        </button>
-      </form>
-    </section>
+    <div class="search-bar-wrap">
+      <FlightSearchBar
+        v-model:origin-input="originInput"
+        v-model:destination-input="destinationInput"
+        v-model:origin-airports="originAirports"
+        v-model:destination-airports="destinationAirports"
+        v-model:departure-date="departureDate"
+        v-model:flexible-days="flexibleDays"
+        v-model:adults="adults"
+        v-model:cabin-class="cabinClass"
+        :response-exists="Boolean(response)"
+        :is-collapsed="isSearchCollapsed"
+        :compact-summary="compactSearchSummary"
+        :loading="loading"
+        :origin-suggestions="originSuggestions"
+        :destination-suggestions="destinationSuggestions"
+        :cabin-options="cabinOptions"
+        :flexibility-options="flexibilityOptions"
+        @submit="searchFlights"
+        @toggle-collapse="isSearchCollapsed = !isSearchCollapsed"
+        @confirm-origin-input="confirmOriginInput"
+        @confirm-destination-input="confirmDestinationInput"
+        @remove-origin-airport="removeOriginAirport"
+        @remove-destination-airport="removeDestinationAirport"
+        @add-origin-airport="addOriginAirport"
+        @add-destination-airport="addDestinationAirport"
+      />
+    </div>
 
     <p v-if="error" class="error-message">{{ error }}</p>
 
     <section class="results-grid" :class="{ 'results-only': !response }">
-      <aside v-if="response" class="filters-panel">
-        <div class="filters-card">
-          <p class="eyebrow">Filters</p>
-          <h3>Refine results</h3>
-
-          <label class="filter-row">
-            <span>Max price</span>
-            <input v-model.number="maxPrice" type="range" min="50" max="1500" step="10" />
-            <strong>EUR {{ maxPrice }}</strong>
-          </label>
-
-          <label class="filter-toggle">
-            <input v-model="directFlightsOnly" type="checkbox" />
-            <span>Direct flights</span>
-          </label>
-
-          <div v-if="providerFilters.length" class="provider-filter-group">
-            <span class="filter-label">Preferred providers</span>
-            <label
-              v-for="provider in providerFilters"
-              :key="provider"
-              class="filter-toggle"
-            >
-              <input v-model="selectedProviders" :value="provider" type="checkbox" />
-              <span>{{ provider.replace('FlightApi:', '') }}</span>
-            </label>
-          </div>
-        </div>
-      </aside>
+      <SearchFilters
+        v-if="response"
+        v-model:max-price="maxPrice"
+        v-model:direct-flights-only="directFlightsOnly"
+        v-model:selected-providers="selectedProviders"
+        :provider-filters="providerFilters"
+      />
 
       <section class="results-panel">
         <div v-if="response" class="results-shell">
@@ -542,94 +304,15 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
             </div>
           </div>
 
-          <article v-for="result in filteredResults" :key="result.id" class="result-card">
-            <div class="details-header">
-              <p class="provider">{{ getAirlineSummary(result) }}</p>
-              <p class="route">
-                {{ result.legs[0]?.originAirport }} to
-                {{ result.legs[result.legs.length - 1]?.destinationAirport }}
-              </p>
-            </div>
-
-            <div v-for="(leg, legIndex) in result.legs" :key="`${result.id}-${legIndex}`" class="leg-block">
-              <div class="leg-summary">
-                <div>
-                  <p>{{ leg.originAirport }} → {{ leg.destinationAirport }}</p>
-                  <span>{{ formatDateTime(leg.departureUtc) }} to {{ formatDateTime(leg.arrivalUtc) }}</span>
-                </div>
-                <strong>{{ formatDuration(leg.durationMinutes) }}</strong>
-              </div>
-
-              <ul class="segment-list">
-                <li
-                  v-for="segment in leg.segments"
-                  :key="segment.flightNumber + segment.departureUtc"
-                  class="segment-item"
-                >
-                  <span>{{ segment.marketingCarrierName }} ({{ segment.marketingCarrierCode }}) {{ segment.flightNumber }}</span>
-                  <span>{{ segment.originAirport }} → {{ segment.destinationAirport }}</span>
-                  <span>{{ formatDateTime(segment.departureUtc) }} to {{ formatDateTime(segment.arrivalUtc) }}</span>
-                </li>
-              </ul>
-            </div>
-
-            <div class="fare-stack">
-              <div class="fare-summary">
-                <div class="fare-provider">
-                  <span class="fare-provider-label">{{ formatProviderName(result.priceOptions[0].provider) }}</span>
-                  <span>{{ formatDuration(result.totalDurationMinutes) }}</span>
-                </div>
-                <div class="price-block">
-                  <strong>
-                    {{ result.priceOptions[0].totalPrice.currency }}
-                    {{ result.priceOptions[0].totalPrice.amount.toFixed(2) }}
-                  </strong>
-                  <a
-                    v-if="result.priceOptions[0].deepLink"
-                    class="primary-fare-link"
-                    :href="result.priceOptions[0].deepLink"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    View fare
-                  </a>
-                </div>
-              </div>
-
-              <button
-                v-if="result.priceOptions.length > 1"
-                class="expand-button attached-expand"
-                type="button"
-                @click="toggleExpanded(result.id)"
-              >
-                {{ isExpanded(result.id) ? 'Hide other fares' : `Show ${result.priceOptions.length - 1} more fares` }}
-              </button>
-            </div>
-
-            <div v-if="result.priceOptions.length > 1 && isExpanded(result.id)" class="other-fares">
-              <p class="other-fares-title">Other fare options</p>
-              <ul class="other-fares-list">
-                <li
-                  v-for="option in result.priceOptions.slice(1)"
-                  :key="option.id"
-                  class="other-fare-item"
-                >
-                  <div>
-                    <strong>{{ formatProviderName(option.provider) }}</strong>
-                    <span>{{ option.totalPrice.currency }} {{ option.totalPrice.amount.toFixed(2) }}</span>
-                  </div>
-                  <a
-                    v-if="option.deepLink"
-                    :href="option.deepLink"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    View fare
-                  </a>
-                </li>
-              </ul>
-            </div>
-          </article>
+          <div class="results-list">
+            <SearchResultCard
+              v-for="result in filteredResults"
+              :key="result.id"
+              :result="result"
+              :expanded="isExpanded(result.id)"
+              @toggle-expanded="toggleExpanded"
+            />
+          </div>
         </div>
       </section>
     </section>
@@ -648,7 +331,7 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
 }
 
 .hero-panel,
-.search-shell,
+.search-bar-wrap,
 .results-grid,
 .error-message {
   width: min(1520px, 100%);
@@ -669,8 +352,7 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
 }
 
 h1,
-h2,
-h3 {
+h2 {
   margin: 0;
   color: #1d2228;
 }
@@ -689,168 +371,6 @@ h1 {
   font-size: 1.06rem;
   line-height: 1.7;
   color: #4b5661;
-}
-
-.search-shell,
-.filters-card,
-.results-shell {
-  border: 1px solid rgba(29, 34, 40, 0.08);
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 24px 60px rgba(41, 49, 61, 0.08);
-  backdrop-filter: blur(18px);
-}
-
-.search-shell {
-  padding: 20px 22px;
-  margin-bottom: 18px;
-}
-
-.search-shell.collapsed {
-  padding-bottom: 18px;
-}
-
-.search-shell-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: 16px;
-  margin-bottom: 10px;
-}
-
-.collapse-toggle {
-  border: 1px solid rgba(29, 34, 40, 0.12);
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: #fff;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.search-form {
-  margin-top: 10px;
-}
-
-.search-layout {
-  display: grid;
-  gap: 16px;
-}
-
-.airport-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-}
-
-.settings-grid {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(170px, 0.55fr) minmax(120px, 0.3fr) minmax(180px, 0.45fr);
-  gap: 14px;
-  max-width: 980px;
-}
-
-.field {
-  display: grid;
-  gap: 8px;
-}
-
-.field span,
-.filter-label {
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #5b6570;
-}
-
-.airport-picker {
-  position: relative;
-  display: grid;
-  gap: 10px;
-}
-
-.chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-height: 38px;
-}
-
-.airport-chip {
-  border: none;
-  border-radius: 999px;
-  padding: 8px 12px;
-  background: #eef4fb;
-  color: #1f5fbf;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.airport-picker input,
-.field input,
-.field select {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #d5dbe1;
-  border-radius: 16px;
-  padding: 14px 16px;
-  font: inherit;
-  background: #fff;
-  color: #1d2228;
-}
-
-.airport-picker input:focus,
-.field input:focus,
-.field select:focus {
-  outline: none;
-  border-color: #2c7be5;
-  box-shadow: 0 0 0 4px rgba(44, 123, 229, 0.14);
-}
-
-.field-compact {
-  max-width: 140px;
-}
-
-.suggestions-list {
-  list-style: none;
-  padding: 8px;
-  margin: 0;
-  border: 1px solid rgba(29, 34, 40, 0.08);
-  border-radius: 18px;
-  background: #fff;
-  box-shadow: 0 20px 45px rgba(41, 49, 61, 0.12);
-}
-
-.suggestion-button {
-  width: 100%;
-  border: none;
-  background: transparent;
-  text-align: left;
-  padding: 10px 12px;
-  border-radius: 12px;
-  cursor: pointer;
-}
-
-.suggestion-button:hover {
-  background: #f2f5f8;
-}
-
-.search-button {
-  margin-top: 18px;
-  border: none;
-  border-radius: 999px;
-  padding: 14px 24px;
-  font: inherit;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, #1f5fbf 0%, #2c7be5 100%);
-  cursor: pointer;
-}
-
-.search-button:disabled {
-  opacity: 0.7;
-  cursor: wait;
 }
 
 .error-message {
@@ -874,39 +394,12 @@ h1 {
   grid-template-columns: 1fr;
 }
 
-.filters-panel {
-  position: sticky;
-  top: 20px;
-}
-
-.filters-card {
-  padding: 22px 18px;
-}
-
-.filters-card h3 {
-  margin-bottom: 18px;
-  font-size: 1.25rem;
-}
-
-.filter-row {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
-.filter-toggle {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.provider-filter-group {
-  padding-top: 14px;
-  border-top: 1px solid rgba(29, 34, 40, 0.08);
-}
-
 .results-shell {
+  border: 1px solid rgba(29, 34, 40, 0.08);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 24px 60px rgba(41, 49, 61, 0.08);
+  backdrop-filter: blur(18px);
   padding: 24px;
 }
 
@@ -918,238 +411,31 @@ h1 {
   margin-bottom: 20px;
 }
 
-.results-header h2 {
-  font-size: clamp(1.5rem, 3vw, 2.1rem);
-}
-
 .results-stats {
   display: flex;
-  gap: 10px;
   flex-wrap: wrap;
+  justify-content: end;
+  gap: 12px;
+  color: #5b6570;
 }
 
-.results-stats span {
-  padding: 10px 12px;
-  border-radius: 999px;
-  background: #eef4fb;
-  color: #36506b;
-  font-size: 0.92rem;
-}
-
-.result-card {
-  padding: 20px 0;
-  border-top: 1px solid rgba(29, 34, 40, 0.08);
-}
-
-.result-card:first-of-type {
-  border-top: none;
-  padding-top: 0;
-}
-
-.details-header,
-.leg-summary,
-.segment-item,
-.fare-summary,
-.other-fare-item {
-  display: flex;
-  justify-content: space-between;
+.results-list {
+  display: grid;
   gap: 16px;
 }
 
-.details-header {
-  display: grid;
-  gap: 6px;
-}
-
-.provider {
-  margin: 0;
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #9c5a11;
-}
-
-.route {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
-.fare-stack {
-  width: 100%;
-  margin-top: 18px;
-}
-
-.price-block {
-  display: grid;
-  justify-items: end;
-  gap: 4px;
-}
-
-.price-block strong {
-  font-size: 1.35rem;
-}
-
-.primary-fare-link {
-  color: #1f5fbf;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.fare-summary {
-  align-items: center;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: #fff6e9;
-  color: #6d4a20;
-}
-
-.fare-provider {
-  display: grid;
-  gap: 4px;
-}
-
-.fare-provider-label {
-  font-weight: 700;
-}
-
-.expand-button {
-  border: none;
-  background: transparent;
-  color: #1f5fbf;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.attached-expand {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  margin-top: 8px;
-  padding: 10px 14px;
-  border-radius: 0 0 14px 14px;
-  background: #f2e7d1;
-}
-
-.price-block span,
-.leg-summary span,
-.segment-item span {
-  color: #5f6973;
-}
-
-.leg-block {
-  margin-top: 16px;
-  padding: 16px;
-  border-radius: 20px;
-  background: #f6f8fb;
-}
-
-.leg-summary {
-  align-items: center;
-}
-
-.leg-summary p {
-  margin: 0 0 4px;
-  font-weight: 700;
-}
-
-.segment-list {
-  list-style: none;
-  padding: 0;
-  margin: 16px 0 0;
-  display: grid;
-  gap: 12px;
-}
-
-.segment-item {
-  padding-top: 12px;
-  border-top: 1px solid rgba(29, 34, 40, 0.08);
-  font-size: 0.96rem;
-}
-
-.segment-item:first-child {
-  border-top: none;
-  padding-top: 0;
-}
-
-.other-fares {
-  margin-top: 0;
-  padding: 16px;
-  border-radius: 0 20px 20px 20px;
-  background: #f6efe3;
-  border-top: 1px solid rgba(29, 34, 40, 0.08);
-}
-
-.other-fares-title {
-  margin: 0 0 12px;
-  font-weight: 700;
-}
-
-.other-fares-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 12px;
-}
-
-.other-fare-item {
-  align-items: center;
-  padding-top: 12px;
-  border-top: 1px solid rgba(29, 34, 40, 0.08);
-}
-
-.other-fare-item:first-child {
-  padding-top: 0;
-  border-top: none;
-}
-
-.other-fare-item div {
-  display: grid;
-  gap: 4px;
-}
-
-.other-fare-item a {
-  color: #1f5fbf;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-@media (max-width: 1100px) {
+@media (max-width: 960px) {
   .results-grid {
     grid-template-columns: 1fr;
   }
 
-  .filters-panel {
-    position: static;
-  }
-}
-
-@media (max-width: 860px) {
-  .airport-grid,
-  .settings-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 680px) {
-  .search-page {
-    padding: 24px 14px 42px;
-  }
-
-  .search-shell-header,
-  .results-header,
-  .leg-summary,
-  .segment-item,
-  .fare-summary,
-  .other-fare-item {
-    flex-direction: column;
+  .results-header {
     align-items: start;
+    flex-direction: column;
   }
 
-  .price-block {
-    justify-items: start;
+  .results-stats {
+    justify-content: start;
   }
 }
 </style>
