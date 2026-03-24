@@ -1,0 +1,252 @@
+.filters-panel {
+  position: sticky;
+  top: 20px;
+}
+
+.filters-card {
+  border: 1px solid rgba(29, 34, 40, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 24px 60px rgba(41, 49, 61, 0.08);
+  backdrop-filter: blur(18px);
+  padding: 12px;
+}
+
+.filters-card,
+.filter-row,
+.provider-filter-group,
+.filter-toggle {
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #9c5a11;
+}
+
+h3 {
+  margin: 0 0 8px;
+  color: #1d2228;
+  font-size: 0.96rem;
+  font-weight: 600;
+}
+
+.filter-row {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 0.88rem;
+}
+
+.filter-toggle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.filter-label,
+.filter-row span {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #5b6570;
+}
+
+.filter-section {
+  margin-top: 12px;
+  border-top: 1px solid rgba(29, 34, 40, 0.08);
+  padding-top: 8px;
+}
+
+.filter-section-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  width: 100%;
+  border: none;
+  padding: 0;
+  background: transparent;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #47515b;
+  text-align: left;
+}
+
+.filter-section-summary::after {
+  content: '+';
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.filter-section.open .filter-section-summary::after {
+  content: '−';
+}
+
+.filter-section-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 0.18s ease,
+    opacity 0.18s ease,
+    margin-top 0.18s ease;
+}
+
+.filter-section-body.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-top: 8px;
+}
+
+.filter-section-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.provider-filter-group {
+  padding-top: 4px;
+}
+
+.filter-placeholder {
+  margin: 0;
+  padding-top: 4px;
+  color: #7a858f;
+  font-size: 0.82rem;
+}
+
+.stop-filter-group {
+  display: grid;
+  gap: 2px;
+}
+
+.time-filter-group {
+  display: grid;
+  gap: 8px;
+}
+
+.time-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.time-filter-header strong {
+  font-size: 0.78rem;
+  color: #33404d;
+  white-space: nowrap;
+}
+
+.range-slider {
+  position: relative;
+  height: 26px;
+}
+
+.range-slider-track,
+.range-slider-selected {
+  position: absolute;
+  top: 50%;
+  height: 6px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+}
+
+.range-slider-track {
+  left: 0;
+  right: 0;
+  background: #e5ebf2;
+}
+
+.range-slider-selected {
+  background: linear-gradient(135deg, #1f5fbf 0%, #2c7be5 100%);
+}
+
+.range-slider input[type='range'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+  appearance: none;
+}
+
+.range-slider input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  background: transparent;
+}
+
+.range-slider input[type='range']::-moz-range-track {
+  height: 6px;
+  background: transparent;
+}
+
+.range-slider input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #1f5fbf;
+  box-shadow: 0 2px 8px rgba(31, 95, 191, 0.25);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.range-slider input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #1f5fbf;
+  box-shadow: 0 2px 8px rgba(31, 95, 191, 0.25);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+@media (max-width: 960px) {
+  .filters-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .filters-card {
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  h3 {
+    font-size: 0.92rem;
+  }
+
+  .filter-toggle {
+    font-size: 0.84rem;
+  }
+
+  .provider-filter-group {
+    display: grid;
+    gap: 2px;
+  }
+
+  .time-filter-header {
+    align-items: start;
+    flex-direction: column;
+    gap: 3px;
+  }
+}

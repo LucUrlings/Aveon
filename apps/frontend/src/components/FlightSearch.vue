@@ -37,9 +37,14 @@ const searchSession = ref<SearchSessionResponse | null>(null)
 const expandedResultIds = ref<string[]>([])
 const isSearchCollapsed = ref(false)
 
-const directFlightsOnly = ref(true)
+const includeDirectFlights = ref(true)
+const includeOneStopFlights = ref(false)
+const includeTwoPlusStopFlights = ref(false)
 const selectedProviders = ref<string[]>([])
-const maxPrice = ref(800)
+const selectedAirlines = ref<string[]>([])
+const priceRange = ref<[number, number]>([0, 0])
+const departureTimeRange = ref<[number, number]>([0, 1439])
+const arrivalTimeRange = ref<[number, number]>([0, 1439])
 
 let originRequestId = 0
 let destinationRequestId = 0
@@ -57,23 +62,99 @@ const providerFilters = computed(() => {
   )].sort((left, right) => left.localeCompare(right))
 })
 
-const filteredResults = computed(() => {
+const airlineFilters = computed(() => {
+  if (!response.value) {
+    return []
+  }
+
+  return [...new Set(
+    response.value.results.flatMap((result) =>
+      result.legs.flatMap((leg) =>
+        leg.segments
+          .map((segment) => segment.marketingCarrierName?.trim())
+          .filter((name): name is string => Boolean(name)),
+      ),
+    ),
+  )].sort((left, right) => left.localeCompare(right))
+})
+
+const baseFilteredResults = computed(() => {
   if (!response.value) {
     return []
   }
 
   return response.value.results.filter((result) => {
-    const cheapest = result.priceOptions[0]
-    if (cheapest.totalPrice.amount > maxPrice.value) {
-      return false
-    }
+    const stopCount = getStopCount(result)
+    const includeByStopCount = (
+      (stopCount === 0 && includeDirectFlights.value) ||
+      (stopCount === 1 && includeOneStopFlights.value) ||
+      (stopCount >= 2 && includeTwoPlusStopFlights.value)
+    )
 
-    if (directFlightsOnly.value && result.legs.some((leg) => leg.segments.length > 1)) {
+    if (!includeByStopCount) {
       return false
     }
 
     if (selectedProviders.value.length > 0) {
-      return result.priceOptions.some((option) => selectedProviders.value.includes(option.provider))
+      const hasSelectedProvider = result.priceOptions.some((option) =>
+        selectedProviders.value.includes(option.provider),
+      )
+
+      if (!hasSelectedProvider) {
+        return false
+      }
+    }
+
+    if (selectedAirlines.value.length > 0) {
+      const resultAirlines = new Set(
+        result.legs.flatMap((leg) =>
+          leg.segments
+            .map((segment) => segment.marketingCarrierName?.trim())
+            .filter((name): name is string => Boolean(name)),
+        ),
+      )
+
+      const hasSelectedAirline = selectedAirlines.value.some((airline) => resultAirlines.has(airline))
+      if (!hasSelectedAirline) {
+        return false
+      }
+    }
+
+    const firstDepartureMinutes = getUtcMinutes(result.legs[0]?.departureUtc)
+    if (firstDepartureMinutes < departureTimeRange.value[0] || firstDepartureMinutes > departureTimeRange.value[1]) {
+      return false
+    }
+
+    const lastArrivalMinutes = getUtcMinutes(result.legs[result.legs.length - 1]?.arrivalUtc)
+    if (lastArrivalMinutes < arrivalTimeRange.value[0] || lastArrivalMinutes > arrivalTimeRange.value[1]) {
+      return false
+    }
+
+    return true
+  })
+})
+
+const availablePriceRange = computed<[number, number]>(() => {
+  if (baseFilteredResults.value.length === 0) {
+    return [0, 0]
+  }
+
+  const amounts = baseFilteredResults.value
+    .map((result) => result.priceOptions[0]?.totalPrice.amount ?? 0)
+    .filter((amount) => Number.isFinite(amount))
+
+  if (amounts.length === 0) {
+    return [0, 0]
+  }
+
+  return [Math.floor(Math.min(...amounts)), Math.ceil(Math.max(...amounts))]
+})
+
+const filteredResults = computed(() => {
+  return baseFilteredResults.value.filter((result) => {
+    const cheapest = result.priceOptions[0]
+    if (cheapest.totalPrice.amount < priceRange.value[0] || cheapest.totalPrice.amount > priceRange.value[1]) {
+      return false
     }
 
     return true
@@ -131,6 +212,18 @@ const addDays = (dateString: string, days: number) => {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
+
+const getUtcMinutes = (value?: string) => {
+  if (!value) {
+    return 0
+  }
+
+  const date = new Date(value)
+  return (date.getUTCHours() * 60) + date.getUTCMinutes()
+}
+
+const getStopCount = (result: SearchResponse['results'][number]) =>
+  result.legs.reduce((totalStops, leg) => totalStops + Math.max(leg.segments.length - 1, 0), 0)
 
 const isSelected = (items: AirportOption[], code: string) =>
   items.some((item) => item.code === code)
@@ -206,6 +299,15 @@ const updateSuggestions = async (
   }
 }
 
+const resetPriceRangeToAvailable = () => {
+  const [minPrice, maxPrice] = availablePriceRange.value
+  priceRange.value = [minPrice, maxPrice]
+}
+
+const resetSelectedAirlinesToAvailable = () => {
+  selectedAirlines.value = [...airlineFilters.value]
+}
+
 watch(originInput, (value) => {
   originRequestId += 1
   void updateSuggestions(value, originAirports, originSuggestions, originRequestId, () => originRequestId)
@@ -215,6 +317,30 @@ watch(destinationInput, (value) => {
   destinationRequestId += 1
   void updateSuggestions(value, destinationAirports, destinationSuggestions, destinationRequestId, () => destinationRequestId)
 })
+
+watch(
+  [
+    response,
+    includeDirectFlights,
+    includeOneStopFlights,
+    includeTwoPlusStopFlights,
+    selectedProviders,
+    departureTimeRange,
+    arrivalTimeRange,
+  ],
+  () => {
+    resetPriceRangeToAvailable()
+  },
+  { immediate: true, deep: true },
+)
+
+watch(
+  response,
+  () => {
+    resetSelectedAirlinesToAvailable()
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   void fetchAirportSuggestions(originAirports.value[0].code)
@@ -379,9 +505,16 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
     <section class="results-grid" :class="{ 'results-only': !response }">
       <SearchFilters
         v-if="response"
-        v-model:max-price="maxPrice"
-        v-model:direct-flights-only="directFlightsOnly"
+        v-model:price-range="priceRange"
+        v-model:include-direct-flights="includeDirectFlights"
+        v-model:include-one-stop-flights="includeOneStopFlights"
+        v-model:include-two-plus-stop-flights="includeTwoPlusStopFlights"
         v-model:selected-providers="selectedProviders"
+        v-model:selected-airlines="selectedAirlines"
+        v-model:departure-time-range="departureTimeRange"
+        v-model:arrival-time-range="arrivalTimeRange"
+        :available-price-range="availablePriceRange"
+        :airline-filters="airlineFilters"
         :provider-filters="providerFilters"
       />
 
@@ -418,314 +551,4 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
   </main>
 </template>
 
-<style scoped>
-.search-page {
-  min-height: 100vh;
-  padding: 18px 18px 28px;
-  background:
-    radial-gradient(circle at top left, rgba(255, 196, 61, 0.22), transparent 24%),
-    radial-gradient(circle at top right, rgba(44, 123, 229, 0.18), transparent 26%),
-    linear-gradient(180deg, #f5f1e8 0%, #fbfaf7 42%, #eeece5 100%);
-  color: #1d2228;
-  overflow-x: clip;
-}
-
-.hero-panel,
-.search-bar-wrap,
-.progress-shell,
-.results-grid,
-.error-message {
-  width: min(1520px, 100%);
-  margin: 0 auto;
-}
-
-.hero-panel {
-  display: flex;
-  align-items: center;
-  padding: 4px 0 2px;
-  margin-bottom: 8px;
-}
-
-.hero-copy {
-  display: grid;
-  gap: 6px;
-}
-
-.hero-heading {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #9c5a11;
-}
-
-h1,
-h2 {
-  margin: 0;
-  color: #1d2228;
-}
-
-h1 {
-  max-width: none;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: clamp(1.35rem, 2.2vw, 1.85rem);
-  line-height: 1.05;
-  letter-spacing: -0.04em;
-}
-
-.lead {
-  max-width: 54rem;
-  margin: 0;
-  font-size: 0.86rem;
-  line-height: 1.35;
-  color: #4b5661;
-}
-
-.error-message {
-  margin-top: 0;
-  margin-bottom: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: #fff0ef;
-  color: #a53a2a;
-  border: 1px solid rgba(165, 58, 42, 0.16);
-}
-
-.progress-shell {
-  margin: 0 auto 10px;
-  padding: 10px 12px;
-  border: 1px solid rgba(29, 34, 40, 0.08);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 8px 20px rgba(41, 49, 61, 0.04);
-}
-
-.progress-copy {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-
-.progress-copy strong {
-  font-size: 0.95rem;
-}
-
-.progress-copy span {
-  color: #5b6570;
-}
-
-.progress-bar {
-  height: 8px;
-  border-radius: 999px;
-  background: #e8edf3;
-  overflow: hidden;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #1f5fbf 0%, #2c7be5 100%);
-  transition: width 0.4s ease;
-}
-
-.results-grid {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.results-grid.results-only {
-  grid-template-columns: 1fr;
-}
-
-.results-shell {
-  border: 1px solid rgba(29, 34, 40, 0.08);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 10px 28px rgba(41, 49, 61, 0.05);
-  backdrop-filter: blur(18px);
-  padding: 14px;
-}
-
-.results-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: end;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.results-header > div,
-.results-stats,
-.results-stats span {
-  min-width: 0;
-}
-
-.results-stats {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: end;
-  gap: 6px;
-  color: #5b6570;
-  font-size: 0.82rem;
-}
-
-.results-stats span {
-  padding: 5px 8px;
-  border-radius: 999px;
-  background: #eef2f6;
-}
-
-.results-list {
-  display: grid;
-  gap: 16px;
-}
-
-.progress-shell-enter-active,
-.progress-shell-leave-active {
-  transition:
-    opacity 0.28s ease,
-    transform 0.28s ease,
-    max-height 0.28s ease,
-    margin-bottom 0.28s ease;
-  overflow: hidden;
-}
-
-.progress-shell-enter-from,
-.progress-shell-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-  max-height: 0;
-  margin-bottom: 0;
-}
-
-.progress-shell-enter-to,
-.progress-shell-leave-from {
-  opacity: 1;
-  transform: translateY(0);
-  max-height: 120px;
-  margin-bottom: 10px;
-}
-
-.result-list-enter-active,
-.result-list-leave-active {
-  transition:
-    opacity 0.16s ease,
-    transform 0.16s ease;
-}
-
-.result-list-move {
-  transition: transform 0.16s ease;
-}
-
-.result-list-enter-from {
-  opacity: 0;
-  transform: translateY(6px) scale(0.995);
-}
-
-.result-list-leave-to {
-  opacity: 0;
-  transform: translateY(-4px) scale(0.995);
-}
-
-@media (max-width: 960px) {
-  .search-page {
-    padding: 16px 14px 24px;
-  }
-
-  h1 {
-    font-size: clamp(1.15rem, 4.2vw, 1.45rem);
-  }
-
-  .results-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .results-header {
-    align-items: start;
-    flex-direction: column;
-  }
-
-  .results-stats {
-    justify-content: start;
-  }
-}
-
-@media (max-width: 640px) {
-  .search-page {
-    padding: 12px 10px 22px;
-  }
-
-  .hero-panel {
-    margin-bottom: 4px;
-    padding-top: 0;
-  }
-
-  .hero-heading {
-    align-items: start;
-    gap: 6px;
-    flex-direction: column;
-  }
-
-  .lead {
-    font-size: 0.8rem;
-  }
-
-  .progress-shell,
-  .results-shell,
-  .error-message {
-    padding-left: 10px;
-    padding-right: 10px;
-    border-radius: 10px;
-  }
-
-  .progress-copy {
-    gap: 6px;
-    margin-bottom: 8px;
-  }
-
-  .progress-copy strong {
-    font-size: 0.88rem;
-  }
-
-  .results-header {
-    gap: 8px;
-  }
-
-  .results-stats {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px;
-    font-size: 0.78rem;
-    width: 100%;
-  }
-
-  .results-stats span {
-    padding: 4px 7px;
-    border-radius: 8px;
-    text-align: center;
-    overflow-wrap: anywhere;
-  }
-
-  .results-list {
-    gap: 10px;
-  }
-}
-
-@media (max-width: 420px) {
-  .results-stats {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
+<style scoped src="./FlightSearch.css"></style>
