@@ -107,6 +107,25 @@ const compactSearchSummary = computed(() => {
   return `${origins} to ${destinations} on ${departureDate.value} (${flexibilityLabel})`
 })
 
+const uniqueAirportCodes = (airports: AirportOption[]) =>
+  [...new Set(airports.map((airport) => airport.code.trim().toUpperCase()).filter(Boolean))]
+
+const searchCombinationCount = computed(() => {
+  const origins = uniqueAirportCodes(originAirports.value)
+  const destinations = uniqueAirportCodes(destinationAirports.value)
+  const departureDateCount = (flexibleDays.value * 2) + 1
+
+  if (origins.length === 0 || destinations.length === 0 || departureDateCount <= 0) {
+    return 0
+  }
+
+  const routeCombinationCount = origins.reduce((count, origin) => (
+    count + destinations.filter((destination) => destination !== origin).length
+  ), 0)
+
+  return routeCombinationCount * departureDateCount
+})
+
 const addDays = (dateString: string, days: number) => {
   const date = new Date(`${dateString}T00:00:00Z`)
   date.setUTCDate(date.getUTCDate() + days)
@@ -297,13 +316,14 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
 <template>
   <main class="search-page">
     <section class="hero-panel">
-      <div>
+      <div class="hero-copy">
         <p class="eyebrow">Aveon</p>
-        <h1>Flight discovery with a wider canvas.</h1>
-        <p class="lead">
-          Search multiple airports, compare grouped fares, and refine results from a
-          dedicated filter rail.
-        </p>
+        <div class="hero-heading">
+          <h1>Flight discovery across nearby airports</h1>
+          <p class="lead">
+            Compare grouped fares, expand flexible dates, and refine results without leaving the page.
+          </p>
+        </div>
       </div>
     </section>
 
@@ -320,6 +340,7 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
         :response-exists="Boolean(response)"
         :is-collapsed="isSearchCollapsed"
         :compact-summary="compactSearchSummary"
+        :search-combination-count="searchCombinationCount"
         :loading="loading"
         :origin-suggestions="originSuggestions"
         :destination-suggestions="destinationSuggestions"
@@ -406,6 +427,7 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
     radial-gradient(circle at top right, rgba(44, 123, 229, 0.18), transparent 26%),
     linear-gradient(180deg, #f5f1e8 0%, #fbfaf7 42%, #eeece5 100%);
   color: #1d2228;
+  overflow-x: clip;
 }
 
 .hero-panel,
@@ -418,7 +440,22 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
 }
 
 .hero-panel {
+  display: flex;
+  align-items: center;
+  padding: 4px 0 2px;
   margin-bottom: 8px;
+}
+
+.hero-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.hero-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .eyebrow {
@@ -437,18 +474,18 @@ h2 {
 }
 
 h1 {
-  max-width: 12ch;
+  max-width: none;
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: clamp(2rem, 4vw, 3.2rem);
-  line-height: 1;
-  letter-spacing: -0.05em;
+  font-size: clamp(1.35rem, 2.2vw, 1.85rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
 }
 
 .lead {
-  max-width: 58rem;
-  margin: 8px 0 0;
-  font-size: 0.9rem;
-  line-height: 1.45;
+  max-width: 54rem;
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.35;
   color: #4b5661;
 }
 
@@ -529,6 +566,12 @@ h1 {
   margin-bottom: 10px;
 }
 
+.results-header > div,
+.results-stats,
+.results-stats span {
+  min-width: 0;
+}
+
 .results-stats {
   display: flex;
   flex-wrap: wrap;
@@ -597,6 +640,14 @@ h1 {
 }
 
 @media (max-width: 960px) {
+  .search-page {
+    padding: 16px 14px 24px;
+  }
+
+  h1 {
+    font-size: clamp(1.15rem, 4.2vw, 1.45rem);
+  }
+
   .results-grid {
     grid-template-columns: 1fr;
   }
@@ -608,6 +659,73 @@ h1 {
 
   .results-stats {
     justify-content: start;
+  }
+}
+
+@media (max-width: 640px) {
+  .search-page {
+    padding: 12px 10px 22px;
+  }
+
+  .hero-panel {
+    margin-bottom: 4px;
+    padding-top: 0;
+  }
+
+  .hero-heading {
+    align-items: start;
+    gap: 6px;
+    flex-direction: column;
+  }
+
+  .lead {
+    font-size: 0.8rem;
+  }
+
+  .progress-shell,
+  .results-shell,
+  .error-message {
+    padding-left: 10px;
+    padding-right: 10px;
+    border-radius: 10px;
+  }
+
+  .progress-copy {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .progress-copy strong {
+    font-size: 0.88rem;
+  }
+
+  .results-header {
+    gap: 8px;
+  }
+
+  .results-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    font-size: 0.78rem;
+    width: 100%;
+  }
+
+  .results-stats span {
+    padding: 4px 7px;
+    border-radius: 8px;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  .results-list {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .results-stats {
+    grid-template-columns: 1fr;
   }
 }
 </style>

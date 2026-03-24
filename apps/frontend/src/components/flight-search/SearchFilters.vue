@@ -55,6 +55,13 @@ const selectedProviders = defineModel<string[]>('selectedProviders', { required:
   padding: 12px;
 }
 
+.filters-card,
+.filter-row,
+.provider-filter-group,
+.filter-toggle {
+  min-width: 0;
+}
+
 .eyebrow {
   margin: 0 0 6px;
   font-size: 0.72rem;
@@ -85,6 +92,11 @@ h3 {
   font-size: 0.88rem;
 }
 
+.filter-toggle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .filter-label,
 .filter-row span {
   font-size: 0.74rem;
@@ -97,5 +109,31 @@ h3 {
 .provider-filter-group {
   padding-top: 8px;
   border-top: 1px solid rgba(29, 34, 40, 0.08);
+}
+
+@media (max-width: 960px) {
+  .filters-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .filters-card {
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  h3 {
+    font-size: 0.92rem;
+  }
+
+  .filter-toggle {
+    font-size: 0.84rem;
+  }
+
+  .provider-filter-group {
+    display: grid;
+    gap: 2px;
+  }
 }
 </style>

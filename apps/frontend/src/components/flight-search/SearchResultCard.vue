@@ -174,6 +174,16 @@ const isDirectFlight = (result: SearchResult) =>
   margin-bottom: 8px;
 }
 
+.details-main,
+.details-timing,
+.fare-summary,
+.fare-provider,
+.price-block,
+.other-fare-item,
+.other-fare-item div {
+  min-width: 0;
+}
+
 .details-main {
   display: grid;
   gap: 4px;
@@ -195,11 +205,13 @@ const isDirectFlight = (result: SearchResult) =>
 .provider {
   font-size: 0.9rem;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .route {
   color: #5b6570;
   font-size: 0.84rem;
+  overflow-wrap: anywhere;
 }
 
 .leg-block + .leg-block {
@@ -253,6 +265,7 @@ const isDirectFlight = (result: SearchResult) =>
 .segment-route,
 .segment-times {
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .segment-route,
@@ -307,6 +320,7 @@ const isDirectFlight = (result: SearchResult) =>
   font-weight: 600;
   text-decoration: none;
   font-size: 0.84rem;
+  overflow-wrap: anywhere;
 }
 
 .attached-expand {
@@ -388,6 +402,10 @@ const isDirectFlight = (result: SearchResult) =>
 }
 
 @media (max-width: 720px) {
+  .result-card {
+    padding: 10px;
+  }
+
   .details-header,
   .leg-summary,
   .segment-item,
@@ -402,6 +420,15 @@ const isDirectFlight = (result: SearchResult) =>
     text-align: left;
   }
 
+  .details-header {
+    margin-bottom: 10px;
+  }
+
+  .fare-summary,
+  .other-fare-item {
+    gap: 6px;
+  }
+
   .leg-times,
   .segment-route,
   .segment-times {
@@ -414,6 +441,39 @@ const isDirectFlight = (result: SearchResult) =>
 
   .price-block {
     justify-items: start;
+  }
+
+  .other-fare-item {
+    justify-items: start;
+  }
+}
+
+@media (max-width: 560px) {
+  .provider {
+    font-size: 0.86rem;
+  }
+
+  .route {
+    font-size: 0.8rem;
+  }
+
+  .segment-item,
+  .other-fare-item,
+  .attached-expand {
+    font-size: 0.8rem;
+  }
+
+  .fare-summary {
+    padding: 8px 9px;
+  }
+
+  .price-block strong {
+    font-size: 0.94rem;
+  }
+
+  .primary-fare-link,
+  .other-fare-item a {
+    font-size: 0.82rem;
   }
 }
 </style>

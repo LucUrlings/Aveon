@@ -5,6 +5,7 @@ defineProps<{
   responseExists: boolean
   isCollapsed: boolean
   compactSummary: string
+  searchCombinationCount: number
   loading: boolean
   originSuggestions: AirportOption[]
   destinationSuggestions: AirportOption[]
@@ -156,9 +157,16 @@ const emit = defineEmits<{
           </div>
         </div>
 
-        <button class="search-button" type="submit" :disabled="loading">
-          {{ loading ? 'Searching...' : 'Search flights' }}
-        </button>
+        <div class="search-actions">
+          <p class="combination-count">
+            {{ searchCombinationCount }}
+            {{ searchCombinationCount === 1 ? 'combination' : 'combinations' }}
+          </p>
+
+          <button class="search-button" type="submit" :disabled="loading">
+            {{ loading ? 'Searching...' : 'Search flights' }}
+          </button>
+        </div>
       </form>
     </Transition>
   </section>
@@ -187,6 +195,15 @@ const emit = defineEmits<{
   margin-bottom: 6px;
 }
 
+.search-shell-header > div,
+.field,
+.airport-picker,
+.search-actions,
+.search-button,
+.combination-count {
+  min-width: 0;
+}
+
 .eyebrow {
   margin: 0 0 6px;
   font-size: 0.72rem;
@@ -201,6 +218,7 @@ h2 {
   color: #1d2228;
   font-size: 1.1rem;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .collapse-toggle {
@@ -259,6 +277,7 @@ h2 {
   flex-wrap: wrap;
   gap: 6px;
   min-height: 30px;
+  max-width: 100%;
 }
 
 .airport-chip {
@@ -270,6 +289,7 @@ h2 {
   font-weight: 600;
   font-size: 0.82rem;
   cursor: pointer;
+  max-width: 100%;
 }
 
 .airport-picker input,
@@ -299,6 +319,11 @@ h2 {
 }
 
 .suggestions-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
   list-style: none;
   padding: 6px;
   margin: 0;
@@ -306,6 +331,8 @@ h2 {
   border-radius: 10px;
   background: #fff;
   box-shadow: 0 20px 45px rgba(41, 49, 61, 0.12);
+  max-height: 220px;
+  overflow: auto;
 }
 
 .suggestion-button {
@@ -324,7 +351,6 @@ h2 {
 }
 
 .search-button {
-  margin-top: 12px;
   border: none;
   border-radius: 999px;
   padding: 8px 14px;
@@ -338,6 +364,22 @@ h2 {
 .search-button:disabled {
   opacity: 0.7;
   cursor: wait;
+}
+
+.search-actions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.combination-count {
+  margin: 0;
+  color: #5b6570;
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .search-pane-enter-active,
@@ -365,6 +407,10 @@ h2 {
 }
 
 @media (max-width: 960px) {
+  .search-shell {
+    padding: 11px 12px;
+  }
+
   .airport-grid,
   .settings-grid {
     grid-template-columns: 1fr;
@@ -372,6 +418,79 @@ h2 {
 
   .field-compact {
     max-width: none;
+  }
+
+  .search-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .search-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .search-shell {
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  .search-shell-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  h2 {
+    font-size: 1rem;
+    line-height: 1.2;
+  }
+
+  .collapse-toggle {
+    align-self: flex-start;
+    max-width: 100%;
+  }
+
+  .airport-picker,
+  .field {
+    gap: 5px;
+  }
+
+  .airport-chip {
+    font-size: 0.78rem;
+  }
+
+  .airport-picker input,
+  .field input,
+  .field select {
+    min-height: 40px;
+    padding: 8px 9px;
+    font-size: 0.9rem;
+  }
+
+  .suggestions-list {
+    padding: 4px;
+    border-radius: 8px;
+  }
+
+  .suggestion-button {
+    padding: 8px;
+    font-size: 0.86rem;
+  }
+
+  .search-actions {
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .combination-count {
+    font-size: 0.78rem;
+  }
+
+  .airport-chip,
+  .suggestion-button,
+  .search-button {
+    word-break: break-word;
   }
 }
 </style>
