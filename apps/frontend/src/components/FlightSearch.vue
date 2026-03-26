@@ -78,12 +78,20 @@ const airlineFilters = computed(() => {
   )].sort((left, right) => left.localeCompare(right))
 })
 
+const getVisiblePriceOptions = (result: SearchResponse['results'][number]) => {
+  const visibleOptions = selectedProviders.value.length > 0
+    ? result.priceOptions.filter((option) => selectedProviders.value.includes(option.provider))
+    : result.priceOptions
+
+  return [...visibleOptions].sort((left, right) => left.totalPrice.amount - right.totalPrice.amount)
+}
+
 const baseFilteredResults = computed(() => {
   if (!response.value) {
     return []
   }
 
-  return response.value.results.filter((result) => {
+  return response.value.results.flatMap((result) => {
     const stopCount = getStopCount(result)
     const includeByStopCount = (
       (stopCount === 0 && includeDirectFlights.value) ||
@@ -92,17 +100,12 @@ const baseFilteredResults = computed(() => {
     )
 
     if (!includeByStopCount) {
-      return false
+      return []
     }
 
-    if (selectedProviders.value.length > 0) {
-      const hasSelectedProvider = result.priceOptions.some((option) =>
-        selectedProviders.value.includes(option.provider),
-      )
-
-      if (!hasSelectedProvider) {
-        return false
-      }
+    const visiblePriceOptions = getVisiblePriceOptions(result)
+    if (visiblePriceOptions.length === 0) {
+      return []
     }
 
     if (selectedAirlines.value.length > 0) {
@@ -116,21 +119,24 @@ const baseFilteredResults = computed(() => {
 
       const hasSelectedAirline = selectedAirlines.value.some((airline) => resultAirlines.has(airline))
       if (!hasSelectedAirline) {
-        return false
+        return []
       }
     }
 
     const firstDepartureMinutes = getUtcMinutes(result.legs[0]?.departureUtc)
     if (firstDepartureMinutes < departureTimeRange.value[0] || firstDepartureMinutes > departureTimeRange.value[1]) {
-      return false
+      return []
     }
 
     const lastArrivalMinutes = getUtcMinutes(result.legs[result.legs.length - 1]?.arrivalUtc)
     if (lastArrivalMinutes < arrivalTimeRange.value[0] || lastArrivalMinutes > arrivalTimeRange.value[1]) {
-      return false
+      return []
     }
 
-    return true
+    return [{
+      ...result,
+      priceOptions: visiblePriceOptions,
+    }]
   })
 })
 
@@ -190,6 +196,22 @@ const compactSearchSummary = computed(() => {
 
 const uniqueAirportCodes = (airports: AirportOption[]) =>
   [...new Set(airports.map((airport) => airport.code.trim().toUpperCase()).filter(Boolean))]
+
+const pageTitle = computed(() => {
+  const origins = uniqueAirportCodes(originAirports.value).join(', ')
+  const destinations = uniqueAirportCodes(destinationAirports.value).join(', ')
+  const routeSummary = origins && destinations ? `${origins} to ${destinations}` : ''
+
+  if (isPolling.value && routeSummary) {
+    return `Aveon · Searching ${routeSummary}`
+  }
+
+  if (response.value && routeSummary) {
+    return `Aveon · ${filteredResults.value.length} flights from ${routeSummary}`
+  }
+
+  return 'Aveon'
+})
 
 const searchCombinationCount = computed(() => {
   const origins = uniqueAirportCodes(originAirports.value)
@@ -304,6 +326,10 @@ const resetPriceRangeToAvailable = () => {
   priceRange.value = [minPrice, maxPrice]
 }
 
+const resetSelectedProvidersToAvailable = () => {
+  selectedProviders.value = [...providerFilters.value]
+}
+
 const resetSelectedAirlinesToAvailable = () => {
   selectedAirlines.value = [...airlineFilters.value]
 }
@@ -337,7 +363,16 @@ watch(
 watch(
   response,
   () => {
+    resetSelectedProvidersToAvailable()
     resetSelectedAirlinesToAvailable()
+  },
+  { immediate: true },
+)
+
+watch(
+  pageTitle,
+  (value) => {
+    document.title = value
   },
   { immediate: true },
 )
