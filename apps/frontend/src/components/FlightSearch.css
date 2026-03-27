@@ -18,6 +18,11 @@
   margin: 0 auto;
 }
 
+.search-bar-wrap {
+  position: relative;
+  z-index: 40;
+}
+
 .hero-panel {
   display: flex;
   align-items: center;

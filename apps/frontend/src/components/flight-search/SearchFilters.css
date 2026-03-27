@@ -156,8 +156,15 @@ h3 {
   height: 26px;
 }
 
+.single-range-slider {
+  position: relative;
+  height: 18px;
+}
+
 .range-slider-track,
-.range-slider-selected {
+.range-slider-selected,
+.single-range-slider .range-slider-track,
+.single-range-slider .range-slider-selected {
   position: absolute;
   top: 50%;
   height: 6px;
@@ -171,7 +178,17 @@ h3 {
   background: #e5ebf2;
 }
 
+.single-range-slider .range-slider-track {
+  left: 0;
+  right: 0;
+  background: #e5ebf2;
+}
+
 .range-slider-selected {
+  background: linear-gradient(135deg, #1f5fbf 0%, #2c7be5 100%);
+}
+
+.single-range-slider .range-slider-selected {
   background: linear-gradient(135deg, #1f5fbf 0%, #2c7be5 100%);
 }
 
@@ -185,12 +202,31 @@ h3 {
   appearance: none;
 }
 
+.single-range-slider input[type='range'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+}
+
 .range-slider input[type='range']::-webkit-slider-runnable-track {
   height: 6px;
   background: transparent;
 }
 
+.single-range-slider input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  background: transparent;
+}
+
 .range-slider input[type='range']::-moz-range-track {
+  height: 6px;
+  background: transparent;
+}
+
+.single-range-slider input[type='range']::-moz-range-track {
   height: 6px;
   background: transparent;
 }
@@ -208,6 +244,18 @@ h3 {
   cursor: pointer;
 }
 
+.single-range-slider input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #1f5fbf;
+  box-shadow: 0 2px 8px rgba(31, 95, 191, 0.25);
+  cursor: pointer;
+}
+
 .range-slider input[type='range']::-moz-range-thumb {
   width: 14px;
   height: 14px;
@@ -216,6 +264,16 @@ h3 {
   background: #1f5fbf;
   box-shadow: 0 2px 8px rgba(31, 95, 191, 0.25);
   pointer-events: auto;
+  cursor: pointer;
+}
+
+.single-range-slider input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #1f5fbf;
+  box-shadow: 0 2px 8px rgba(31, 95, 191, 0.25);
   cursor: pointer;
 }
 

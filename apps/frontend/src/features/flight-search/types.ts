@@ -88,10 +88,3 @@ export const cabinOptions = [
   { label: 'First', value: 'first' },
   { label: 'Premium Economy', value: 'premium_economy' },
 ]
-
-export const flexibilityOptions = [
-  { label: 'Exact', value: 0 },
-  { label: '±1 day', value: 1 },
-  { label: '±2 days', value: 2 },
-  { label: '±3 days', value: 3 },
-]

@@ -6,12 +6,13 @@ import SearchResultCard from './flight-search/SearchResultCard.vue'
 import { fetchAirportSuggestions, getSearchSession, searchFlightsRequest } from '../features/flight-search/api'
 import {
   cabinOptions,
-  flexibilityOptions,
   type AirportOption,
   type SearchRequest,
   type SearchResponse,
   type SearchSessionResponse,
 } from '../features/flight-search/types'
+
+const MAX_DEPARTURE_RANGE_DAYS = 10
 
 const originInput = ref('')
 const destinationInput = ref('')
@@ -22,8 +23,8 @@ const destinationAirports = ref<AirportOption[]>([
   { code: 'AMS', name: 'Amsterdam Schiphol', displayLabel: 'Amsterdam Schiphol (AMS)' },
 ])
 
-const departureDate = ref('2026-05-15')
-const flexibleDays = ref(0)
+const departureDateFrom = ref('2026-05-15')
+const departureDateTo = ref('2026-05-17')
 const adults = ref(1)
 const cabinClass = ref('economy')
 
@@ -42,7 +43,10 @@ const includeOneStopFlights = ref(false)
 const includeTwoPlusStopFlights = ref(false)
 const selectedProviders = ref<string[]>([])
 const selectedAirlines = ref<string[]>([])
+const selectedDepartureAirports = ref<string[]>([])
+const selectedArrivalAirports = ref<string[]>([])
 const priceRange = ref<[number, number]>([0, 0])
+const maxDurationMinutes = ref(0)
 const departureTimeRange = ref<[number, number]>([0, 1439])
 const arrivalTimeRange = ref<[number, number]>([0, 1439])
 
@@ -75,6 +79,30 @@ const airlineFilters = computed(() => {
           .filter((name): name is string => Boolean(name)),
       ),
     ),
+  )].sort((left, right) => left.localeCompare(right))
+})
+
+const departureAirportFilters = computed(() => {
+  if (!response.value) {
+    return []
+  }
+
+  return [...new Set(
+    response.value.results
+      .map((result) => result.legs[0]?.originAirport?.trim())
+      .filter((airport): airport is string => Boolean(airport)),
+  )].sort((left, right) => left.localeCompare(right))
+})
+
+const arrivalAirportFilters = computed(() => {
+  if (!response.value) {
+    return []
+  }
+
+  return [...new Set(
+    response.value.results
+      .map((result) => result.legs[result.legs.length - 1]?.destinationAirport?.trim())
+      .filter((airport): airport is string => Boolean(airport)),
   )].sort((left, right) => left.localeCompare(right))
 })
 
@@ -123,6 +151,22 @@ const baseFilteredResults = computed(() => {
       }
     }
 
+    const departureAirport = result.legs[0]?.originAirport?.trim()
+    if (
+      selectedDepartureAirports.value.length > 0 &&
+      (!departureAirport || !selectedDepartureAirports.value.includes(departureAirport))
+    ) {
+      return []
+    }
+
+    const arrivalAirport = result.legs[result.legs.length - 1]?.destinationAirport?.trim()
+    if (
+      selectedArrivalAirports.value.length > 0 &&
+      (!arrivalAirport || !selectedArrivalAirports.value.includes(arrivalAirport))
+    ) {
+      return []
+    }
+
     const firstDepartureMinutes = getUtcMinutes(result.legs[0]?.departureUtc)
     if (firstDepartureMinutes < departureTimeRange.value[0] || firstDepartureMinutes > departureTimeRange.value[1]) {
       return []
@@ -138,6 +182,14 @@ const baseFilteredResults = computed(() => {
       priceOptions: visiblePriceOptions,
     }]
   })
+})
+
+const availableMaxDurationMinutes = computed(() => {
+  if (baseFilteredResults.value.length === 0) {
+    return 0
+  }
+
+  return Math.max(...baseFilteredResults.value.map((result) => result.totalDurationMinutes))
 })
 
 const availablePriceRange = computed<[number, number]>(() => {
@@ -158,6 +210,10 @@ const availablePriceRange = computed<[number, number]>(() => {
 
 const filteredResults = computed(() => {
   return baseFilteredResults.value.filter((result) => {
+    if (maxDurationMinutes.value > 0 && result.totalDurationMinutes > maxDurationMinutes.value) {
+      return false
+    }
+
     const cheapest = result.priceOptions[0]
     if (cheapest.totalPrice.amount < priceRange.value[0] || cheapest.totalPrice.amount > priceRange.value[1]) {
       return false
@@ -190,8 +246,10 @@ const isPolling = computed(() =>
 const compactSearchSummary = computed(() => {
   const origins = originAirports.value.map((airport) => airport.code).join(', ')
   const destinations = destinationAirports.value.map((airport) => airport.code).join(', ')
-  const flexibilityLabel = flexibleDays.value === 0 ? 'Exact' : `±${flexibleDays.value}d`
-  return `${origins} to ${destinations} on ${departureDate.value} (${flexibilityLabel})`
+  const dateSummary = departureDateFrom.value === departureDateTo.value
+    ? departureDateFrom.value
+    : `${departureDateFrom.value} to ${departureDateTo.value}`
+  return `${origins} to ${destinations} on ${dateSummary}`
 })
 
 const uniqueAirportCodes = (airports: AirportOption[]) =>
@@ -216,7 +274,11 @@ const pageTitle = computed(() => {
 const searchCombinationCount = computed(() => {
   const origins = uniqueAirportCodes(originAirports.value)
   const destinations = uniqueAirportCodes(destinationAirports.value)
-  const departureDateCount = (flexibleDays.value * 2) + 1
+  const start = new Date(`${departureDateFrom.value}T00:00:00Z`)
+  const end = new Date(`${departureDateTo.value}T00:00:00Z`)
+  const departureDateCount = start > end
+    ? 0
+    : Math.floor((end.getTime() - start.getTime()) / 86400000) + 1
 
   if (origins.length === 0 || destinations.length === 0 || departureDateCount <= 0) {
     return 0
@@ -334,6 +396,18 @@ const resetSelectedAirlinesToAvailable = () => {
   selectedAirlines.value = [...airlineFilters.value]
 }
 
+const resetSelectedDepartureAirportsToAvailable = () => {
+  selectedDepartureAirports.value = [...departureAirportFilters.value]
+}
+
+const resetSelectedArrivalAirportsToAvailable = () => {
+  selectedArrivalAirports.value = [...arrivalAirportFilters.value]
+}
+
+const resetMaxDurationToAvailable = () => {
+  maxDurationMinutes.value = availableMaxDurationMinutes.value
+}
+
 watch(originInput, (value) => {
   originRequestId += 1
   void updateSuggestions(value, originAirports, originSuggestions, originRequestId, () => originRequestId)
@@ -344,6 +418,30 @@ watch(destinationInput, (value) => {
   void updateSuggestions(value, destinationAirports, destinationSuggestions, destinationRequestId, () => destinationRequestId)
 })
 
+watch(departureDateFrom, (value) => {
+  if (departureDateTo.value < value) {
+    departureDateTo.value = value
+    return
+  }
+
+  const maxAllowedEnd = addDays(value, MAX_DEPARTURE_RANGE_DAYS - 1)
+  if (departureDateTo.value > maxAllowedEnd) {
+    departureDateTo.value = maxAllowedEnd
+  }
+})
+
+watch(departureDateTo, (value) => {
+  if (departureDateFrom.value > value) {
+    departureDateFrom.value = value
+    return
+  }
+
+  const minAllowedStart = addDays(value, -(MAX_DEPARTURE_RANGE_DAYS - 1))
+  if (departureDateFrom.value < minAllowedStart) {
+    departureDateFrom.value = minAllowedStart
+  }
+})
+
 watch(
   [
     response,
@@ -351,11 +449,15 @@ watch(
     includeOneStopFlights,
     includeTwoPlusStopFlights,
     selectedProviders,
+    selectedAirlines,
+    selectedDepartureAirports,
+    selectedArrivalAirports,
     departureTimeRange,
     arrivalTimeRange,
   ],
   () => {
     resetPriceRangeToAvailable()
+    resetMaxDurationToAvailable()
   },
   { immediate: true, deep: true },
 )
@@ -365,6 +467,9 @@ watch(
   () => {
     resetSelectedProvidersToAvailable()
     resetSelectedAirlinesToAvailable()
+    resetSelectedDepartureAirportsToAvailable()
+    resetSelectedArrivalAirportsToAvailable()
+    resetMaxDurationToAvailable()
   },
   { immediate: true },
 )
@@ -429,8 +534,8 @@ const searchFlights = async () => {
     const request: SearchRequest = {
       originAirports: originAirports.value.map((airport) => airport.code),
       destinationAirports: destinationAirports.value.map((airport) => airport.code),
-      departDateFrom: addDays(departureDate.value, -flexibleDays.value),
-      departDateTo: addDays(departureDate.value, flexibleDays.value),
+      departDateFrom: departureDateFrom.value <= departureDateTo.value ? departureDateFrom.value : departureDateTo.value,
+      departDateTo: departureDateFrom.value <= departureDateTo.value ? departureDateTo.value : departureDateFrom.value,
       returnDateFrom: null,
       returnDateTo: null,
       adults: adults.value,
@@ -494,19 +599,19 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
         v-model:destination-input="destinationInput"
         v-model:origin-airports="originAirports"
         v-model:destination-airports="destinationAirports"
-        v-model:departure-date="departureDate"
-        v-model:flexible-days="flexibleDays"
+        v-model:departure-date-from="departureDateFrom"
+        v-model:departure-date-to="departureDateTo"
         v-model:adults="adults"
         v-model:cabin-class="cabinClass"
         :response-exists="Boolean(response)"
         :is-collapsed="isSearchCollapsed"
         :compact-summary="compactSearchSummary"
         :search-combination-count="searchCombinationCount"
+        :max-departure-range-days="MAX_DEPARTURE_RANGE_DAYS"
         :loading="loading"
         :origin-suggestions="originSuggestions"
         :destination-suggestions="destinationSuggestions"
         :cabin-options="cabinOptions"
-        :flexibility-options="flexibilityOptions"
         @submit="searchFlights"
         @toggle-collapse="isSearchCollapsed = !isSearchCollapsed"
         @confirm-origin-input="confirmOriginInput"
@@ -546,10 +651,16 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
         v-model:include-two-plus-stop-flights="includeTwoPlusStopFlights"
         v-model:selected-providers="selectedProviders"
         v-model:selected-airlines="selectedAirlines"
+        v-model:selected-departure-airports="selectedDepartureAirports"
+        v-model:selected-arrival-airports="selectedArrivalAirports"
         v-model:departure-time-range="departureTimeRange"
         v-model:arrival-time-range="arrivalTimeRange"
+        v-model:max-duration-minutes="maxDurationMinutes"
         :available-price-range="availablePriceRange"
+        :available-max-duration-minutes="availableMaxDurationMinutes"
         :airline-filters="airlineFilters"
+        :departure-airport-filters="departureAirportFilters"
+        :arrival-airport-filters="arrivalAirportFilters"
         :provider-filters="providerFilters"
       />
 

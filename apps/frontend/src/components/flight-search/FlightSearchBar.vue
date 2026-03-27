@@ -1,24 +1,25 @@
 <script setup lang="ts">
+import DateRangePicker from './DateRangePicker.vue'
 import type { AirportOption } from '../../features/flight-search/types'
 
-defineProps<{
+const props = defineProps<{
   responseExists: boolean
   isCollapsed: boolean
   compactSummary: string
   searchCombinationCount: number
+  maxDepartureRangeDays: number
   loading: boolean
   originSuggestions: AirportOption[]
   destinationSuggestions: AirportOption[]
   cabinOptions: Array<{ label: string; value: string }>
-  flexibilityOptions: Array<{ label: string; value: number }>
 }>()
 
 const originInput = defineModel<string>('originInput', { required: true })
 const destinationInput = defineModel<string>('destinationInput', { required: true })
 const originAirports = defineModel<AirportOption[]>('originAirports', { required: true })
 const destinationAirports = defineModel<AirportOption[]>('destinationAirports', { required: true })
-const departureDate = defineModel<string>('departureDate', { required: true })
-const flexibleDays = defineModel<number>('flexibleDays', { required: true })
+const departureDateFrom = defineModel<string>('departureDateFrom', { required: true })
+const departureDateTo = defineModel<string>('departureDateTo', { required: true })
 const adults = defineModel<number>('adults', { required: true })
 const cabinClass = defineModel<string>('cabinClass', { required: true })
 
@@ -124,21 +125,12 @@ const emit = defineEmits<{
 
           <div class="settings-grid">
             <label class="field">
-              <span>Departure date</span>
-              <input v-model="departureDate" type="date" />
-            </label>
-
-            <label class="field">
-              <span>Flexible days</span>
-              <select v-model.number="flexibleDays">
-                <option
-                  v-for="option in flexibilityOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
+              <span>Date range</span>
+              <DateRangePicker
+                v-model:start-date="departureDateFrom"
+                v-model:end-date="departureDateTo"
+                :max-range-days="maxDepartureRangeDays"
+              />
             </label>
 
             <label class="field field-compact">

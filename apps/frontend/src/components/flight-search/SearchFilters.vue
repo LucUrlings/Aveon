@@ -4,23 +4,32 @@ import { ref } from 'vue'
 defineProps<{
   providerFilters: string[]
   airlineFilters: string[]
+  departureAirportFilters: string[]
+  arrivalAirportFilters: string[]
   availablePriceRange: [number, number]
+  availableMaxDurationMinutes: number
 }>()
 
 const priceRange = defineModel<[number, number]>('priceRange', { required: true })
+const maxDurationMinutes = defineModel<number>('maxDurationMinutes', { required: true })
 const includeDirectFlights = defineModel<boolean>('includeDirectFlights', { required: true })
 const includeOneStopFlights = defineModel<boolean>('includeOneStopFlights', { required: true })
 const includeTwoPlusStopFlights = defineModel<boolean>('includeTwoPlusStopFlights', { required: true })
 const selectedProviders = defineModel<string[]>('selectedProviders', { required: true })
 const selectedAirlines = defineModel<string[]>('selectedAirlines', { required: true })
+const selectedDepartureAirports = defineModel<string[]>('selectedDepartureAirports', { required: true })
+const selectedArrivalAirports = defineModel<string[]>('selectedArrivalAirports', { required: true })
 const departureTimeRange = defineModel<[number, number]>('departureTimeRange', { required: true })
 const arrivalTimeRange = defineModel<[number, number]>('arrivalTimeRange', { required: true })
 
 const expandedSections = ref({
   price: true,
+  duration: true,
   stops: true,
   departure: true,
   arrival: true,
+  departureAirports: false,
+  arrivalAirports: false,
   sources: false,
   airlines: false,
 })
@@ -33,6 +42,22 @@ const formatMinutes = (minutes: number) => {
   const hours = String(Math.floor(minutes / 60)).padStart(2, '0')
   const mins = String(minutes % 60).padStart(2, '0')
   return `${hours}:${mins}`
+}
+
+const formatDuration = (minutes: number) => {
+  const safeMinutes = Math.max(minutes, 0)
+  const hours = Math.floor(safeMinutes / 60)
+  const mins = safeMinutes % 60
+
+  if (hours === 0) {
+    return `${mins}m`
+  }
+
+  if (mins === 0) {
+    return `${hours}h`
+  }
+
+  return `${hours}h ${mins}m`
 }
 
 const ensureOrderedRange = (
@@ -139,6 +164,33 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
         </div>
       </section>
 
+      <section class="filter-section" :class="{ open: expandedSections.duration }">
+        <button type="button" class="filter-section-summary" @click="toggleSection('duration')">Max duration</button>
+        <div class="filter-section-body" :class="{ open: expandedSections.duration }">
+          <div class="filter-section-inner time-filter-group">
+            <div class="time-filter-header">
+              <span class="filter-label">Max duration</span>
+              <strong>{{ formatDuration(maxDurationMinutes) }}</strong>
+            </div>
+            <div class="single-range-slider">
+              <div class="range-slider-track" />
+              <div
+                class="range-slider-selected"
+                :style="{ left: '0%', width: `${availableMaxDurationMinutes > 0 ? (maxDurationMinutes / availableMaxDurationMinutes) * 100 : 0}%` }"
+              />
+              <input
+                :value="maxDurationMinutes"
+                type="range"
+                min="0"
+                :max="availableMaxDurationMinutes"
+                step="15"
+                @input="maxDurationMinutes = Number(($event.target as HTMLInputElement).value)"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="filter-section" :class="{ open: expandedSections.departure }">
         <button type="button" class="filter-section-summary" @click="toggleSection('departure')">Departure time</button>
         <div class="filter-section-body" :class="{ open: expandedSections.departure }">
@@ -199,6 +251,44 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
                 @input="ensureOrderedRange(arrivalTimeRange, 1, Number(($event.target as HTMLInputElement).value), 0, 1440)"
               />
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="filter-section" :class="{ open: expandedSections.departureAirports }">
+        <button type="button" class="filter-section-summary" @click="toggleSection('departureAirports')">Departure airport</button>
+        <div class="filter-section-body" :class="{ open: expandedSections.departureAirports }">
+          <div class="filter-section-inner provider-filter-group">
+            <template v-if="departureAirportFilters.length">
+              <label
+                v-for="airport in departureAirportFilters"
+                :key="airport"
+                class="filter-toggle"
+              >
+                <input v-model="selectedDepartureAirports" :value="airport" type="checkbox" />
+                <span>{{ airport }}</span>
+              </label>
+            </template>
+            <p v-else class="filter-placeholder">Available after results load</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="filter-section" :class="{ open: expandedSections.arrivalAirports }">
+        <button type="button" class="filter-section-summary" @click="toggleSection('arrivalAirports')">Arrival airport</button>
+        <div class="filter-section-body" :class="{ open: expandedSections.arrivalAirports }">
+          <div class="filter-section-inner provider-filter-group">
+            <template v-if="arrivalAirportFilters.length">
+              <label
+                v-for="airport in arrivalAirportFilters"
+                :key="airport"
+                class="filter-toggle"
+              >
+                <input v-model="selectedArrivalAirports" :value="airport" type="checkbox" />
+                <span>{{ airport }}</span>
+              </label>
+            </template>
+            <p v-else class="filter-placeholder">Available after results load</p>
           </div>
         </div>
       </section>
