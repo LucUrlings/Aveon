@@ -1,9 +1,11 @@
 name: Publish Container Image
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
   workflow_dispatch:
 
 env:
@@ -15,11 +17,20 @@ permissions:
 
 jobs:
   publish:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
