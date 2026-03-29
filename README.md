@@ -16,10 +16,11 @@ It is not a booking engine. A user search fans out into multiple provider search
 - One-way flight search
 - Multiple origin airports
 - Multiple destination airports
-- Flexible departure date range
+- Flexible departure date selection with `Range` and `Specific dates` modes
 - Airport autocomplete
 - Grouped flight results with multiple fare options
 - Session-based search polling with progress updates
+- Shareable URL-backed search and filter state via `vue-router`
 - Redis-backed provider response caching
 
 Not implemented yet:
@@ -68,10 +69,12 @@ apps/
 ## Frontend Notes
 
 - Main page component: [`FlightSearch.vue`](/Users/lucurlings/Projects/aveon/apps/frontend/src/components/FlightSearch.vue)
+- Route setup lives in [`router.ts`](/Users/lucurlings/Projects/aveon/apps/frontend/src/router.ts)
 - Child components:
   - [`FlightSearchBar.vue`](/Users/lucurlings/Projects/aveon/apps/frontend/src/components/flight-search/FlightSearchBar.vue)
   - [`SearchFilters.vue`](/Users/lucurlings/Projects/aveon/apps/frontend/src/components/flight-search/SearchFilters.vue)
   - [`SearchResultCard.vue`](/Users/lucurlings/Projects/aveon/apps/frontend/src/components/flight-search/SearchResultCard.vue)
+- Search and result filter state is reflected in the URL query string so searches can be reloaded and shared.
 - Generated API types live in [`generated.ts`](/Users/lucurlings/Projects/aveon/apps/frontend/src/api/generated.ts)
 - API normalization for the frontend lives in [`api.ts`](/Users/lucurlings/Projects/aveon/apps/frontend/src/features/flight-search/api.ts)
 
@@ -135,6 +138,14 @@ Run the backend suite with:
 
 ```bash
 dotnet test apps/backend.Tests/backend.Tests.csproj
+```
+
+Frontend unit tests live under [`apps/frontend/tests/unit`](/Users/lucurlings/Projects/aveon/apps/frontend/tests/unit).
+
+Run the frontend suite with:
+
+```bash
+pnpm --dir apps/frontend test
 ```
 
 Current backend test coverage includes:
