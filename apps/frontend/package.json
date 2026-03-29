@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "test": "vitest run",
     "preview": "vite preview",
     "generate:types": "openapi-typescript http://127.0.0.1:5200/swagger/v1/swagger.json -o src/api/generated.ts"
   },
@@ -13,12 +14,15 @@
     "vue": "^3.5.30"
   },
   "devDependencies": {
+    "@vue/test-utils": "^2.4.6",
     "@types/node": "^24.12.0",
     "@vitejs/plugin-vue": "^6.0.5",
     "@vue/tsconfig": "^0.9.0",
+    "jsdom": "^26.1.0",
     "openapi-typescript": "^7.13.0",
     "typescript": "~5.9.3",
     "vite": "^8.0.1",
+    "vitest": "^3.2.4",
     "vue-tsc": "^3.2.5"
   }
 }
