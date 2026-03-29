@@ -96,6 +96,28 @@ public sealed class SearchServiceTests
         Assert.Equal("Search exceeds the limit of 60 combinations.", error.Message);
     }
 
+    [Fact]
+    public async Task StartSearchAsync_PreservesProviderLocalTimes_WithoutForcingUtc()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var service = CreateSearchService(store, new TimedFlightSearchProvider());
+
+        var initialSession = await service.StartSearchAsync(CreateRequest(), CancellationToken.None);
+        var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
+        var result = Assert.Single(finalSession.Response.Results);
+        var leg = Assert.Single(result.Legs);
+        var segment = Assert.Single(leg.Segments);
+
+        Assert.Equal(DateTimeKind.Unspecified, leg.DepartureUtc.Kind);
+        Assert.Equal(DateTimeKind.Unspecified, leg.ArrivalUtc.Kind);
+        Assert.Equal(new DateTime(2026, 5, 15, 6, 30, 0), leg.DepartureUtc);
+        Assert.Equal(new DateTime(2026, 5, 15, 9, 15, 0), leg.ArrivalUtc);
+        Assert.Equal(DateTimeKind.Unspecified, segment.DepartureUtc.Kind);
+        Assert.Equal(DateTimeKind.Unspecified, segment.ArrivalUtc.Kind);
+        Assert.Equal(new DateTime(2026, 5, 15, 6, 30, 0), segment.DepartureUtc);
+        Assert.Equal(new DateTime(2026, 5, 15, 9, 15, 0), segment.ArrivalUtc);
+    }
+
     private static SearchRequest CreateRequest() =>
         new(
             ["DUB"],
@@ -164,6 +186,70 @@ public sealed class SearchServiceTests
             ProviderSearchRequest request,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Provider failure");
+    }
+
+    private sealed class TimedFlightSearchProvider : IFlightSearchProvider
+    {
+        public Task<FlightApiOneWayResponse> SearchOneWayAsync(
+            ProviderSearchRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new FlightApiOneWayResponse
+            {
+                Itineraries =
+                [
+                    new FlightApiItinerary
+                    {
+                        Id = "itinerary-1",
+                        LegIds = ["leg-1"],
+                        DeepLink = "https://example.com/fare",
+                        PricingOptions =
+                        [
+                            new FlightApiPricingOption
+                            {
+                                Id = "pricing-1",
+                                Price = new FlightApiPrice { Amount = 199m },
+                                Items = []
+                            }
+                        ]
+                    }
+                ],
+                Legs =
+                [
+                    new FlightApiLeg
+                    {
+                        Id = "leg-1",
+                        OriginPlaceId = 1,
+                        DestinationPlaceId = 2,
+                        Departure = new DateTime(2026, 5, 15, 6, 30, 0),
+                        Arrival = new DateTime(2026, 5, 15, 9, 15, 0),
+                        SegmentIds = ["segment-1"],
+                        Duration = 165
+                    }
+                ],
+                Segments =
+                [
+                    new FlightApiSegment
+                    {
+                        Id = "segment-1",
+                        OriginPlaceId = 1,
+                        DestinationPlaceId = 2,
+                        Departure = new DateTime(2026, 5, 15, 6, 30, 0),
+                        Arrival = new DateTime(2026, 5, 15, 9, 15, 0),
+                        Duration = 165,
+                        MarketingFlightNumber = "123",
+                        MarketingCarrierId = 1
+                    }
+                ],
+                Places =
+                [
+                    new FlightApiPlace { Id = 1, Iata = "DUB", DisplayCode = "DUB", Name = "Dublin" },
+                    new FlightApiPlace { Id = 2, Iata = "AMS", DisplayCode = "AMS", Name = "Amsterdam" }
+                ],
+                Carriers =
+                [
+                    new FlightApiCarrier { Id = 1, Name = "Test Airline", DisplayCode = "TA" }
+                ]
+            });
     }
 
     private sealed class FlakySearchSessionStore(IEnumerable<int> failingCalls) : ISearchSessionStore

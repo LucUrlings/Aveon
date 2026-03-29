@@ -11,22 +11,21 @@ const emit = defineEmits<{
 }>()
 
 const formatDateTime = (value: string) => {
-  const date = new Date(value)
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+  if (!match) {
+    return value
+  }
+
+  const [, year, month, day, hours, minutes] = match
+  const date = new Date(Number.parseInt(year, 10), Number.parseInt(month, 10) - 1, Number.parseInt(day, 10))
   const weekday = new Intl.DateTimeFormat('en-IE', {
     weekday: 'short',
-    timeZone: 'UTC',
   }).format(date).slice(0, 2)
-
-  const rest = new Intl.DateTimeFormat('en-IE', {
-    day: '2-digit',
+  const monthLabel = new Intl.DateTimeFormat('en-IE', {
     month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'UTC',
   }).format(date)
 
-  return `${weekday} ${rest}`
+  return `${weekday} ${day} ${monthLabel} ${hours}:${minutes}`
 }
 
 const formatDuration = (totalMinutes: number) => {

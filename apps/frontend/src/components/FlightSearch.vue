@@ -167,12 +167,12 @@ const baseFilteredResults = computed(() => {
       return []
     }
 
-    const firstDepartureMinutes = getUtcMinutes(result.legs[0]?.departureUtc)
+    const firstDepartureMinutes = getClockMinutes(result.legs[0]?.departureUtc)
     if (firstDepartureMinutes < departureTimeRange.value[0] || firstDepartureMinutes > departureTimeRange.value[1]) {
       return []
     }
 
-    const lastArrivalMinutes = getUtcMinutes(result.legs[result.legs.length - 1]?.arrivalUtc)
+    const lastArrivalMinutes = getClockMinutes(result.legs[result.legs.length - 1]?.arrivalUtc)
     if (lastArrivalMinutes < arrivalTimeRange.value[0] || lastArrivalMinutes > arrivalTimeRange.value[1]) {
       return []
     }
@@ -297,13 +297,20 @@ const addDays = (dateString: string, days: number) => {
   return date.toISOString().slice(0, 10)
 }
 
-const getUtcMinutes = (value?: string) => {
+const getClockMinutes = (value?: string) => {
   if (!value) {
     return 0
   }
 
-  const date = new Date(value)
-  return (date.getUTCHours() * 60) + date.getUTCMinutes()
+  const match = value.match(/T(\d{2}):(\d{2})/)
+  if (!match) {
+    return 0
+  }
+
+  const hours = Number.parseInt(match[1], 10)
+  const minutes = Number.parseInt(match[2], 10)
+
+  return (hours * 60) + minutes
 }
 
 const getStopCount = (result: SearchResponse['results'][number]) =>

@@ -461,8 +461,8 @@ public sealed class SearchService(
         return new SearchResultLeg(
             ResolvePlaceCode(leg.OriginPlaceId, placesById),
             ResolvePlaceCode(leg.DestinationPlaceId, placesById),
-            DateTime.SpecifyKind(leg.Departure, DateTimeKind.Utc),
-            DateTime.SpecifyKind(leg.Arrival, DateTimeKind.Utc),
+            DateTime.SpecifyKind(leg.Departure, DateTimeKind.Unspecified),
+            DateTime.SpecifyKind(leg.Arrival, DateTimeKind.Unspecified),
             leg.Duration,
             segments);
     }
@@ -484,8 +484,8 @@ public sealed class SearchService(
             segment.MarketingFlightNumber ?? string.Empty,
             ResolvePlaceCode(segment.OriginPlaceId, placesById),
             ResolvePlaceCode(segment.DestinationPlaceId, placesById),
-            DateTime.SpecifyKind(segment.Departure, DateTimeKind.Utc),
-            DateTime.SpecifyKind(segment.Arrival, DateTimeKind.Utc),
+            DateTime.SpecifyKind(segment.Departure, DateTimeKind.Unspecified),
+            DateTime.SpecifyKind(segment.Arrival, DateTimeKind.Unspecified),
             segment.Duration);
     }
 
