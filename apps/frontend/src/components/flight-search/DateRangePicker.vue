@@ -7,11 +7,15 @@ const props = defineProps<{
 
 const startDate = defineModel<string>('startDate', { required: true })
 const endDate = defineModel<string>('endDate', { required: true })
+const selectedDates = defineModel<string[]>('selectedDates', { required: true })
+
+type SelectionMode = 'range' | 'specific'
 
 const isOpen = ref(false)
 const pickerRoot = ref<HTMLElement | null>(null)
 const displayMonth = ref('')
 const anchorDate = ref<string | null>(null)
+const selectionMode = ref<SelectionMode>('range')
 
 const monthFormatter = new Intl.DateTimeFormat('en-IE', {
   month: 'long',
@@ -130,26 +134,53 @@ const availableMonthOptions = computed(() => {
 })
 
 const formattedRange = computed(() => {
-  if (!startDate.value || !endDate.value) {
+  if (selectedDates.value.length === 0) {
     return 'Select travel dates'
   }
 
-  const start = triggerFormatter.format(parseDate(startDate.value))
-  const end = triggerFormatter.format(parseDate(endDate.value))
-
-  return startDate.value === endDate.value ? start : `${start} - ${end}`
+  return selectedDates.value
+    .map((value) => triggerFormatter.format(parseDate(value)))
+    .join(', ')
 })
 
+const normalizeDates = (dates: string[]) => [...new Set(dates)].sort((left, right) => left.localeCompare(right))
+
+const buildSelectedDates = (start: string, end: string) => {
+  if (!start || !end) {
+    return []
+  }
+
+  const first = start <= end ? start : end
+  const last = start <= end ? end : start
+  const dates: string[] = []
+
+  for (let dateValue = first; dateValue <= last; dateValue = addDays(dateValue, 1)) {
+    dates.push(dateValue)
+  }
+
+  return normalizeDates(dates)
+}
+
 const isWithinSelectedRange = (dateValue: string) =>
-  dateValue >= startDate.value && dateValue <= endDate.value
+  selectionMode.value === 'range' &&
+  dateValue >= startDate.value &&
+  dateValue <= endDate.value
 
-const isRangeStart = (dateValue: string) => dateValue === startDate.value
+const isRangeStart = (dateValue: string) =>
+  selectionMode.value === 'range' && dateValue === startDate.value
 
-const isRangeEnd = (dateValue: string) => dateValue === endDate.value
+const isRangeEnd = (dateValue: string) =>
+  selectionMode.value === 'range' && dateValue === endDate.value
+
+const isSelectedDate = (dateValue: string) => selectedDates.value.includes(dateValue)
 
 const isDisabledDate = (dateValue: string) => {
   if (dateValue < todayDateString) {
     return true
+  }
+
+  if (selectionMode.value === 'specific') {
+    return selectedDates.value.length >= props.maxRangeDays && !isSelectedDate(dateValue)
   }
 
   if (!anchorDate.value) {
@@ -161,8 +192,31 @@ const isDisabledDate = (dateValue: string) => {
   return dateValue < earliest || dateValue > latest
 }
 
+const syncBoundsFromSelectedDates = (dates: string[]) => {
+  if (dates.length === 0) {
+    return
+  }
+
+  startDate.value = dates[0]
+  endDate.value = dates[dates.length - 1]
+}
+
+const toggleSpecificDate = (dateValue: string) => {
+  const nextDates = isSelectedDate(dateValue)
+    ? selectedDates.value.filter((value) => value !== dateValue)
+    : normalizeDates([...selectedDates.value, dateValue])
+
+  selectedDates.value = nextDates
+  syncBoundsFromSelectedDates(nextDates)
+}
+
 const selectDate = (dateValue: string) => {
   if (isDisabledDate(dateValue)) {
+    return
+  }
+
+  if (selectionMode.value === 'specific') {
+    toggleSpecificDate(dateValue)
     return
   }
 
@@ -191,12 +245,18 @@ const closePicker = () => {
 }
 
 const togglePicker = () => {
-  displayMonth.value = startDate.value.slice(0, 7)
+  const focalDate = selectedDates.value[0] ?? startDate.value
+  displayMonth.value = focalDate.slice(0, 7)
   isOpen.value = !isOpen.value
 
   if (!isOpen.value) {
     anchorDate.value = null
   }
+}
+
+const setSelectionMode = (mode: SelectionMode) => {
+  selectionMode.value = mode
+  anchorDate.value = null
 }
 
 const moveMonth = (offset: number) => {
@@ -223,6 +283,26 @@ watch(
   { immediate: true },
 )
 
+watch(
+  [startDate, endDate],
+  ([start, end]) => {
+    if (selectionMode.value === 'range') {
+      selectedDates.value = buildSelectedDates(start, end)
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  selectedDates,
+  (dates) => {
+    if (dates.length > 0) {
+      syncBoundsFromSelectedDates(normalizeDates(dates))
+    }
+  },
+  { deep: true },
+)
+
 onMounted(() => {
   document.addEventListener('mousedown', handleClickOutside)
 })
@@ -236,17 +316,39 @@ onBeforeUnmount(() => {
   <div ref="pickerRoot" class="date-range-picker">
     <button type="button" class="date-range-trigger" @click="togglePicker">
       <span class="date-range-trigger-label">{{ formattedRange }}</span>
-      <span class="date-range-trigger-meta">Up to {{ maxRangeDays }} consecutive days</span>
+      <span class="date-range-trigger-meta">
+        {{ selectionMode === 'range' ? `Up to ${maxRangeDays} consecutive days` : `Up to ${maxRangeDays} picked dates` }}
+      </span>
     </button>
 
     <Transition name="date-range-popover">
       <div v-if="isOpen" class="date-range-popover">
         <div class="date-range-popover-header">
           <div class="date-range-popover-copy">
-            <p>Select a start and end date</p>
-            <span>Up to {{ maxRangeDays }} consecutive days</span>
+            <p>Select travel dates</p>
+            <span>
+              {{ selectionMode === 'range' ? `Range mode: up to ${maxRangeDays} consecutive days` : `Specific dates mode: up to ${maxRangeDays} picked dates` }}
+            </span>
           </div>
           <div class="date-range-popover-controls">
+            <div class="selection-mode-toggle">
+              <button
+                type="button"
+                class="selection-mode-button"
+                :class="{ active: selectionMode === 'range' }"
+                @click="setSelectionMode('range')"
+              >
+                Range
+              </button>
+              <button
+                type="button"
+                class="selection-mode-button"
+                :class="{ active: selectionMode === 'specific' }"
+                @click="setSelectionMode('specific')"
+              >
+                Specific dates
+              </button>
+            </div>
             <div class="calendar-jumpers">
               <select v-model="selectedMonth" class="calendar-jump-select">
                 <option v-for="month in availableMonthOptions" :key="month.value" :value="month.value">
@@ -280,10 +382,10 @@ onBeforeUnmount(() => {
                   type="button"
                   class="calendar-day"
                   :class="{
-                    selected: isWithinSelectedRange(cell.date),
+                    selected: isWithinSelectedRange(cell.date) || (selectionMode === 'specific' && isSelectedDate(cell.date)),
                     'range-start': isRangeStart(cell.date),
                     'range-end': isRangeEnd(cell.date),
-                    anchor: anchorDate === cell.date,
+                    anchor: selectionMode === 'range' && anchorDate === cell.date,
                     disabled: isDisabledDate(cell.date),
                   }"
                   :disabled="isDisabledDate(cell.date)"

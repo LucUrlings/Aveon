@@ -300,11 +300,6 @@ public sealed class SearchService(
             throw new ArgumentException("At least one destination airport is required.");
         }
 
-        if (request.DepartDateTo < request.DepartDateFrom)
-        {
-            throw new ArgumentException("DepartDateTo must be on or after DepartDateFrom.");
-        }
-
         if (request.ReturnDateFrom is not null || request.ReturnDateTo is not null)
         {
             throw new ArgumentException("Return flights are not supported yet.");

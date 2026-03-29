@@ -25,6 +25,7 @@ const destinationAirports = ref<AirportOption[]>([
 
 const departureDateFrom = ref('2026-05-15')
 const departureDateTo = ref('2026-05-17')
+const selectedDepartureDates = ref<string[]>(['2026-05-15', '2026-05-16', '2026-05-17'])
 const adults = ref(1)
 const cabinClass = ref('economy')
 
@@ -246,9 +247,7 @@ const isPolling = computed(() =>
 const compactSearchSummary = computed(() => {
   const origins = originAirports.value.map((airport) => airport.code).join(', ')
   const destinations = destinationAirports.value.map((airport) => airport.code).join(', ')
-  const dateSummary = departureDateFrom.value === departureDateTo.value
-    ? departureDateFrom.value
-    : `${departureDateFrom.value} to ${departureDateTo.value}`
+  const dateSummary = selectedDepartureDates.value.join(', ')
   return `${origins} to ${destinations} on ${dateSummary}`
 })
 
@@ -274,11 +273,7 @@ const pageTitle = computed(() => {
 const searchCombinationCount = computed(() => {
   const origins = uniqueAirportCodes(originAirports.value)
   const destinations = uniqueAirportCodes(destinationAirports.value)
-  const start = new Date(`${departureDateFrom.value}T00:00:00Z`)
-  const end = new Date(`${departureDateTo.value}T00:00:00Z`)
-  const departureDateCount = start > end
-    ? 0
-    : Math.floor((end.getTime() - start.getTime()) / 86400000) + 1
+  const departureDateCount = selectedDepartureDates.value.length
 
   if (origins.length === 0 || destinations.length === 0 || departureDateCount <= 0) {
     return 0
@@ -607,8 +602,7 @@ const searchFlights = async () => {
     const request: SearchRequest = {
       originAirports: originAirports.value.map((airport) => airport.code),
       destinationAirports: destinationAirports.value.map((airport) => airport.code),
-      departDateFrom: departureDateFrom.value <= departureDateTo.value ? departureDateFrom.value : departureDateTo.value,
-      departDateTo: departureDateFrom.value <= departureDateTo.value ? departureDateTo.value : departureDateFrom.value,
+      selectedDates: [...selectedDepartureDates.value],
       returnDateFrom: null,
       returnDateTo: null,
       adults: adults.value,
@@ -674,6 +668,7 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
         v-model:destination-airports="destinationAirports"
         v-model:departure-date-from="departureDateFrom"
         v-model:departure-date-to="departureDateTo"
+        v-model:selected-departure-dates="selectedDepartureDates"
         v-model:adults="adults"
         v-model:cabin-class="cabinClass"
         :response-exists="Boolean(response)"

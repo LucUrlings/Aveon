@@ -20,6 +20,7 @@ const originAirports = defineModel<AirportOption[]>('originAirports', { required
 const destinationAirports = defineModel<AirportOption[]>('destinationAirports', { required: true })
 const departureDateFrom = defineModel<string>('departureDateFrom', { required: true })
 const departureDateTo = defineModel<string>('departureDateTo', { required: true })
+const selectedDepartureDates = defineModel<string[]>('selectedDepartureDates', { required: true })
 const adults = defineModel<number>('adults', { required: true })
 const cabinClass = defineModel<string>('cabinClass', { required: true })
 
@@ -125,10 +126,11 @@ const emit = defineEmits<{
 
           <div class="settings-grid">
             <label class="field">
-              <span>Date range</span>
+              <span>Dates</span>
               <DateRangePicker
                 v-model:start-date="departureDateFrom"
                 v-model:end-date="departureDateTo"
+                v-model:selected-dates="selectedDepartureDates"
                 :max-range-days="maxDepartureRangeDays"
               />
             </label>

@@ -74,8 +74,7 @@ export type SearchSessionResponse = {
 export type SearchRequest = {
   originAirports: NonNullable<GeneratedSearchRequest['originAirports']>
   destinationAirports: NonNullable<GeneratedSearchRequest['destinationAirports']>
-  departDateFrom: NonNullable<GeneratedSearchRequest['departDateFrom']>
-  departDateTo: NonNullable<GeneratedSearchRequest['departDateTo']>
+  selectedDates: NonNullable<GeneratedSearchRequest['selectedDates']>
   returnDateFrom: GeneratedSearchRequest['returnDateFrom']
   returnDateTo: GeneratedSearchRequest['returnDateTo']
   adults: NonNullable<GeneratedSearchRequest['adults']>

@@ -186,10 +186,7 @@ export interface components {
         SearchRequest: {
             originAirports?: string[] | null;
             destinationAirports?: string[] | null;
-            /** Format: date */
-            departDateFrom?: string;
-            /** Format: date */
-            departDateTo?: string;
+            selectedDates?: string[] | null;
             /** Format: date */
             returnDateFrom?: string | null;
             /** Format: date */

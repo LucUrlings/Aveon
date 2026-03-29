@@ -27,6 +27,9 @@
 
 .date-range-trigger-label {
   font-size: 0.92rem;
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
 }
 
 .date-range-trigger-meta {
@@ -107,6 +110,33 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.selection-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgba(29, 34, 40, 0.1);
+  border-radius: 999px;
+  background: #f5f7fa;
+}
+
+.selection-mode-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: transparent;
+  color: #5b6570;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.selection-mode-button.active {
+  background: #1d2228;
+  color: #fff;
 }
 
 .calendar-jump-select {

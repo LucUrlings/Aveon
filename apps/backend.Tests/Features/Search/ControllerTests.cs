@@ -54,7 +54,7 @@ public sealed class SearchControllerTests
     }
 
     private static SearchRequest CreateRequest() =>
-        new(["DUB"], ["AMS"], new DateOnly(2026, 5, 15), new DateOnly(2026, 5, 15), null, null, 1, "economy");
+        new(["DUB"], ["AMS"], [new DateOnly(2026, 5, 15)], null, null, 1, "economy");
 
     private static SearchSessionResponse CreateSession(string status) =>
         new(

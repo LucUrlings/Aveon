@@ -279,13 +279,13 @@
             },
             "nullable": true
           },
-          "departDateFrom": {
-            "type": "string",
-            "format": "date"
-          },
-          "departDateTo": {
-            "type": "string",
-            "format": "date"
+          "selectedDates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "nullable": true
           },
           "returnDateFrom": {
             "type": "string",

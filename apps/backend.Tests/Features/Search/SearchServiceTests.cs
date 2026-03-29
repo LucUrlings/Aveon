@@ -60,8 +60,7 @@ public sealed class SearchServiceTests
             [
                 "AMS", "BCN", "CDG", "FRA", "MAD", "LHR", "OSL", "CPH", "MXP", "ARN"
             ],
-            DepartDateFrom: new DateOnly(2026, 5, 15),
-            DepartDateTo: new DateOnly(2026, 5, 15),
+            SelectedDates: [new DateOnly(2026, 5, 15)],
             ReturnDateFrom: null,
             ReturnDateTo: null,
             Adults: 1,
@@ -85,8 +84,7 @@ public sealed class SearchServiceTests
         var request = new SearchRequest(
             OriginAirports: ["DUB", "ORK", "SNN", "NOC", "KIR", "WAT", "SXL"],
             DestinationAirports: ["AMS", "BCN", "CDG", "FRA", "MAD", "LHR", "OSL", "CPH", "MXP"],
-            DepartDateFrom: new DateOnly(2026, 5, 15),
-            DepartDateTo: new DateOnly(2026, 5, 15),
+            SelectedDates: [new DateOnly(2026, 5, 15)],
             ReturnDateFrom: null,
             ReturnDateTo: null,
             Adults: 1,
@@ -106,8 +104,7 @@ public sealed class SearchServiceTests
         var request = new SearchRequest(
             OriginAirports: ["DUB"],
             DestinationAirports: ["DUB"],
-            DepartDateFrom: new DateOnly(2026, 5, 15),
-            DepartDateTo: new DateOnly(2026, 5, 15),
+            SelectedDates: [new DateOnly(2026, 5, 15)],
             ReturnDateFrom: null,
             ReturnDateTo: null,
             Adults: 1,
@@ -151,8 +148,7 @@ public sealed class SearchServiceTests
         var request = new SearchRequest(
             ["DUB"],
             ["AMS", "CDG"],
-            new DateOnly(2026, 5, 15),
-            new DateOnly(2026, 5, 15),
+            [new DateOnly(2026, 5, 15)],
             null,
             null,
             1,
@@ -172,8 +168,7 @@ public sealed class SearchServiceTests
         new(
             ["DUB"],
             ["AMS"],
-            new DateOnly(2026, 5, 15),
-            new DateOnly(2026, 5, 15),
+            [new DateOnly(2026, 5, 15)],
             null,
             null,
             1,
