@@ -50,21 +50,24 @@ public sealed class SearchService(
 
     private async Task RunSearchSafelyAsync(string searchId, IReadOnlyList<ProviderSearchRequest> combinations)
     {
+        var executionState = new SearchExecutionState();
+
         try
         {
-            await RunSearchAsync(searchId, combinations);
+            await RunSearchAsync(searchId, combinations, executionState);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Background flight search failed for search session {SearchId}", searchId);
 
+            var snapshot = executionState.Capture();
             var failedSession = BuildSessionSnapshot(
                 searchId,
                 StatusFailed,
                 combinations.Count,
-                0,
-                combinations.Count,
-                [],
+                snapshot.CompletedCombinations,
+                Math.Max(snapshot.FailedCombinations, combinations.Count - snapshot.CompletedCombinations),
+                snapshot.FareOptions,
                 "Search failed before completion.");
 
             await TrySetSearchSessionAsync(
@@ -73,14 +76,12 @@ public sealed class SearchService(
         }
     }
 
-    private async Task RunSearchAsync(string searchId, IReadOnlyList<ProviderSearchRequest> combinations)
+    private async Task RunSearchAsync(
+        string searchId,
+        IReadOnlyList<ProviderSearchRequest> combinations,
+        SearchExecutionState executionState)
     {
         using var concurrencyGate = new SemaphoreSlim(MaxConcurrentProviderCalls);
-
-        var sync = new object();
-        var fareOptions = new List<SearchFareOption>();
-        var completedCombinations = 0;
-        var failedCombinations = 0;
 
         var providerTasks = combinations
             .Select(async candidate =>
@@ -96,20 +97,7 @@ public sealed class SearchService(
                         var providerResponse = await flightSearchProvider.SearchOneWayAsync(candidate, CancellationToken.None);
                         var mappedFareOptions = MapToSearchFareOptions(providerResponse).ToList();
 
-                        SearchSessionResponse snapshot;
-                        lock (sync)
-                        {
-                            fareOptions.AddRange(mappedFareOptions);
-                            completedCombinations += 1;
-                            snapshot = BuildSessionSnapshot(
-                                searchId,
-                                StatusRunning,
-                                combinations.Count,
-                                completedCombinations,
-                                failedCombinations,
-                                fareOptions,
-                                null);
-                        }
+                        var snapshot = executionState.BuildRunningSnapshot(searchId, combinations.Count, mappedFareOptions);
 
                         await TrySetSearchSessionAsync(
                             snapshot,
@@ -124,20 +112,7 @@ public sealed class SearchService(
                             candidate.DestinationAirport,
                             candidate.DepartureDate);
 
-                        SearchSessionResponse snapshot;
-                        lock (sync)
-                        {
-                            completedCombinations += 1;
-                            failedCombinations += 1;
-                            snapshot = BuildSessionSnapshot(
-                                searchId,
-                                StatusRunning,
-                                combinations.Count,
-                                completedCombinations,
-                                failedCombinations,
-                                fareOptions,
-                                null);
-                        }
+                        var snapshot = executionState.BuildFailedProviderSnapshot(searchId, combinations.Count);
 
                         await TrySetSearchSessionAsync(
                             snapshot,
@@ -153,23 +128,7 @@ public sealed class SearchService(
 
         await Task.WhenAll(providerTasks);
 
-        SearchSessionResponse finalSession;
-        lock (sync)
-        {
-            var status = completedCombinations == failedCombinations ? StatusFailed : StatusCompleted;
-            var errorMessage = status == StatusFailed
-                ? "No results could be retrieved from the flight provider."
-                : null;
-
-            finalSession = BuildSessionSnapshot(
-                searchId,
-                status,
-                combinations.Count,
-                completedCombinations,
-                failedCombinations,
-                fareOptions,
-                errorMessage);
-        }
+        var finalSession = executionState.BuildFinalSnapshot(searchId, combinations.Count);
 
         await TrySetSearchSessionAsync(finalSession, "persisting the final search session");
     }
@@ -189,6 +148,80 @@ public sealed class SearchService(
                 session.SearchId);
         }
     }
+
+    private sealed class SearchExecutionState
+    {
+        private readonly Lock _lock = new();
+        private readonly List<SearchFareOption> _fareOptions = [];
+        private int _completedCombinations;
+        private int _failedCombinations;
+
+        public SearchSessionResponse BuildRunningSnapshot(
+            string searchId,
+            int totalCombinations,
+            IReadOnlyCollection<SearchFareOption> newFareOptions)
+        {
+            lock (_lock)
+            {
+                _fareOptions.AddRange(newFareOptions);
+                _completedCombinations += 1;
+                return BuildSearchSession(searchId, StatusRunning, totalCombinations, null);
+            }
+        }
+
+        public SearchSessionResponse BuildFailedProviderSnapshot(string searchId, int totalCombinations)
+        {
+            lock (_lock)
+            {
+                _completedCombinations += 1;
+                _failedCombinations += 1;
+                return BuildSearchSession(searchId, StatusRunning, totalCombinations, null);
+            }
+        }
+
+        public SearchSessionResponse BuildFinalSnapshot(string searchId, int totalCombinations)
+        {
+            lock (_lock)
+            {
+                var status = _completedCombinations == _failedCombinations ? StatusFailed : StatusCompleted;
+                var errorMessage = status == StatusFailed
+                    ? "No results could be retrieved from the flight provider."
+                    : null;
+
+                return BuildSearchSession(searchId, status, totalCombinations, errorMessage);
+            }
+        }
+
+        public SearchExecutionSnapshot Capture()
+        {
+            lock (_lock)
+            {
+                return new SearchExecutionSnapshot(
+                    [.. _fareOptions],
+                    _completedCombinations,
+                    _failedCombinations);
+            }
+        }
+
+        private SearchSessionResponse BuildSearchSession(
+            string searchId,
+            string status,
+            int totalCombinations,
+            string? errorMessage) =>
+            BuildSessionSnapshot(
+                searchId,
+                status,
+                totalCombinations,
+                _completedCombinations,
+                _failedCombinations,
+                [.. _fareOptions],
+                errorMessage);
+    }
+
+    private sealed record SearchExecutionSnapshot(
+        List<SearchFareOption> FareOptions,
+        int CompletedCombinations,
+        int FailedCombinations);
 
     private static SearchSessionResponse BuildSessionSnapshot(
         string searchId,
@@ -280,6 +313,11 @@ public sealed class SearchService(
         if (request.Adults <= 0)
         {
             throw new ArgumentException("At least one adult passenger is required.");
+        }
+
+        if (expandedCombinationCount <= 0)
+        {
+            throw new ArgumentException("Search must contain at least one valid origin, destination, and departure date combination.");
         }
 
         if (expandedCombinationCount > MaxSearchCombinations)
@@ -410,13 +448,13 @@ public sealed class SearchService(
         var legKey = string.Join(
             "|",
             option.Legs.Select(leg =>
-                $"{leg.OriginAirport}-{leg.DestinationAirport}-{leg.DepartureUtc:O}-{leg.ArrivalUtc:O}-{leg.DurationMinutes}"));
+                $"{leg.OriginAirport}-{leg.DestinationAirport}-{leg.DepartureLocalTime:O}-{leg.ArrivalLocalTime:O}-{leg.DurationMinutes}"));
 
         var segmentKey = string.Join(
             "|",
             option.Legs.SelectMany(leg => leg.Segments)
                 .Select(segment =>
-                    $"{segment.MarketingCarrierCode}-{segment.FlightNumber}-{segment.OriginAirport}-{segment.DestinationAirport}-{segment.DepartureUtc:O}-{segment.ArrivalUtc:O}"));
+                    $"{segment.MarketingCarrierCode}-{segment.FlightNumber}-{segment.OriginAirport}-{segment.DestinationAirport}-{segment.DepartureLocalTime:O}-{segment.ArrivalLocalTime:O}"));
 
         return $"{option.IsRoundTrip}:{legKey}:{segmentKey}";
     }

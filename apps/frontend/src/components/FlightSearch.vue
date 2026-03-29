@@ -167,12 +167,12 @@ const baseFilteredResults = computed(() => {
       return []
     }
 
-    const firstDepartureMinutes = getClockMinutes(result.legs[0]?.departureUtc)
+    const firstDepartureMinutes = getClockMinutes(result.legs[0]?.departureLocalTime)
     if (firstDepartureMinutes < departureTimeRange.value[0] || firstDepartureMinutes > departureTimeRange.value[1]) {
       return []
     }
 
-    const lastArrivalMinutes = getClockMinutes(result.legs[result.legs.length - 1]?.arrivalUtc)
+    const lastArrivalMinutes = getClockMinutes(result.legs[result.legs.length - 1]?.arrivalLocalTime)
     if (lastArrivalMinutes < arrivalTimeRange.value[0] || lastArrivalMinutes > arrivalTimeRange.value[1]) {
       return []
     }

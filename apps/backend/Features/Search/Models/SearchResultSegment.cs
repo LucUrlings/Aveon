@@ -6,7 +6,7 @@ public record SearchResultSegment(
     string FlightNumber,
     string OriginAirport,
     string DestinationAirport,
-    DateTime DepartureUtc,
-    DateTime ArrivalUtc,
+    DateTime DepartureLocalTime,
+    DateTime ArrivalLocalTime,
     int DurationMinutes
 );

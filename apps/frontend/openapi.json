@@ -1,0 +1,507 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "backend",
+    "version": "1.0"
+  },
+  "paths": {
+    "/api/v1/Airports": {
+      "get": {
+        "tags": [
+          "Airports"
+        ],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AirportLookupResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AirportLookupResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AirportLookupResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/Search": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchSessionResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchSessionResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/Search/{searchId}": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "searchId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchSessionResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchSessionResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchSessionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AirportLookupResponse": {
+        "type": "object",
+        "properties": {
+          "airports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AirportOption"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AirportOption": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayLabel": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "instance": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": { }
+      },
+      "SearchMetadata": {
+        "type": "object",
+        "properties": {
+          "searchCombinationCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "providerResultCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "returnedResultCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "returnedDirectFlightCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "returnedOneStopFlightCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "returnedTwoPlusStopFlightCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchRequest": {
+        "type": "object",
+        "properties": {
+          "originAirports": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "destinationAirports": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "departDateFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "departDateTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "returnDateFrom": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "returnDateTo": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "adults": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cabinClass": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            },
+            "nullable": true
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/SearchMetadata"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "isRoundTrip": {
+            "type": "boolean"
+          },
+          "legs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchResultLeg"
+            },
+            "nullable": true
+          },
+          "totalDurationMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "priceOptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchResultPriceOption"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchResultLeg": {
+        "type": "object",
+        "properties": {
+          "originAirport": {
+            "type": "string",
+            "nullable": true
+          },
+          "destinationAirport": {
+            "type": "string",
+            "nullable": true
+          },
+          "departureLocalTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "arrivalLocalTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchResultSegment"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchResultPrice": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchResultPriceOption": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": true
+          },
+          "provider": {
+            "type": "string",
+            "nullable": true
+          },
+          "totalPrice": {
+            "$ref": "#/components/schemas/SearchResultPrice"
+          },
+          "deepLink": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchResultSegment": {
+        "type": "object",
+        "properties": {
+          "marketingCarrierName": {
+            "type": "string",
+            "nullable": true
+          },
+          "marketingCarrierCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "flightNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "originAirport": {
+            "type": "string",
+            "nullable": true
+          },
+          "destinationAirport": {
+            "type": "string",
+            "nullable": true
+          },
+          "departureLocalTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "arrivalLocalTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchSessionResponse": {
+        "type": "object",
+        "properties": {
+          "searchId": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "totalCombinations": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completedCombinations": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "failedCombinations": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "response": {
+            "$ref": "#/components/schemas/SearchResponse"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Airports"
+    },
+    {
+      "name": "Search"
+    }
+  ]
+}

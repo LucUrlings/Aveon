@@ -15,16 +15,16 @@ export type SearchResultSegment = {
   flightNumber: string
   originAirport: string
   destinationAirport: string
-  departureUtc: string
-  arrivalUtc: string
+  departureLocalTime: string
+  arrivalLocalTime: string
   durationMinutes: number
 }
 
 export type SearchResultLeg = {
   originAirport: string
   destinationAirport: string
-  departureUtc: string
-  arrivalUtc: string
+  departureLocalTime: string
+  arrivalLocalTime: string
   durationMinutes: number
   segments: SearchResultSegment[]
 }

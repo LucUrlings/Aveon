@@ -41,16 +41,16 @@ const normalizeSegment = (segment: ApiSearchResultSegment): SearchResultSegment 
   flightNumber: segment.flightNumber ?? '',
   originAirport: segment.originAirport ?? '',
   destinationAirport: segment.destinationAirport ?? '',
-  departureUtc: segment.departureUtc ?? '',
-  arrivalUtc: segment.arrivalUtc ?? '',
+  departureLocalTime: segment.departureLocalTime ?? '',
+  arrivalLocalTime: segment.arrivalLocalTime ?? '',
   durationMinutes: segment.durationMinutes ?? 0,
 })
 
 const normalizeLeg = (leg: ApiSearchResultLeg): SearchResultLeg => ({
   originAirport: leg.originAirport ?? '',
   destinationAirport: leg.destinationAirport ?? '',
-  departureUtc: leg.departureUtc ?? '',
-  arrivalUtc: leg.arrivalUtc ?? '',
+  departureLocalTime: leg.departureLocalTime ?? '',
+  arrivalLocalTime: leg.arrivalLocalTime ?? '',
   durationMinutes: leg.durationMinutes ?? 0,
   segments: (leg.segments ?? []).map(normalizeSegment),
 })

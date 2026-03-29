@@ -5,6 +5,7 @@ using backend.Infrastructure.Models;
 using backend.Infrastructure.Providers.FlightApi;
 using backend.Infrastructure.Providers.FlightApi.Models;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace backend.Tests;
@@ -97,6 +98,27 @@ public sealed class SearchServiceTests
     }
 
     [Fact]
+    public async Task StartSearchAsync_RejectsRequestsWithNoValidExpandedCombinations()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
+
+        var request = new SearchRequest(
+            OriginAirports: ["DUB"],
+            DestinationAirports: ["DUB"],
+            DepartDateFrom: new DateOnly(2026, 5, 15),
+            DepartDateTo: new DateOnly(2026, 5, 15),
+            ReturnDateFrom: null,
+            ReturnDateTo: null,
+            Adults: 1,
+            CabinClass: "economy");
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => service.StartSearchAsync(request, CancellationToken.None));
+
+        Assert.Equal("Search must contain at least one valid origin, destination, and departure date combination.", error.Message);
+    }
+
+    [Fact]
     public async Task StartSearchAsync_PreservesProviderLocalTimes_WithoutForcingUtc()
     {
         var store = new FlakySearchSessionStore(failingCalls: []);
@@ -108,14 +130,42 @@ public sealed class SearchServiceTests
         var leg = Assert.Single(result.Legs);
         var segment = Assert.Single(leg.Segments);
 
-        Assert.Equal(DateTimeKind.Unspecified, leg.DepartureUtc.Kind);
-        Assert.Equal(DateTimeKind.Unspecified, leg.ArrivalUtc.Kind);
-        Assert.Equal(new DateTime(2026, 5, 15, 6, 30, 0), leg.DepartureUtc);
-        Assert.Equal(new DateTime(2026, 5, 15, 9, 15, 0), leg.ArrivalUtc);
-        Assert.Equal(DateTimeKind.Unspecified, segment.DepartureUtc.Kind);
-        Assert.Equal(DateTimeKind.Unspecified, segment.ArrivalUtc.Kind);
-        Assert.Equal(new DateTime(2026, 5, 15, 6, 30, 0), segment.DepartureUtc);
-        Assert.Equal(new DateTime(2026, 5, 15, 9, 15, 0), segment.ArrivalUtc);
+        Assert.Equal(DateTimeKind.Unspecified, leg.DepartureLocalTime.Kind);
+        Assert.Equal(DateTimeKind.Unspecified, leg.ArrivalLocalTime.Kind);
+        Assert.Equal(new DateTime(2026, 5, 15, 6, 30, 0), leg.DepartureLocalTime);
+        Assert.Equal(new DateTime(2026, 5, 15, 9, 15, 0), leg.ArrivalLocalTime);
+        Assert.Equal(DateTimeKind.Unspecified, segment.DepartureLocalTime.Kind);
+        Assert.Equal(DateTimeKind.Unspecified, segment.ArrivalLocalTime.Kind);
+        Assert.Equal(new DateTime(2026, 5, 15, 6, 30, 0), segment.DepartureLocalTime);
+        Assert.Equal(new DateTime(2026, 5, 15, 9, 15, 0), segment.ArrivalLocalTime);
+    }
+
+    [Fact]
+    public async Task StartSearchAsync_PreservesPartialResults_WhenUnexpectedBackgroundErrorOccurs()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var provider = new TimedFlightSearchProvider();
+        var scopeFactory = new ThrowOnSecondScopeFactory(provider);
+        var service = new SearchService(scopeFactory, store, NullLogger<SearchService>.Instance);
+
+        var request = new SearchRequest(
+            ["DUB"],
+            ["AMS", "CDG"],
+            new DateOnly(2026, 5, 15),
+            new DateOnly(2026, 5, 15),
+            null,
+            null,
+            1,
+            "economy");
+
+        var initialSession = await service.StartSearchAsync(request, CancellationToken.None);
+        var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
+
+        Assert.Equal("failed", finalSession.Status);
+        Assert.Equal(1, finalSession.CompletedCombinations);
+        Assert.Equal(1, finalSession.FailedCombinations);
+        Assert.Equal("Search failed before completion.", finalSession.ErrorMessage);
+        Assert.Single(finalSession.Response.Results);
     }
 
     private static SearchRequest CreateRequest() =>
@@ -307,5 +357,36 @@ public sealed class SearchServiceTests
 
             throw new TimeoutException("Timed out waiting for a terminal search session.");
         }
+    }
+
+    private sealed class ThrowOnSecondScopeFactory(IFlightSearchProvider provider) : IServiceScopeFactory
+    {
+        private int _callCount;
+
+        public IServiceScope CreateScope()
+        {
+            _callCount += 1;
+            if (_callCount == 2)
+            {
+                throw new InvalidOperationException("Injected scope creation failure.");
+            }
+
+            return new TestServiceScope(provider);
+        }
+    }
+
+    private sealed class TestServiceScope(IFlightSearchProvider provider) : IServiceScope
+    {
+        public IServiceProvider ServiceProvider { get; } = new TestServiceProvider(provider);
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class TestServiceProvider(IFlightSearchProvider provider) : IServiceProvider
+    {
+        public object? GetService(Type serviceType) =>
+            serviceType == typeof(IFlightSearchProvider) ? provider : null;
     }
 }

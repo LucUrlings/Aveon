@@ -62,8 +62,8 @@ const isDirectFlight = (result: SearchResult) =>
       </div>
       <div v-if="isDirectFlight(props.result)" class="details-timing">
         <span>
-          {{ formatDateTime(props.result.legs[0]?.departureUtc ?? '') }} to
-          {{ formatDateTime(props.result.legs[props.result.legs.length - 1]?.arrivalUtc ?? '') }}
+          {{ formatDateTime(props.result.legs[0]?.departureLocalTime ?? '') }} to
+          {{ formatDateTime(props.result.legs[props.result.legs.length - 1]?.arrivalLocalTime ?? '') }}
         </span>
         <strong>{{ formatDuration(props.result.totalDurationMinutes) }}</strong>
       </div>
@@ -77,19 +77,19 @@ const isDirectFlight = (result: SearchResult) =>
       >
         <div class="leg-summary">
           <p class="leg-route">{{ leg.originAirport }} → {{ leg.destinationAirport }}</p>
-          <span class="leg-times">{{ formatDateTime(leg.departureUtc) }} to {{ formatDateTime(leg.arrivalUtc) }}</span>
+          <span class="leg-times">{{ formatDateTime(leg.departureLocalTime) }} to {{ formatDateTime(leg.arrivalLocalTime) }}</span>
           <strong>{{ formatDuration(leg.durationMinutes) }}</strong>
         </div>
 
         <ul class="segment-list">
           <li
             v-for="segment in leg.segments"
-            :key="segment.flightNumber + segment.departureUtc"
+            :key="segment.flightNumber + segment.departureLocalTime"
             class="segment-item"
           >
             <span class="segment-airline">{{ segment.marketingCarrierName }} ({{ segment.marketingCarrierCode }}) {{ segment.flightNumber }}</span>
             <span class="segment-route">{{ segment.originAirport }} → {{ segment.destinationAirport }}</span>
-            <span class="segment-times">{{ formatDateTime(segment.departureUtc) }} to {{ formatDateTime(segment.arrivalUtc) }}</span>
+            <span class="segment-times">{{ formatDateTime(segment.departureLocalTime) }} to {{ formatDateTime(segment.arrivalLocalTime) }}</span>
           </li>
         </ul>
       </div>

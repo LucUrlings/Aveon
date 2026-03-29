@@ -214,9 +214,9 @@ export interface components {
             originAirport?: string | null;
             destinationAirport?: string | null;
             /** Format: date-time */
-            departureUtc?: string;
+            departureLocalTime?: string;
             /** Format: date-time */
-            arrivalUtc?: string;
+            arrivalLocalTime?: string;
             /** Format: int32 */
             durationMinutes?: number;
             segments?: components["schemas"]["SearchResultSegment"][] | null;
@@ -239,9 +239,9 @@ export interface components {
             originAirport?: string | null;
             destinationAirport?: string | null;
             /** Format: date-time */
-            departureUtc?: string;
+            departureLocalTime?: string;
             /** Format: date-time */
-            arrivalUtc?: string;
+            arrivalLocalTime?: string;
             /** Format: int32 */
             durationMinutes?: number;
         };
