@@ -25,9 +25,8 @@ public sealed class SearchService(
         SearchRequest request,
         CancellationToken cancellationToken)
     {
-        Validate(request);
-
         var combinations = ExpandOneWaySearches(request).ToList();
+        Validate(request, combinations.Count);
         var searchId = Guid.NewGuid().ToString("N");
 
         var initialSession = new SearchSessionResponse(
@@ -41,13 +40,38 @@ public sealed class SearchService(
 
         await searchSessionStore.SetAsync(initialSession, cancellationToken);
 
-        _ = Task.Run(() => RunSearchAsync(searchId, combinations), CancellationToken.None);
+        _ = Task.Run(() => RunSearchSafelyAsync(searchId, combinations), CancellationToken.None);
 
         return initialSession;
     }
 
     public Task<SearchSessionResponse?> GetSearchAsync(string searchId, CancellationToken cancellationToken) =>
         searchSessionStore.GetAsync(searchId, cancellationToken);
+
+    private async Task RunSearchSafelyAsync(string searchId, IReadOnlyList<ProviderSearchRequest> combinations)
+    {
+        try
+        {
+            await RunSearchAsync(searchId, combinations);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Background flight search failed for search session {SearchId}", searchId);
+
+            var failedSession = BuildSessionSnapshot(
+                searchId,
+                StatusFailed,
+                combinations.Count,
+                0,
+                combinations.Count,
+                [],
+                "Search failed before completion.");
+
+            await TrySetSearchSessionAsync(
+                failedSession,
+                "persisting failed search session after an unexpected background error");
+        }
+    }
 
     private async Task RunSearchAsync(string searchId, IReadOnlyList<ProviderSearchRequest> combinations)
     {
@@ -87,7 +111,9 @@ public sealed class SearchService(
                                 null);
                         }
 
-                        await searchSessionStore.SetAsync(snapshot, CancellationToken.None);
+                        await TrySetSearchSessionAsync(
+                            snapshot,
+                            "persisting an in-progress search session update");
                     }
                     catch (Exception ex)
                     {
@@ -113,7 +139,9 @@ public sealed class SearchService(
                                 null);
                         }
 
-                        await searchSessionStore.SetAsync(snapshot, CancellationToken.None);
+                        await TrySetSearchSessionAsync(
+                            snapshot,
+                            "persisting a failed provider search session update");
                     }
                 }
                 finally
@@ -143,7 +171,23 @@ public sealed class SearchService(
                 errorMessage);
         }
 
-        await searchSessionStore.SetAsync(finalSession, CancellationToken.None);
+        await TrySetSearchSessionAsync(finalSession, "persisting the final search session");
+    }
+
+    private async Task TrySetSearchSessionAsync(SearchSessionResponse session, string operation)
+    {
+        try
+        {
+            await searchSessionStore.SetAsync(session, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Search session persistence failed while {Operation} for {SearchId}",
+                operation,
+                session.SearchId);
+        }
     }
 
     private static SearchSessionResponse BuildSessionSnapshot(
@@ -211,7 +255,7 @@ public sealed class SearchService(
                 stopCounts.TwoPlusStopFlightCount));
     }
 
-    private static void Validate(SearchRequest request)
+    private static void Validate(SearchRequest request, int expandedCombinationCount)
     {
         if (request.OriginAirports.Count == 0)
         {
@@ -238,12 +282,7 @@ public sealed class SearchService(
             throw new ArgumentException("At least one adult passenger is required.");
         }
 
-        var combinationCount =
-            request.OriginAirports.Count *
-            request.DestinationAirports.Count *
-            request.GetDepartureDates().Count();
-
-        if (combinationCount > MaxSearchCombinations)
+        if (expandedCombinationCount > MaxSearchCombinations)
         {
             throw new ArgumentException($"Search exceeds the limit of {MaxSearchCombinations} combinations.");
         }

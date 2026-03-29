@@ -127,6 +127,25 @@ pnpm dev:frontend
 pnpm dev:backend
 ```
 
+## Testing
+
+Backend tests live in [`apps/backend.Tests`](/Users/lucurlings/Projects/aveon/apps/backend.Tests).
+
+Run the backend suite with:
+
+```bash
+dotnet test apps/backend.Tests/backend.Tests.csproj
+```
+
+Current backend test coverage includes:
+
+- search orchestration and validation edge cases
+- airport lookup service behavior
+- API controllers
+- FlightAPI client cache and request-path behavior
+- provider cache key normalization
+- search request date expansion
+
 ## Type Generation
 
 The frontend types are generated from the backend Swagger document.

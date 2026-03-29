@@ -388,24 +388,56 @@ const resetPriceRangeToAvailable = () => {
   priceRange.value = [minPrice, maxPrice]
 }
 
-const resetSelectedProvidersToAvailable = () => {
-  selectedProviders.value = [...providerFilters.value]
-}
-
-const resetSelectedAirlinesToAvailable = () => {
-  selectedAirlines.value = [...airlineFilters.value]
-}
-
-const resetSelectedDepartureAirportsToAvailable = () => {
-  selectedDepartureAirports.value = [...departureAirportFilters.value]
-}
-
-const resetSelectedArrivalAirportsToAvailable = () => {
-  selectedArrivalAirports.value = [...arrivalAirportFilters.value]
-}
-
 const resetMaxDurationToAvailable = () => {
   maxDurationMinutes.value = availableMaxDurationMinutes.value
+}
+
+const syncSelectedFiltersToAvailable = (
+  selectedItems: typeof selectedProviders | typeof selectedAirlines | typeof selectedDepartureAirports | typeof selectedArrivalAirports,
+  availableItems: string[],
+  previousAvailableItems: string[],
+  shouldReset: boolean,
+) => {
+  const hadAllAvailableSelected =
+    previousAvailableItems.length === 0
+      ? selectedItems.value.length === 0
+      : previousAvailableItems.every((item) => selectedItems.value.includes(item))
+
+  if (shouldReset || hadAllAvailableSelected) {
+    selectedItems.value = [...availableItems]
+    return
+  }
+
+  selectedItems.value = selectedItems.value.filter((item) => availableItems.includes(item))
+}
+
+const syncPriceRangeToAvailable = (shouldReset: boolean) => {
+  const [availableMinPrice, availableMaxPrice] = availablePriceRange.value
+
+  if (shouldReset) {
+    priceRange.value = [availableMinPrice, availableMaxPrice]
+    return
+  }
+
+  const nextMinPrice = Math.min(
+    Math.max(priceRange.value[0], availableMinPrice),
+    availableMaxPrice,
+  )
+  const nextMaxPrice = Math.max(
+    Math.min(priceRange.value[1], availableMaxPrice),
+    nextMinPrice,
+  )
+
+  priceRange.value = [nextMinPrice, nextMaxPrice]
+}
+
+const syncMaxDurationToAvailable = (shouldReset: boolean) => {
+  if (shouldReset) {
+    maxDurationMinutes.value = availableMaxDurationMinutes.value
+    return
+  }
+
+  maxDurationMinutes.value = Math.min(maxDurationMinutes.value, availableMaxDurationMinutes.value)
 }
 
 watch(originInput, (value) => {
@@ -444,7 +476,6 @@ watch(departureDateTo, (value) => {
 
 watch(
   [
-    response,
     includeDirectFlights,
     includeOneStopFlights,
     includeTwoPlusStopFlights,
@@ -464,12 +495,47 @@ watch(
 
 watch(
   response,
-  () => {
-    resetSelectedProvidersToAvailable()
-    resetSelectedAirlinesToAvailable()
-    resetSelectedDepartureAirportsToAvailable()
-    resetSelectedArrivalAirportsToAvailable()
-    resetMaxDurationToAvailable()
+  (nextResponse, previousResponse) => {
+    const shouldResetFilters = !previousResponse && Boolean(nextResponse)
+    const previousProviderFilters = previousResponse
+      ? [...new Set(
+        previousResponse.results.flatMap((result) =>
+          result.priceOptions.map((option) => option.provider),
+        ),
+      )].sort((left, right) => left.localeCompare(right))
+      : []
+    const previousAirlineFilters = previousResponse
+      ? [...new Set(
+        previousResponse.results.flatMap((result) =>
+          result.legs.flatMap((leg) =>
+            leg.segments
+              .map((segment) => segment.marketingCarrierName?.trim())
+              .filter((name): name is string => Boolean(name)),
+          ),
+        ),
+      )].sort((left, right) => left.localeCompare(right))
+      : []
+    const previousDepartureAirportFilters = previousResponse
+      ? [...new Set(
+        previousResponse.results
+          .map((result) => result.legs[0]?.originAirport?.trim())
+          .filter((airport): airport is string => Boolean(airport)),
+      )].sort((left, right) => left.localeCompare(right))
+      : []
+    const previousArrivalAirportFilters = previousResponse
+      ? [...new Set(
+        previousResponse.results
+          .map((result) => result.legs[result.legs.length - 1]?.destinationAirport?.trim())
+          .filter((airport): airport is string => Boolean(airport)),
+      )].sort((left, right) => left.localeCompare(right))
+      : []
+
+    syncSelectedFiltersToAvailable(selectedProviders, providerFilters.value, previousProviderFilters, shouldResetFilters)
+    syncSelectedFiltersToAvailable(selectedAirlines, airlineFilters.value, previousAirlineFilters, shouldResetFilters)
+    syncSelectedFiltersToAvailable(selectedDepartureAirports, departureAirportFilters.value, previousDepartureAirportFilters, shouldResetFilters)
+    syncSelectedFiltersToAvailable(selectedArrivalAirports, arrivalAirportFilters.value, previousArrivalAirportFilters, shouldResetFilters)
+    syncPriceRangeToAvailable(shouldResetFilters)
+    syncMaxDurationToAvailable(shouldResetFilters)
   },
   { immediate: true },
 )
