@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import FlightSearch from '../../../src/components/FlightSearch.vue'
 import type { SearchSessionResponse } from '../../../src/features/flight-search/types'
 
@@ -117,11 +118,33 @@ beforeEach(() => {
   document.title = ''
 })
 
+const mountWithRouter = async (initialPath = '/', options: Parameters<typeof mount>[1] = {}) => {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/', component: FlightSearch }],
+  })
+
+  await router.push(initialPath)
+  await router.isReady()
+
+  const wrapper = mount(FlightSearch, {
+    ...options,
+    global: {
+      ...(options.global ?? {}),
+      plugins: [...(options.global?.plugins ?? []), router],
+    },
+  })
+
+  await flushPromises()
+
+  return { wrapper, router }
+}
+
 describe('FlightSearch', () => {
   it('submits selectedDates to the backend and passes combination count to the search bar', async () => {
     mockSearchFlightsRequest.mockResolvedValue(makeSession())
 
-    const wrapper = mount(FlightSearch, {
+    const { wrapper, router } = await mountWithRouter('/', {
       global: {
         stubs: {
           FlightSearchBar: {
@@ -149,12 +172,13 @@ describe('FlightSearch', () => {
     expect(mockSearchFlightsRequest).toHaveBeenCalledWith(expect.objectContaining({
       selectedDates: ['2026-05-15', '2026-05-16', '2026-05-17'],
     }))
+    expect(router.currentRoute.value.query.adults).toBe('1')
   })
 
   it('filters by local departure time and updates the page title from filtered results', async () => {
     mockSearchFlightsRequest.mockResolvedValue(makeSession())
 
-    const wrapper = mount(FlightSearch, {
+    const { wrapper } = await mountWithRouter('/', {
       global: {
         stubs: {
           FlightSearchBar: {
@@ -183,5 +207,79 @@ describe('FlightSearch', () => {
 
     expect(wrapper.findAll('.result-card-stub').map((node) => node.text())).toEqual(['morning'])
     expect(document.title).toBe('Aveon · 1 flights from DUB to AMS')
+  })
+
+  it('hydrates the search form from URL params and keeps them in the address bar', async () => {
+    const { wrapper, router } = await mountWithRouter(
+      '/?origins=AMS&destinations=DUB&dates=2026-06-01,2026-06-03&adults=2&cabinClass=business',
+      {
+      global: {
+        stubs: {
+          FlightSearchBar: {
+            props: [
+              'originAirports',
+              'destinationAirports',
+              'selectedDepartureDates',
+              'adults',
+              'cabinClass',
+              'searchCombinationCount',
+            ],
+            template: `
+              <div>
+                <span class="origins">{{ originAirports.map((airport) => airport.code).join(',') }}</span>
+                <span class="destinations">{{ destinationAirports.map((airport) => airport.code).join(',') }}</span>
+                <span class="dates">{{ selectedDepartureDates.join(',') }}</span>
+                <span class="adults">{{ adults }}</span>
+                <span class="cabin">{{ cabinClass }}</span>
+                <span class="combinations">{{ searchCombinationCount }}</span>
+              </div>
+            `,
+          },
+          SearchFilters: true,
+          SearchResultCard: true,
+        },
+      },
+    })
+
+    expect(wrapper.get('.origins').text()).toBe('AMS')
+    expect(wrapper.get('.destinations').text()).toBe('DUB')
+    expect(wrapper.get('.dates').text()).toBe('2026-06-01,2026-06-03')
+    expect(wrapper.get('.adults').text()).toBe('2')
+    expect(wrapper.get('.cabin').text()).toBe('business')
+    expect(wrapper.get('.combinations').text()).toBe('2')
+    expect(router.currentRoute.value.query.origins).toBe('AMS')
+    expect(router.currentRoute.value.query.dates).toBe('2026-06-01,2026-06-03')
+  })
+
+  it('runs a search automatically when the route contains search params', async () => {
+    mockSearchFlightsRequest.mockResolvedValue(makeSession())
+
+    const { wrapper } = await mountWithRouter(
+      '/?origins=DUB&destinations=AMS&dates=2026-05-15,2026-05-16,2026-05-17&adults=1',
+      {
+        global: {
+          stubs: {
+            FlightSearchBar: {
+              props: ['isCollapsed'],
+              template: '<div class="collapsed">{{ isCollapsed ? "yes" : "no" }}</div>',
+            },
+            SearchFilters: true,
+            SearchResultCard: {
+              props: ['result'],
+              template: '<div class="result-card-stub">{{ result.id }}</div>',
+            },
+          },
+        },
+      },
+    )
+
+    expect(mockSearchFlightsRequest).toHaveBeenCalledWith(expect.objectContaining({
+      originAirports: ['DUB'],
+      destinationAirports: ['AMS'],
+      selectedDates: ['2026-05-15', '2026-05-16', '2026-05-17'],
+      adults: 1,
+      cabinClass: 'economy',
+    }))
+    expect(wrapper.findAll('.result-card-stub')).toHaveLength(2)
   })
 })

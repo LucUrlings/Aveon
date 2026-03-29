@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter, type LocationQueryValue } from 'vue-router'
 import FlightSearchBar from './flight-search/FlightSearchBar.vue'
 import SearchFilters from './flight-search/SearchFilters.vue'
 import SearchResultCard from './flight-search/SearchResultCard.vue'
@@ -54,6 +55,256 @@ const arrivalTimeRange = ref<[number, number]>([0, 1439])
 let originRequestId = 0
 let destinationRequestId = 0
 let pollingTimer: number | null = null
+let hasMounted = false
+let hasHydratedFiltersFromUrl = false
+let isSyncingRoute = false
+let lastExecutedSearchKey: string | null = null
+
+const route = useRoute()
+const router = useRouter()
+
+const getQueryString = (value: LocationQueryValue | LocationQueryValue[] | undefined) =>
+  Array.isArray(value) ? value[0] ?? null : value ?? null
+
+const buildAirportOption = (code: string): AirportOption => ({
+  code,
+  name: null,
+  displayLabel: code,
+})
+
+const parseStringListParam = (value: string | null) =>
+  (value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+const parseCodeListParam = (value: string | null) =>
+  parseStringListParam(value).map((item) => item.toUpperCase())
+
+const parseDateListParam = (value: string | null) =>
+  (value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right))
+
+const parseNumberParam = (value: string | null, fallback: number) => {
+  if (value === null || value.trim() === '') {
+    return fallback
+  }
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const parseBooleanParam = (value: string | null, fallback: boolean) => {
+  if (value === '1' || value === 'true') {
+    return true
+  }
+
+  if (value === '0' || value === 'false') {
+    return false
+  }
+
+  return fallback
+}
+
+const parseRangeParam = (value: string | null, fallback: [number, number]): [number, number] => {
+  if (!value) {
+    return fallback
+  }
+
+  const [startRaw, endRaw] = value.split('-', 2)
+  const start = Number(startRaw)
+  const end = Number(endRaw)
+
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return fallback
+  }
+
+  return [Math.min(start, end), Math.max(start, end)]
+}
+
+const hasActiveFilterQuery = (params: Record<string, LocationQueryValue | LocationQueryValue[] | undefined>) =>
+  [
+    'direct',
+    'oneStop',
+    'twoPlusStop',
+    'providers',
+    'airlines',
+    'departureAirports',
+    'arrivalAirports',
+    'price',
+    'maxDuration',
+    'departureTime',
+    'arrivalTime',
+  ].some((key) => params[key] !== undefined)
+
+const buildSearchRequestKey = (
+  origins: string[],
+  destinations: string[],
+  dates: string[],
+  adultsValue: number,
+  cabinClassValue: string,
+) => JSON.stringify({
+  origins: [...origins].sort((left, right) => left.localeCompare(right)),
+  destinations: [...destinations].sort((left, right) => left.localeCompare(right)),
+  dates: [...dates].sort((left, right) => left.localeCompare(right)),
+  adults: adultsValue,
+  cabinClass: cabinClassValue,
+})
+
+const getCurrentSearchRequestKey = () => {
+  const origins = uniqueAirportCodes(originAirports.value)
+  const destinations = uniqueAirportCodes(destinationAirports.value)
+  const dates = [...selectedDepartureDates.value].sort((left, right) => left.localeCompare(right))
+
+  if (origins.length === 0 || destinations.length === 0 || dates.length === 0) {
+    return null
+  }
+
+  return buildSearchRequestKey(origins, destinations, dates, adults.value, cabinClass.value)
+}
+
+const getSearchRequestKeyFromQuery = (params: Record<string, LocationQueryValue | LocationQueryValue[] | undefined>) => {
+  const origins = parseCodeListParam(getQueryString(params.origins))
+  const destinations = parseCodeListParam(getQueryString(params.destinations))
+  const dates = parseDateListParam(getQueryString(params.dates))
+
+  if (origins.length === 0 || destinations.length === 0 || dates.length === 0) {
+    return null
+  }
+
+  return buildSearchRequestKey(
+    origins,
+    destinations,
+    dates,
+    parseNumberParam(getQueryString(params.adults), 1),
+    getQueryString(params.cabinClass)?.trim() || 'economy',
+  )
+}
+
+const applyUrlState = () => {
+  const params = route.query
+
+  const originCodes = parseCodeListParam(getQueryString(params.origins))
+  if (originCodes.length > 0) {
+    originAirports.value = originCodes.map(buildAirportOption)
+  }
+
+  const destinationCodes = parseCodeListParam(getQueryString(params.destinations))
+  if (destinationCodes.length > 0) {
+    destinationAirports.value = destinationCodes.map(buildAirportOption)
+  }
+
+  const selectedDates = parseDateListParam(getQueryString(params.dates))
+  if (selectedDates.length > 0) {
+    selectedDepartureDates.value = selectedDates
+    departureDateFrom.value = selectedDates[0]
+    departureDateTo.value = selectedDates[selectedDates.length - 1]
+  }
+
+  adults.value = parseNumberParam(getQueryString(params.adults), adults.value)
+
+  const cabinClassParam = getQueryString(params.cabinClass)?.trim()
+  if (cabinClassParam) {
+    cabinClass.value = cabinClassParam
+  }
+
+  includeDirectFlights.value = parseBooleanParam(getQueryString(params.direct), includeDirectFlights.value)
+  includeOneStopFlights.value = parseBooleanParam(getQueryString(params.oneStop), includeOneStopFlights.value)
+  includeTwoPlusStopFlights.value = parseBooleanParam(getQueryString(params.twoPlusStop), includeTwoPlusStopFlights.value)
+  selectedProviders.value = parseStringListParam(getQueryString(params.providers))
+  selectedAirlines.value = parseStringListParam(getQueryString(params.airlines))
+  selectedDepartureAirports.value = parseCodeListParam(getQueryString(params.departureAirports))
+  selectedArrivalAirports.value = parseCodeListParam(getQueryString(params.arrivalAirports))
+  priceRange.value = parseRangeParam(getQueryString(params.price), priceRange.value)
+  maxDurationMinutes.value = parseNumberParam(getQueryString(params.maxDuration), maxDurationMinutes.value)
+  departureTimeRange.value = parseRangeParam(getQueryString(params.departureTime), departureTimeRange.value)
+  arrivalTimeRange.value = parseRangeParam(getQueryString(params.arrivalTime), arrivalTimeRange.value)
+  hasHydratedFiltersFromUrl = hasActiveFilterQuery(params)
+}
+
+const setListParam = (params: Record<string, string>, key: string, values: string[]) => {
+  const cleanedValues = values.map((value) => value.trim()).filter(Boolean)
+  if (cleanedValues.length === 0) {
+    delete params[key]
+    return
+  }
+
+  params[key] = cleanedValues.join(',')
+}
+
+const setBooleanParam = (params: Record<string, string>, key: string, value: boolean, fallback: boolean) => {
+  if (value === fallback) {
+    delete params[key]
+    return
+  }
+
+  params[key] = value ? '1' : '0'
+}
+
+const setNumberParam = (params: Record<string, string>, key: string, value: number, fallback: number) => {
+  if (value === fallback) {
+    delete params[key]
+    return
+  }
+
+  params[key] = String(value)
+}
+
+const setRangeParam = (params: Record<string, string>, key: string, value: [number, number], fallback: [number, number]) => {
+  if (value[0] === fallback[0] && value[1] === fallback[1]) {
+    delete params[key]
+    return
+  }
+
+  params[key] = `${value[0]}-${value[1]}`
+}
+
+const updateRouteState = async () => {
+  if (!hasMounted || isSyncingRoute) {
+    return
+  }
+
+  const query: Record<string, string> = {}
+  setListParam(query, 'origins', originAirports.value.map((airport) => airport.code))
+  setListParam(query, 'destinations', destinationAirports.value.map((airport) => airport.code))
+  setListParam(query, 'dates', selectedDepartureDates.value)
+  query.adults = String(adults.value)
+
+  if (cabinClass.value !== 'economy') {
+    query.cabinClass = cabinClass.value
+  }
+
+  setBooleanParam(query, 'direct', includeDirectFlights.value, true)
+  setBooleanParam(query, 'oneStop', includeOneStopFlights.value, false)
+  setBooleanParam(query, 'twoPlusStop', includeTwoPlusStopFlights.value, false)
+  setListParam(query, 'providers', selectedProviders.value)
+  setListParam(query, 'airlines', selectedAirlines.value)
+  setListParam(query, 'departureAirports', selectedDepartureAirports.value)
+  setListParam(query, 'arrivalAirports', selectedArrivalAirports.value)
+  setRangeParam(query, 'price', priceRange.value, [0, 0])
+  setNumberParam(query, 'maxDuration', maxDurationMinutes.value, 0)
+  setRangeParam(query, 'departureTime', departureTimeRange.value, [0, 1439])
+  setRangeParam(query, 'arrivalTime', arrivalTimeRange.value, [0, 1439])
+
+  isSyncingRoute = true
+  try {
+    await router.replace({ query })
+  } finally {
+    isSyncingRoute = false
+  }
+}
+
+const syncSearchFromRoute = () => {
+  const routeSearchKey = getSearchRequestKeyFromQuery(route.query)
+  if (!routeSearchKey || routeSearchKey === lastExecutedSearchKey) {
+    return
+  }
+
+  void searchFlights()
+}
 
 const providerFilters = computed(() => {
   if (!response.value) {
@@ -498,7 +749,7 @@ watch(
 watch(
   response,
   (nextResponse, previousResponse) => {
-    const shouldResetFilters = !previousResponse && Boolean(nextResponse)
+    const shouldResetFilters = !previousResponse && Boolean(nextResponse) && !hasHydratedFiltersFromUrl
     const previousProviderFilters = previousResponse
       ? [...new Set(
         previousResponse.results.flatMap((result) =>
@@ -538,8 +789,47 @@ watch(
     syncSelectedFiltersToAvailable(selectedArrivalAirports, arrivalAirportFilters.value, previousArrivalAirportFilters, shouldResetFilters)
     syncPriceRangeToAvailable(shouldResetFilters)
     syncMaxDurationToAvailable(shouldResetFilters)
+    hasHydratedFiltersFromUrl = false
   },
   { immediate: true },
+)
+
+watch(
+  [
+    originAirports,
+    destinationAirports,
+    selectedDepartureDates,
+    adults,
+    cabinClass,
+    includeDirectFlights,
+    includeOneStopFlights,
+    includeTwoPlusStopFlights,
+    selectedProviders,
+    selectedAirlines,
+    selectedDepartureAirports,
+    selectedArrivalAirports,
+    priceRange,
+    maxDurationMinutes,
+    departureTimeRange,
+    arrivalTimeRange,
+    isSearchCollapsed,
+  ],
+  () => {
+    void updateRouteState()
+  },
+  { deep: true },
+)
+
+watch(
+  () => route.query,
+  () => {
+    if (isSyncingRoute) {
+      return
+    }
+
+    applyUrlState()
+    syncSearchFromRoute()
+  },
 )
 
 watch(
@@ -551,8 +841,12 @@ watch(
 )
 
 onMounted(() => {
+  applyUrlState()
+  hasMounted = true
+  void updateRouteState()
   void fetchAirportSuggestions(originAirports.value[0].code)
   void fetchAirportSuggestions(destinationAirports.value[0].code)
+  syncSearchFromRoute()
 })
 
 onBeforeUnmount(() => {
@@ -599,6 +893,8 @@ const searchFlights = async () => {
   expandedResultIds.value = []
 
   try {
+    lastExecutedSearchKey = getCurrentSearchRequestKey()
+
     const request: SearchRequest = {
       originAirports: originAirports.value.map((airport) => airport.code),
       destinationAirports: destinationAirports.value.map((airport) => airport.code),

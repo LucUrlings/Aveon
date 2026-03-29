@@ -11,7 +11,8 @@
     "generate:types": "openapi-typescript http://127.0.0.1:5200/swagger/v1/swagger.json -o src/api/generated.ts"
   },
   "dependencies": {
-    "vue": "^3.5.30"
+    "vue": "^3.5.30",
+    "vue-router": "^4.5.1"
   },
   "devDependencies": {
     "@vue/test-utils": "^2.4.6",
