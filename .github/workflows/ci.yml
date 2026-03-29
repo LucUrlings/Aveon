@@ -52,7 +52,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run frontend tests if present
-        run: pnpm --dir apps/frontend test --if-present
+        run: pnpm --dir apps/frontend run --if-present test
 
       - name: Build frontend
         run: pnpm --dir apps/frontend build
