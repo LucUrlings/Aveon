@@ -106,7 +106,22 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    Direct?: boolean;
+                    OneStop?: boolean;
+                    TwoPlusStop?: boolean;
+                    Providers?: string;
+                    Airlines?: string;
+                    DepartureAirports?: string;
+                    ArrivalAirports?: string;
+                    MaxDuration?: number;
+                    DepartureTime?: string;
+                    ArrivalTime?: string;
+                    Page?: number;
+                    PageSize?: number;
+                    HasStopFilter?: boolean;
+                    IsPaginationRequested?: boolean;
+                };
                 header?: never;
                 path: {
                     searchId: string;
@@ -169,6 +184,21 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        SearchFilterOptionCount: {
+            value?: string | null;
+            /** Format: int32 */
+            count?: number;
+        };
+        SearchFiltersMetadata: {
+            providers?: components["schemas"]["SearchFilterOptionCount"][] | null;
+            airlines?: components["schemas"]["SearchFilterOptionCount"][] | null;
+            departureAirports?: components["schemas"]["SearchFilterOptionCount"][] | null;
+            arrivalAirports?: components["schemas"]["SearchFilterOptionCount"][] | null;
+            durationMinutes?: components["schemas"]["SearchRangeMetadata"];
+            departureTimeMinutes?: components["schemas"]["SearchRangeMetadata"];
+            arrivalTimeMinutes?: components["schemas"]["SearchRangeMetadata"];
+            stops?: components["schemas"]["SearchStopFilterMetadata"];
+        };
         SearchMetadata: {
             /** Format: int32 */
             searchCombinationCount?: number;
@@ -182,6 +212,22 @@ export interface components {
             returnedOneStopFlightCount?: number;
             /** Format: int32 */
             returnedTwoPlusStopFlightCount?: number;
+        };
+        SearchPagination: {
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            /** Format: int32 */
+            totalResults?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
+        SearchRangeMetadata: {
+            /** Format: int32 */
+            min?: number;
+            /** Format: int32 */
+            max?: number;
         };
         SearchRequest: {
             originAirports?: string[] | null;
@@ -198,6 +244,8 @@ export interface components {
         SearchResponse: {
             results?: components["schemas"]["SearchResult"][] | null;
             metadata?: components["schemas"]["SearchMetadata"];
+            filters?: components["schemas"]["SearchFiltersMetadata"];
+            pagination?: components["schemas"]["SearchPagination"];
         };
         SearchResult: {
             id?: string | null;
@@ -253,6 +301,14 @@ export interface components {
             failedCombinations?: number;
             response?: components["schemas"]["SearchResponse"];
             errorMessage?: string | null;
+        };
+        SearchStopFilterMetadata: {
+            /** Format: int32 */
+            direct?: number;
+            /** Format: int32 */
+            oneStop?: number;
+            /** Format: int32 */
+            twoPlusStop?: number;
         };
     };
     responses: never;

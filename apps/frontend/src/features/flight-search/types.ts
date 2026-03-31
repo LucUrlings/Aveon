@@ -36,7 +36,10 @@ export type SearchResultPriceOption = {
     amount: number
     currency: string
   }
-  deepLink: string
+  bookingLinks: {
+    label: string
+    url: string
+  }[]
 }
 
 export type SearchResult = {

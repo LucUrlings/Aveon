@@ -4,5 +4,5 @@ public record SearchResultPriceOption(
     string Id,
     string Provider,
     SearchResultPrice TotalPrice,
-    string DeepLink
+    List<SearchResultBookingLink> BookingLinks
 );

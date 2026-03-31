@@ -48,6 +48,24 @@
   overflow-wrap: anywhere;
 }
 
+.trip-badge {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #e9f1ff;
+  color: #1f5fbf;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.trip-badge.synthetic {
+  background: #fff1d6;
+  color: #9c5a11;
+}
+
 .route {
   color: #5b6570;
   font-size: 0.84rem;
@@ -73,6 +91,19 @@
 .leg-route {
   font-weight: 700;
   font-size: 0.88rem;
+}
+
+.return-leg-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.return-leg-label {
+  color: #7a858f;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .leg-times {
@@ -147,6 +178,14 @@
   display: grid;
   gap: 4px;
   justify-items: end;
+}
+
+.primary-booking-links,
+.other-fare-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 8px;
 }
 
 .price-block strong {
@@ -267,6 +306,11 @@
   .fare-summary,
   .other-fare-item {
     gap: 6px;
+  }
+
+  .primary-booking-links,
+  .other-fare-links {
+    justify-content: start;
   }
 
   .leg-times,

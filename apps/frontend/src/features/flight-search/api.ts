@@ -23,6 +23,13 @@ type ApiSearchMetadata = components['schemas']['SearchMetadata']
 type ApiSearchResult = components['schemas']['SearchResult']
 type ApiSearchResultLeg = components['schemas']['SearchResultLeg']
 type ApiSearchResultPriceOption = components['schemas']['SearchResultPriceOption']
+type ApiSearchResultBookingLink = {
+  label?: string | null
+  url?: string | null
+}
+type ApiSearchResultPriceOptionWithLinks = ApiSearchResultPriceOption & {
+  bookingLinks?: ApiSearchResultBookingLink[] | null
+}
 type ApiSearchResultSegment = components['schemas']['SearchResultSegment']
 type ApiSearchSessionResponse = components['schemas']['SearchSessionResponse']
 type ApiSearchFilterOptionCount = {
@@ -92,14 +99,29 @@ const normalizeLeg = (leg: ApiSearchResultLeg): SearchResultLeg => ({
   segments: (leg.segments ?? []).map(normalizeSegment),
 })
 
-const normalizePriceOption = (option: ApiSearchResultPriceOption): SearchResultPriceOption => ({
+const normalizePriceOption = (option: ApiSearchResultPriceOptionWithLinks): SearchResultPriceOption => ({
   id: option.id ?? '',
   provider: option.provider ?? '',
   totalPrice: {
     amount: option.totalPrice?.amount ?? 0,
     currency: option.totalPrice?.currency ?? '',
   },
-  deepLink: option.deepLink ?? '',
+  bookingLinks: (() => {
+    const explicitLinks = ((option.bookingLinks as ApiSearchResultBookingLink[] | null | undefined) ?? [])
+      .map((link) => ({
+        label: link.label ?? '',
+        url: link.url ?? '',
+      }))
+      .filter((link) => link.url)
+
+    if (explicitLinks.length > 0) {
+      return explicitLinks
+    }
+
+    return option.deepLink
+      ? [{ label: 'View fare', url: option.deepLink }]
+      : []
+  })(),
 })
 
 const normalizeResult = (result: ApiSearchResult): SearchResult => ({

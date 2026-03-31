@@ -26,22 +26,22 @@ public sealed class SearchService(
         SearchRequest request,
         CancellationToken cancellationToken)
     {
-        var combinations = ExpandOneWaySearches(request).ToList();
-        Validate(request, combinations.Count);
+        var searchPlan = BuildSearchPlan(request);
+        Validate(request, searchPlan);
         var searchId = Guid.NewGuid().ToString("N");
 
         var initialSession = new SearchSessionResponse(
             searchId,
             StatusRunning,
-            combinations.Count,
+            searchPlan.TotalProviderCalls,
             0,
             0,
-            BuildSearchResponse(combinations.Count, new List<SearchFareOption>()),
+            BuildSearchResponse(searchPlan.TotalProviderCalls, []),
             null);
 
         await searchSessionStore.SetAsync(initialSession, cancellationToken);
 
-        _ = Task.Run(() => RunSearchSafelyAsync(searchId, combinations), CancellationToken.None);
+        _ = Task.Run(() => RunSearchSafelyAsync(searchId, searchPlan), CancellationToken.None);
 
         return initialSession;
     }
@@ -61,13 +61,13 @@ public sealed class SearchService(
         };
     }
 
-    private async Task RunSearchSafelyAsync(string searchId, IReadOnlyList<ProviderSearchRequest> combinations)
+    private async Task RunSearchSafelyAsync(string searchId, SearchPlan searchPlan)
     {
-        var executionState = new SearchExecutionState();
+        var executionState = new SearchExecutionState(searchPlan.IsRoundTripSearch);
 
         try
         {
-            await RunSearchAsync(searchId, combinations, executionState);
+            await RunSearchAsync(searchId, searchPlan, executionState);
         }
         catch (Exception ex)
         {
@@ -77,9 +77,9 @@ public sealed class SearchService(
             var failedSession = BuildSessionSnapshot(
                 searchId,
                 StatusFailed,
-                combinations.Count,
+                searchPlan.TotalProviderCalls,
                 snapshot.CompletedCombinations,
-                Math.Max(snapshot.FailedCombinations, combinations.Count - snapshot.CompletedCombinations),
+                Math.Max(snapshot.FailedCombinations, searchPlan.TotalProviderCalls - snapshot.CompletedCombinations),
                 snapshot.FareOptions,
                 "Search failed before completion.");
 
@@ -91,59 +91,131 @@ public sealed class SearchService(
 
     private async Task RunSearchAsync(
         string searchId,
-        IReadOnlyList<ProviderSearchRequest> combinations,
+        SearchPlan searchPlan,
         SearchExecutionState executionState)
     {
         using var concurrencyGate = new SemaphoreSlim(MaxConcurrentProviderCalls);
 
-        var providerTasks = combinations
-            .Select(async candidate =>
-            {
-                await concurrencyGate.WaitAsync();
-                try
-                {
-                    using var scope = serviceScopeFactory.CreateScope();
-                    var flightSearchProvider = scope.ServiceProvider.GetRequiredService<IFlightSearchProvider>();
-
-                    try
-                    {
-                        var providerResponse = await flightSearchProvider.SearchOneWayAsync(candidate, CancellationToken.None);
-                        var mappedFareOptions = MapToSearchFareOptions(providerResponse).ToList();
-
-                        var snapshot = executionState.BuildRunningSnapshot(searchId, combinations.Count, mappedFareOptions);
-
-                        await TrySetSearchSessionAsync(
-                            snapshot,
-                            "persisting an in-progress search session update");
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(
-                            ex,
-                            "FlightApi search failed for {OriginAirport} -> {DestinationAirport} on {DepartureDate}",
-                            candidate.OriginAirport,
-                            candidate.DestinationAirport,
-                            candidate.DepartureDate);
-
-                        var snapshot = executionState.BuildFailedProviderSnapshot(searchId, combinations.Count);
-
-                        await TrySetSearchSessionAsync(
-                            snapshot,
-                            "persisting a failed provider search session update");
-                    }
-                }
-                finally
-                {
-                    concurrencyGate.Release();
-                }
-            })
-            .ToArray();
+        var providerTasks = new List<Task>();
+        providerTasks.AddRange(searchPlan.OutboundRequests.Select(candidate =>
+            ExecuteOneWaySearchAsync(
+                searchId,
+                searchPlan.TotalProviderCalls,
+                candidate,
+                searchPlan.IsRoundTripSearch ? SearchLegDirection.Outbound : SearchLegDirection.OneWay,
+                executionState,
+                concurrencyGate)));
+        providerTasks.AddRange(searchPlan.InboundRequests.Select(candidate =>
+            ExecuteOneWaySearchAsync(
+                searchId,
+                searchPlan.TotalProviderCalls,
+                candidate,
+                SearchLegDirection.Inbound,
+                executionState,
+                concurrencyGate)));
+        providerTasks.AddRange(searchPlan.RoundTripRequests.Select(candidate =>
+            ExecuteRoundTripSearchAsync(
+                searchId,
+                searchPlan.TotalProviderCalls,
+                candidate,
+                executionState,
+                concurrencyGate)));
 
         await Task.WhenAll(providerTasks);
 
-        var finalSession = executionState.BuildFinalSnapshot(searchId, combinations.Count);
+        var finalSession = executionState.BuildFinalSnapshot(searchId, searchPlan.TotalProviderCalls);
 
         await TrySetSearchSessionAsync(finalSession, "persisting the final search session");
+    }
+
+    private async Task ExecuteOneWaySearchAsync(
+        string searchId,
+        int totalProviderCalls,
+        ProviderSearchRequest request,
+        SearchLegDirection direction,
+        SearchExecutionState executionState,
+        SemaphoreSlim concurrencyGate)
+    {
+        await concurrencyGate.WaitAsync();
+        try
+        {
+            using var scope = serviceScopeFactory.CreateScope();
+            var flightSearchProvider = scope.ServiceProvider.GetRequiredService<IFlightSearchProvider>();
+
+            try
+            {
+                var providerResponse = await flightSearchProvider.SearchOneWayAsync(request, CancellationToken.None);
+                var mappedFareOptions = MapToSearchFareOptions(providerResponse, isRoundTrip: false).ToList();
+
+                var snapshot = executionState.BuildRunningSnapshot(searchId, totalProviderCalls, mappedFareOptions, direction);
+
+                await TrySetSearchSessionAsync(snapshot, "persisting an in-progress search session update");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "FlightApi one-way search failed for {OriginAirport} -> {DestinationAirport} on {DepartureDate}",
+                    request.OriginAirport,
+                    request.DestinationAirport,
+                    request.DepartureDate);
+
+                var snapshot = executionState.BuildFailedProviderSnapshot(searchId, totalProviderCalls);
+
+                await TrySetSearchSessionAsync(snapshot, "persisting a failed provider search session update");
+            }
+        }
+        finally
+        {
+            concurrencyGate.Release();
+        }
+    }
+
+    private async Task ExecuteRoundTripSearchAsync(
+        string searchId,
+        int totalProviderCalls,
+        ProviderRoundTripSearchRequest request,
+        SearchExecutionState executionState,
+        SemaphoreSlim concurrencyGate)
+    {
+        await concurrencyGate.WaitAsync();
+        try
+        {
+            using var scope = serviceScopeFactory.CreateScope();
+            var flightSearchProvider = scope.ServiceProvider.GetRequiredService<IFlightSearchProvider>();
+
+            try
+            {
+                var providerResponse = await flightSearchProvider.SearchRoundTripAsync(request, CancellationToken.None);
+                var mappedFareOptions = MapToSearchFareOptions(providerResponse, isRoundTrip: true).ToList();
+
+                var snapshot = executionState.BuildRunningSnapshot(
+                    searchId,
+                    totalProviderCalls,
+                    mappedFareOptions,
+                    SearchLegDirection.RoundTrip);
+
+                await TrySetSearchSessionAsync(snapshot, "persisting an in-progress search session update");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "FlightApi round-trip search failed for {OriginAirport} -> {DestinationAirport} on {DepartureDate} returning {ReturnDate}",
+                    request.OriginAirport,
+                    request.DestinationAirport,
+                    request.DepartureDate,
+                    request.ReturnDate);
+
+                var snapshot = executionState.BuildFailedProviderSnapshot(searchId, totalProviderCalls);
+
+                await TrySetSearchSessionAsync(snapshot, "persisting a failed provider search session update");
+            }
+        }
+        finally
+        {
+            concurrencyGate.Release();
+        }
     }
 
     private async Task TrySetSearchSessionAsync(SearchSessionResponse session, string operation)
@@ -162,21 +234,40 @@ public sealed class SearchService(
         }
     }
 
-    private sealed class SearchExecutionState
+    private sealed class SearchExecutionState(bool isRoundTripSearch)
     {
         private readonly Lock _lock = new();
         private readonly List<SearchFareOption> _fareOptions = [];
+        private readonly List<SearchFareOption> _outboundFareOptions = [];
+        private readonly List<SearchFareOption> _inboundFareOptions = [];
+        private readonly List<SearchFareOption> _actualRoundTripFareOptions = [];
         private int _completedCombinations;
         private int _failedCombinations;
 
         public SearchSessionResponse BuildRunningSnapshot(
             string searchId,
             int totalCombinations,
-            IReadOnlyCollection<SearchFareOption> newFareOptions)
+            IReadOnlyCollection<SearchFareOption> newFareOptions,
+            SearchLegDirection direction)
         {
             lock (_lock)
             {
-                _fareOptions.AddRange(newFareOptions);
+                switch (direction)
+                {
+                    case SearchLegDirection.OneWay:
+                        _fareOptions.AddRange(newFareOptions);
+                        break;
+                    case SearchLegDirection.Outbound:
+                        _outboundFareOptions.AddRange(newFareOptions);
+                        break;
+                    case SearchLegDirection.Inbound:
+                        _inboundFareOptions.AddRange(newFareOptions);
+                        break;
+                    case SearchLegDirection.RoundTrip:
+                        _actualRoundTripFareOptions.AddRange(newFareOptions);
+                        break;
+                }
+
                 _completedCombinations += 1;
                 return BuildSearchSession(searchId, StatusRunning, totalCombinations, null);
             }
@@ -210,7 +301,7 @@ public sealed class SearchService(
             lock (_lock)
             {
                 return new SearchExecutionSnapshot(
-                    [.. _fareOptions],
+                    BuildCanonicalFareOptions(),
                     _completedCombinations,
                     _failedCombinations);
             }
@@ -227,14 +318,50 @@ public sealed class SearchService(
                 totalCombinations,
                 _completedCombinations,
                 _failedCombinations,
-                [.. _fareOptions],
+                BuildCanonicalFareOptions(),
                 errorMessage);
+
+        private List<SearchFareOption> BuildCanonicalFareOptions()
+        {
+            if (!isRoundTripSearch)
+            {
+                return [.. _fareOptions];
+            }
+
+            var mergedFareOptions = BuildSyntheticRoundTripFareOptions(_outboundFareOptions, _inboundFareOptions)
+                .Concat(_actualRoundTripFareOptions)
+                .GroupBy(BuildFlightGroupingKey)
+                .Select(group => group
+                    .OrderBy(option => option.TotalPrice.Amount)
+                    .ThenBy(option => option.Provider, StringComparer.OrdinalIgnoreCase)
+                    .First())
+                .ToList();
+
+            return mergedFareOptions;
+        }
     }
 
     private sealed record SearchExecutionSnapshot(
         List<SearchFareOption> FareOptions,
         int CompletedCombinations,
         int FailedCombinations);
+
+    private sealed record SearchPlan(
+        bool IsRoundTripSearch,
+        List<ProviderSearchRequest> OutboundRequests,
+        List<ProviderSearchRequest> InboundRequests,
+        List<ProviderRoundTripSearchRequest> RoundTripRequests)
+    {
+        public int TotalProviderCalls => OutboundRequests.Count + InboundRequests.Count + RoundTripRequests.Count;
+    }
+
+    private enum SearchLegDirection
+    {
+        OneWay,
+        Outbound,
+        Inbound,
+        RoundTrip
+    }
 
     private static SearchSessionResponse BuildSessionSnapshot(
         string searchId,
@@ -271,7 +398,7 @@ public sealed class SearchService(
                         option.Id,
                         option.Provider,
                         option.TotalPrice,
-                        option.DeepLink))
+                        option.BookingLinks))
                     .OrderBy(option => option.TotalPrice.Amount)
                     .ThenBy(option => option.Provider)
                     .ToList();
@@ -324,7 +451,7 @@ public sealed class SearchService(
             pagination);
     }
 
-    private static void Validate(SearchRequest request, int expandedCombinationCount)
+    private static void Validate(SearchRequest request, SearchPlan searchPlan)
     {
         if (request.OriginAirports.Count == 0)
         {
@@ -336,9 +463,9 @@ public sealed class SearchService(
             throw new ArgumentException("At least one destination airport is required.");
         }
 
-        if (request.ReturnDateFrom is not null || request.ReturnDateTo is not null)
+        if ((request.ReturnDateFrom is null) != (request.ReturnDateTo is null))
         {
-            throw new ArgumentException("Return flights are not supported yet.");
+            throw new ArgumentException("Both return dates must be provided for a round-trip search.");
         }
 
         if (request.Adults <= 0)
@@ -346,15 +473,37 @@ public sealed class SearchService(
             throw new ArgumentException("At least one adult passenger is required.");
         }
 
-        if (expandedCombinationCount <= 0)
+        if (searchPlan.TotalProviderCalls <= 0)
         {
             throw new ArgumentException("Search must contain at least one valid origin, destination, and departure date combination.");
         }
 
-        if (expandedCombinationCount > MaxSearchCombinations)
+        if (searchPlan.TotalProviderCalls > MaxSearchCombinations)
         {
             throw new ArgumentException($"Search exceeds the limit of {MaxSearchCombinations} combinations.");
         }
+    }
+
+    private static SearchPlan BuildSearchPlan(SearchRequest request)
+    {
+        var outboundRequests = ExpandOneWaySearches(request).ToList();
+        if (request.ReturnDateFrom is null || request.ReturnDateTo is null)
+        {
+            return new SearchPlan(
+                IsRoundTripSearch: false,
+                OutboundRequests: outboundRequests,
+                InboundRequests: [],
+                RoundTripRequests: []);
+        }
+
+        var inboundRequests = ExpandInboundSearches(request).ToList();
+        var roundTripRequests = ExpandRoundTripSearches(request).ToList();
+
+        return new SearchPlan(
+            IsRoundTripSearch: true,
+            OutboundRequests: outboundRequests,
+            InboundRequests: inboundRequests,
+            RoundTripRequests: roundTripRequests);
     }
 
     private static IEnumerable<ProviderSearchRequest> ExpandOneWaySearches(SearchRequest request)
@@ -381,7 +530,64 @@ public sealed class SearchService(
         }
     }
 
-    private static IEnumerable<SearchFareOption> MapToSearchFareOptions(FlightApiOneWayResponse response)
+    private static IEnumerable<ProviderSearchRequest> ExpandInboundSearches(SearchRequest request)
+    {
+        foreach (var destination in request.DestinationAirports.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            foreach (var origin in request.OriginAirports.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.Equals(origin, destination, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (var returnDate in request.GetReturnDates())
+                {
+                    yield return new ProviderSearchRequest(
+                        destination.ToUpperInvariant(),
+                        origin.ToUpperInvariant(),
+                        returnDate,
+                        request.Adults,
+                        request.CabinClass);
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<ProviderRoundTripSearchRequest> ExpandRoundTripSearches(SearchRequest request)
+    {
+        foreach (var origin in request.OriginAirports.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            foreach (var destination in request.DestinationAirports.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.Equals(origin, destination, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                foreach (var departureDate in request.GetDepartureDates())
+                {
+                    foreach (var returnDate in request.GetReturnDates())
+                    {
+                        if (returnDate < departureDate)
+                        {
+                            continue;
+                        }
+
+                        yield return new ProviderRoundTripSearchRequest(
+                            origin.ToUpperInvariant(),
+                            destination.ToUpperInvariant(),
+                            departureDate,
+                            returnDate,
+                            request.Adults,
+                            request.CabinClass);
+                    }
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<SearchFareOption> MapToSearchFareOptions(FlightApiOneWayResponse response, bool isRoundTrip)
     {
         var legsById = response.Legs.ToDictionary(leg => leg.Id);
         var segmentsById = response.Segments.ToDictionary(segment => segment.Id);
@@ -405,7 +611,7 @@ public sealed class SearchService(
             }
 
             var pricingItems = itinerary.PricingOptions
-                .SelectMany(pricingOption => MapPricingItems(itinerary, pricingOption, resultLegs, agentsById));
+                .SelectMany(pricingOption => MapPricingItems(itinerary, pricingOption, resultLegs, agentsById, isRoundTrip));
 
             foreach (var result in pricingItems)
             {
@@ -418,7 +624,8 @@ public sealed class SearchService(
         FlightApiItinerary itinerary,
         FlightApiPricingOption pricingOption,
         List<SearchResultLeg> resultLegs,
-        IReadOnlyDictionary<string, FlightApiAgent> agentsById)
+        IReadOnlyDictionary<string, FlightApiAgent> agentsById,
+        bool isRoundTrip)
     {
         if (pricingOption.Items.Count == 0)
         {
@@ -432,8 +639,9 @@ public sealed class SearchService(
                 $"{itinerary.Id}:{pricingOption.Id}",
                 itinerary.Id,
                 amount.Value,
-                BuildDeepLink(itinerary.DeepLink),
-                resultLegs);
+                [BuildBookingLink("View fare", BuildDeepLink(itinerary.DeepLink))],
+                resultLegs,
+                isRoundTrip);
             yield break;
         }
 
@@ -451,8 +659,9 @@ public sealed class SearchService(
                 $"{itinerary.Id}:{pricingOption.Id}:{item.AgentId ?? "unknown"}",
                 itinerary.Id,
                 amount.Value,
-                BuildDeepLink(item.Url ?? itinerary.DeepLink),
+                [BuildBookingLink("View fare", BuildDeepLink(item.Url ?? itinerary.DeepLink))],
                 resultLegs,
+                isRoundTrip,
                 agentName);
         }
     }
@@ -461,18 +670,87 @@ public sealed class SearchService(
         string id,
         string flightId,
         decimal amount,
-        string deepLink,
+        List<SearchResultBookingLink> bookingLinks,
         List<SearchResultLeg> legs,
+        bool isRoundTrip,
         string? agentName = null) =>
         new(
             id,
             flightId,
             string.IsNullOrWhiteSpace(agentName) ? ProviderName : $"{ProviderName}:{agentName}",
-            false,
+            isRoundTrip,
             new SearchResultPrice(amount, "EUR"),
             legs,
             legs.Sum(leg => leg.DurationMinutes),
-            deepLink);
+            bookingLinks);
+
+    private static SearchResultBookingLink BuildBookingLink(string label, string url) =>
+        new(label, url);
+
+    private static List<SearchFareOption> BuildSyntheticRoundTripFareOptions(
+        IEnumerable<SearchFareOption> outboundFareOptions,
+        IEnumerable<SearchFareOption> inboundFareOptions)
+    {
+        var syntheticFareOptions = new List<SearchFareOption>();
+
+        foreach (var outboundFare in outboundFareOptions)
+        {
+            var outboundOrigin = outboundFare.Legs.FirstOrDefault()?.OriginAirport;
+            var outboundDestination = outboundFare.Legs.LastOrDefault()?.DestinationAirport;
+            var outboundArrival = outboundFare.Legs.LastOrDefault()?.ArrivalLocalTime;
+
+            if (string.IsNullOrWhiteSpace(outboundOrigin) ||
+                string.IsNullOrWhiteSpace(outboundDestination) ||
+                outboundArrival is null)
+            {
+                continue;
+            }
+
+            foreach (var inboundFare in inboundFareOptions)
+            {
+                var inboundOrigin = inboundFare.Legs.FirstOrDefault()?.OriginAirport;
+                var inboundDestination = inboundFare.Legs.LastOrDefault()?.DestinationAirport;
+                var inboundDeparture = inboundFare.Legs.FirstOrDefault()?.DepartureLocalTime;
+
+                if (string.IsNullOrWhiteSpace(inboundOrigin) ||
+                    string.IsNullOrWhiteSpace(inboundDestination) ||
+                    inboundDeparture is null)
+                {
+                    continue;
+                }
+
+                if (inboundDeparture < outboundArrival)
+                {
+                    continue;
+                }
+
+                syntheticFareOptions.Add(new SearchFareOption(
+                    $"synthetic:{outboundFare.Id}:{inboundFare.Id}",
+                    $"{outboundFare.FlightId}|{inboundFare.FlightId}",
+                    BuildSyntheticProviderName(outboundFare.Provider, inboundFare.Provider),
+                    true,
+                    new SearchResultPrice(
+                        outboundFare.TotalPrice.Amount + inboundFare.TotalPrice.Amount,
+                        outboundFare.TotalPrice.Currency),
+                    [.. outboundFare.Legs, .. inboundFare.Legs],
+                    outboundFare.TotalDurationMinutes + inboundFare.TotalDurationMinutes,
+                    new List<SearchResultBookingLink>
+                    {
+                        BuildBookingLink("Book outbound", outboundFare.BookingLinks.FirstOrDefault()?.Url ?? string.Empty),
+                        BuildBookingLink("Book return", inboundFare.BookingLinks.FirstOrDefault()?.Url ?? string.Empty)
+                    }.Where(link => !string.IsNullOrWhiteSpace(link.Url)).ToList()));
+            }
+        }
+
+        return syntheticFareOptions;
+    }
+
+    private static string BuildSyntheticProviderName(string outboundProvider, string inboundProvider)
+    {
+        var outboundLabel = outboundProvider.Replace($"{ProviderName}:", string.Empty, StringComparison.OrdinalIgnoreCase);
+        var inboundLabel = inboundProvider.Replace($"{ProviderName}:", string.Empty, StringComparison.OrdinalIgnoreCase);
+        return $"{ProviderName}:Combined one-way ({outboundLabel} + {inboundLabel})";
+    }
 
     private static string BuildFlightGroupingKey(SearchFareOption option)
     {
@@ -977,7 +1255,7 @@ public sealed class SearchService(
         SearchResultPrice TotalPrice,
         List<SearchResultLeg> Legs,
         int TotalDurationMinutes,
-        string DeepLink);
+        List<SearchResultBookingLink> BookingLinks);
 
     private sealed record StopCounts(
         int DirectFlightCount,

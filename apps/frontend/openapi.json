@@ -125,6 +125,107 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "Direct",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "OneStop",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "TwoPlusStop",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "Providers",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Airlines",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "DepartureAirports",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ArrivalAirports",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "MaxDuration",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "DepartureTime",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ArrivalTime",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "HasStopFilter",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "IsPaginationRequested",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -232,6 +333,66 @@
         },
         "additionalProperties": { }
       },
+      "SearchFilterOptionCount": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "nullable": true
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchFiltersMetadata": {
+        "type": "object",
+        "properties": {
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchFilterOptionCount"
+            },
+            "nullable": true
+          },
+          "airlines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchFilterOptionCount"
+            },
+            "nullable": true
+          },
+          "departureAirports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchFilterOptionCount"
+            },
+            "nullable": true
+          },
+          "arrivalAirports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchFilterOptionCount"
+            },
+            "nullable": true
+          },
+          "durationMinutes": {
+            "$ref": "#/components/schemas/SearchRangeMetadata"
+          },
+          "departureTimeMinutes": {
+            "$ref": "#/components/schemas/SearchRangeMetadata"
+          },
+          "arrivalTimeMinutes": {
+            "$ref": "#/components/schemas/SearchRangeMetadata"
+          },
+          "stops": {
+            "$ref": "#/components/schemas/SearchStopFilterMetadata"
+          }
+        },
+        "additionalProperties": false
+      },
       "SearchMetadata": {
         "type": "object",
         "properties": {
@@ -256,6 +417,42 @@
             "format": "int32"
           },
           "returnedTwoPlusStopFlightCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchPagination": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalResults": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchRangeMetadata": {
+        "type": "object",
+        "properties": {
+          "min": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "max": {
             "type": "integer",
             "format": "int32"
           }
@@ -320,6 +517,12 @@
           },
           "metadata": {
             "$ref": "#/components/schemas/SearchMetadata"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/SearchFiltersMetadata"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/SearchPagination"
           }
         },
         "additionalProperties": false
@@ -490,6 +693,24 @@
           "errorMessage": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SearchStopFilterMetadata": {
+        "type": "object",
+        "properties": {
+          "direct": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "oneStop": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "twoPlusStop": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false

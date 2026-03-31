@@ -33,7 +33,7 @@ const directResult: SearchResult = {
       id: 'price-1',
       provider: 'FlightApi:KLM',
       totalPrice: { amount: 120, currency: 'EUR' },
-      deepLink: 'https://example.com/direct',
+      bookingLinks: [{ label: 'View fare', url: 'https://example.com/direct' }],
     },
   ],
 }
@@ -41,14 +41,15 @@ const directResult: SearchResult = {
 const multiLegResult: SearchResult = {
   ...directResult,
   id: 'multi-1',
+  isRoundTrip: true,
   totalDurationMinutes: 240,
   legs: [
     {
       originAirport: 'AMS',
-      destinationAirport: 'DUB',
+      destinationAirport: 'CDG',
       departureLocalTime: '2026-05-15T08:00:00',
-      arrivalLocalTime: '2026-05-15T12:00:00',
-      durationMinutes: 240,
+      arrivalLocalTime: '2026-05-15T09:00:00',
+      durationMinutes: 60,
       segments: [
         {
           marketingCarrierName: 'KLM',
@@ -60,14 +61,23 @@ const multiLegResult: SearchResult = {
           arrivalLocalTime: '2026-05-15T09:00:00',
           durationMinutes: 60,
         },
+      ],
+    },
+    {
+      originAirport: 'CDG',
+      destinationAirport: 'AMS',
+      departureLocalTime: '2026-05-18T10:30:00',
+      arrivalLocalTime: '2026-05-18T12:00:00',
+      durationMinutes: 90,
+      segments: [
         {
           marketingCarrierName: 'Air France',
           marketingCarrierCode: 'AF',
           flightNumber: '200',
           originAirport: 'CDG',
-          destinationAirport: 'DUB',
-          departureLocalTime: '2026-05-15T10:30:00',
-          arrivalLocalTime: '2026-05-15T12:00:00',
+          destinationAirport: 'AMS',
+          departureLocalTime: '2026-05-18T10:30:00',
+          arrivalLocalTime: '2026-05-18T12:00:00',
           durationMinutes: 90,
         },
       ],
@@ -78,19 +88,60 @@ const multiLegResult: SearchResult = {
       id: 'price-1',
       provider: 'FlightApi:Air France',
       totalPrice: { amount: 140, currency: 'EUR' },
-      deepLink: 'https://example.com/main',
+      bookingLinks: [{ label: 'View fare', url: 'https://example.com/main' }],
     },
     {
       id: 'price-2',
       provider: 'FlightApi:KLM',
       totalPrice: { amount: 150, currency: 'EUR' },
-      deepLink: 'https://example.com/other',
+      bookingLinks: [
+        { label: 'Book outbound', url: 'https://example.com/outbound' },
+        { label: 'Book return', url: 'https://example.com/return' },
+      ],
+    },
+  ],
+}
+
+const actualReturnResult: SearchResult = {
+  ...multiLegResult,
+  id: 'return-1',
+  priceOptions: [
+    {
+      id: 'price-actual',
+      provider: 'FlightApi:Air France',
+      totalPrice: { amount: 140, currency: 'EUR' },
+      bookingLinks: [{ label: 'View fare', url: 'https://example.com/main' }],
+    },
+  ],
+}
+
+const syntheticReturnResult: SearchResult = {
+  ...multiLegResult,
+  id: 'synthetic-return-1',
+  priceOptions: [
+    {
+      id: 'price-synthetic',
+      provider: 'FlightApi:Combined one-way (KLM + Air France)',
+      totalPrice: { amount: 150, currency: 'EUR' },
+      bookingLinks: [
+        { label: 'Book outbound', url: 'https://example.com/outbound' },
+        { label: 'Book return', url: 'https://example.com/return' },
+      ],
+    },
+    {
+      id: 'price-other',
+      provider: 'FlightApi:Combined one-way (KLM + KLM)',
+      totalPrice: { amount: 170, currency: 'EUR' },
+      bookingLinks: [
+        { label: 'Book outbound', url: 'https://example.com/outbound-2' },
+        { label: 'Book return', url: 'https://example.com/return-2' },
+      ],
     },
   ],
 }
 
 describe('SearchResultCard', () => {
-  it('renders a direct flight using local-time formatting', () => {
+  it('renders a direct one-way flight using local-time formatting', () => {
     const wrapper = mount(SearchResultCard, {
       props: {
         result: directResult,
@@ -102,22 +153,40 @@ describe('SearchResultCard', () => {
     expect(wrapper.text()).toContain('Fr 15 May 11:20')
     expect(wrapper.text()).toContain('KLM')
     expect(wrapper.text()).toContain('EUR')
+    expect(wrapper.text()).toContain('View fare')
   })
 
-  it('renders segment details and emits fare toggle for multi-option results', async () => {
+  it('renders an actual return fare using the round-trip layout', () => {
     const wrapper = mount(SearchResultCard, {
       props: {
-        result: multiLegResult,
+        result: actualReturnResult,
         expanded: false,
       },
     })
 
-    expect(wrapper.text()).toContain('KLM, Air France')
-    expect(wrapper.text()).toContain('AMS → CDG')
-    expect(wrapper.text()).toContain('CDG → DUB')
+    expect(wrapper.text()).toContain('Round trip')
+    expect(wrapper.text()).toContain('Outbound')
+    expect(wrapper.text()).toContain('Return')
+    expect(wrapper.text()).toContain('Single round-trip booking')
+  })
+
+  it('renders synthetic return booking links and emits fare toggle for multi-option results', async () => {
+    const wrapper = mount(SearchResultCard, {
+      props: {
+        result: syntheticReturnResult,
+        expanded: false,
+      },
+    })
+
+    expect(wrapper.text()).toContain('Separate bookings')
+    expect(wrapper.text()).toContain('Outbound')
+    expect(wrapper.text()).toContain('Return')
 
     await wrapper.get('.expand-button').trigger('click')
+    await wrapper.setProps({ expanded: true })
 
-    expect(wrapper.emitted('toggleExpanded')).toEqual([['multi-1']])
+    expect(wrapper.emitted('toggleExpanded')).toEqual([['synthetic-return-1']])
+    expect(wrapper.text()).toContain('Book outbound')
+    expect(wrapper.text()).toContain('Book return')
   })
 })

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
   maxRangeDays: number
+  heading?: string
 }>()
 
 const startDate = defineModel<string>('startDate', { required: true })
@@ -325,7 +326,7 @@ onBeforeUnmount(() => {
       <div v-if="isOpen" class="date-range-popover">
         <div class="date-range-popover-header">
           <div class="date-range-popover-copy">
-            <p>Select travel dates</p>
+            <p>{{ heading ?? 'Select travel dates' }}</p>
             <span>
               {{ selectionMode === 'range' ? `Range mode: up to ${maxRangeDays} consecutive days` : `Specific dates mode: up to ${maxRangeDays} picked dates` }}
             </span>

@@ -57,7 +57,7 @@ describe('flight search api', () => {
                     id: 'price-1',
                     provider: 'FlightApi:KLM',
                     totalPrice: { amount: 123.45, currency: 'EUR' },
-                    deepLink: null,
+                    bookingLinks: [{ label: 'View fare', url: 'https://example.com/fare' }],
                   },
                 ],
               },
@@ -108,7 +108,9 @@ describe('flight search api', () => {
       arrivalLocalTime: '',
       durationMinutes: 0,
     })
-    expect(session.response.results[0].priceOptions[0].deepLink).toBe('')
+    expect(session.response.results[0].priceOptions[0].bookingLinks).toEqual([
+      { label: 'View fare', url: 'https://example.com/fare' },
+    ])
     expect(session.response.filters.providers).toEqual([{ value: 'FlightApi:KLM', count: 1 }])
     expect(session.response.pagination.totalResults).toBe(1)
   })

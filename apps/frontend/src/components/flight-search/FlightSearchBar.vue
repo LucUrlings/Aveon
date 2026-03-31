@@ -18,9 +18,13 @@ const originInput = defineModel<string>('originInput', { required: true })
 const destinationInput = defineModel<string>('destinationInput', { required: true })
 const originAirports = defineModel<AirportOption[]>('originAirports', { required: true })
 const destinationAirports = defineModel<AirportOption[]>('destinationAirports', { required: true })
+const tripType = defineModel<'oneWay' | 'return'>('tripType', { required: true })
 const departureDateFrom = defineModel<string>('departureDateFrom', { required: true })
 const departureDateTo = defineModel<string>('departureDateTo', { required: true })
 const selectedDepartureDates = defineModel<string[]>('selectedDepartureDates', { required: true })
+const returnDateFrom = defineModel<string | null>('returnDateFrom', { required: true })
+const returnDateTo = defineModel<string | null>('returnDateTo', { required: true })
+const selectedReturnDates = defineModel<string[]>('selectedReturnDates', { required: true })
 const adults = defineModel<number>('adults', { required: true })
 const cabinClass = defineModel<string>('cabinClass', { required: true })
 
@@ -41,7 +45,7 @@ const emit = defineEmits<{
     <div class="search-shell-header">
       <div>
         <p class="eyebrow">Search</p>
-        <h2>{{ isCollapsed ? compactSummary : 'Build a one-way search' }}</h2>
+        <h2>{{ isCollapsed ? compactSummary : 'Build a flight search' }}</h2>
       </div>
       <button
         v-if="responseExists"
@@ -125,13 +129,33 @@ const emit = defineEmits<{
           </div>
 
           <div class="settings-grid">
-            <label class="field">
+            <label class="field field-compact field-trip-type">
+              <span>Trip type</span>
+              <select v-model="tripType">
+                <option value="oneWay">One way</option>
+                <option value="return">Return</option>
+              </select>
+            </label>
+
+            <label class="field field-wide">
               <span>Dates</span>
               <DateRangePicker
                 v-model:start-date="departureDateFrom"
                 v-model:end-date="departureDateTo"
                 v-model:selected-dates="selectedDepartureDates"
                 :max-range-days="maxDepartureRangeDays"
+                heading="Select departure dates"
+              />
+            </label>
+
+            <label v-if="tripType === 'return' && returnDateFrom && returnDateTo" class="field field-wide">
+              <span>Return dates</span>
+              <DateRangePicker
+                v-model:start-date="returnDateFrom"
+                v-model:end-date="returnDateTo"
+                v-model:selected-dates="selectedReturnDates"
+                :max-range-days="maxDepartureRangeDays"
+                heading="Select return dates"
               />
             </label>
 

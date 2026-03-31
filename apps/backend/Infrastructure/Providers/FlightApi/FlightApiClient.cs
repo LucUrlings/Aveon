@@ -104,6 +104,92 @@ public sealed class FlightApiClient(
         return result;
     }
 
+    public async Task<FlightApiOneWayResponse> SearchRoundTripAsync(
+        ProviderRoundTripSearchRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            throw new InvalidOperationException("FlightApi:ApiKey is not configured.");
+        }
+
+        var cacheKey = ProviderCacheKeyBuilder.BuildFlightApiRoundTripSearchKey(request);
+        var cachedResponse = await providerResponseCache.GetAsync<FlightApiOneWayResponse>(cacheKey, cancellationToken);
+        if (cachedResponse is not null)
+        {
+            logger.LogInformation("FlightApi round-trip cache hit for key {CacheKey}", cacheKey);
+            return cachedResponse;
+        }
+
+        logger.LogInformation("FlightApi round-trip cache miss for key {CacheKey}", cacheKey);
+
+        var cabinClass = MapCabinClass(request.CabinClass);
+        var path = $"roundtrip/{_options.ApiKey}/{request.OriginAirport}/{request.DestinationAirport}/{request.DepartureDate:yyyy-MM-dd}/{request.ReturnDate:yyyy-MM-dd}/{request.Adults}/0/0/{cabinClass}/{_options.Currency}";
+        var stopwatch = Stopwatch.StartNew();
+
+        logger.LogInformation(
+            "Calling FlightApi round-trip search for {OriginAirport} -> {DestinationAirport} on {DepartureDate} returning {ReturnDate} for {Adults} adults in {CabinClass} using cache key {CacheKey}",
+            request.OriginAirport,
+            request.DestinationAirport,
+            request.DepartureDate,
+            request.ReturnDate,
+            request.Adults,
+            cabinClass,
+            cacheKey);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.GetAsync(path, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            logger.LogError(
+                ex,
+                "FlightApi round-trip search request failed for {OriginAirport} -> {DestinationAirport} on {DepartureDate} returning {ReturnDate} after {ElapsedMilliseconds} ms",
+                request.OriginAirport,
+                request.DestinationAirport,
+                request.DepartureDate,
+                request.ReturnDate,
+                stopwatch.ElapsedMilliseconds);
+            throw;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            stopwatch.Stop();
+            logger.LogWarning(
+                "FlightApi round-trip search returned HTTP {StatusCode} for {OriginAirport} -> {DestinationAirport} on {DepartureDate} returning {ReturnDate} after {ElapsedMilliseconds} ms",
+                (int)response.StatusCode,
+                request.OriginAirport,
+                request.DestinationAirport,
+                request.DepartureDate,
+                request.ReturnDate,
+                stopwatch.ElapsedMilliseconds);
+        }
+
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadFromJsonAsync<FlightApiOneWayResponse>(SerializerOptions, cancellationToken);
+        var result = payload ?? new FlightApiOneWayResponse();
+        stopwatch.Stop();
+
+        logger.LogInformation(
+            "FlightApi round-trip search succeeded for {OriginAirport} -> {DestinationAirport} on {DepartureDate} returning {ReturnDate} with HTTP {StatusCode} in {ElapsedMilliseconds} ms",
+            request.OriginAirport,
+            request.DestinationAirport,
+            request.DepartureDate,
+            request.ReturnDate,
+            (int)response.StatusCode,
+            stopwatch.ElapsedMilliseconds);
+
+        await providerResponseCache.SetAsync(cacheKey, result, cancellationToken);
+        logger.LogInformation("Stored FlightApi round-trip response in cache for key {CacheKey}", cacheKey);
+
+        return result;
+    }
+
     public async Task<FlightApiCodeLookupResponse> SearchAirportsAsync(
         string query,
         CancellationToken cancellationToken)

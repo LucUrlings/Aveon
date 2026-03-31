@@ -82,7 +82,7 @@ const makeSession = (overrides: Partial<SearchSessionResponse> = {}): SearchSess
             id: 'p1',
             provider: 'FlightApi:KLM',
             totalPrice: { amount: 120, currency: 'EUR' },
-            deepLink: 'https://example.com/1',
+            bookingLinks: [{ label: 'View fare', url: 'https://example.com/1' }],
           },
         ],
       },
@@ -116,7 +116,7 @@ const makeSession = (overrides: Partial<SearchSessionResponse> = {}): SearchSess
             id: 'p2',
             provider: 'FlightApi:KLM',
             totalPrice: { amount: 150, currency: 'EUR' },
-            deepLink: 'https://example.com/2',
+            bookingLinks: [{ label: 'View fare', url: 'https://example.com/2' }],
           },
         ],
       },
@@ -188,6 +188,8 @@ describe('FlightSearch', () => {
     expect(wrapper.get('.combination-prop').text()).toBe('3')
     expect(mockSearchFlightsRequest).toHaveBeenCalledWith(expect.objectContaining({
       selectedDates: ['2026-05-15', '2026-05-16', '2026-05-17'],
+      returnDateFrom: null,
+      returnDateTo: null,
     }))
     expect(mockGetSearchSession).toHaveBeenCalledWith('search-1', expect.objectContaining({
       direct: true,
@@ -304,6 +306,43 @@ describe('FlightSearch', () => {
     expect(wrapper.get('.combinations').text()).toBe('2')
     expect(router.currentRoute.value.query.origins).toBe('AMS')
     expect(router.currentRoute.value.query.dates).toBe('2026-06-01,2026-06-03')
+  })
+
+  it('submits return-date ranges for return searches and counts return combinations', async () => {
+    mockSearchFlightsRequest.mockResolvedValue(makeSession())
+
+    const { wrapper } = await mountWithRouter(
+      '/?origins=AMS&destinations=DUB&dates=2026-06-01,2026-06-03&tripType=return&returnDateFrom=2026-06-10&returnDateTo=2026-06-11',
+      {
+        global: {
+          stubs: {
+            FlightSearchBar: {
+              props: ['searchCombinationCount'],
+              emits: ['submit'],
+              template: `
+                <div>
+                  <span class="combination-prop">{{ searchCombinationCount }}</span>
+                  <button class="submit-search" @click="$emit('submit')">submit</button>
+                </div>
+              `,
+            },
+            SearchFilters: true,
+            SearchResultCard: true,
+          },
+        },
+      },
+    )
+
+    expect(wrapper.get('.combination-prop').text()).toBe('4')
+
+    await wrapper.get('.submit-search').trigger('click')
+    await flushPromises()
+
+    expect(mockSearchFlightsRequest).toHaveBeenCalledWith(expect.objectContaining({
+      selectedDates: ['2026-06-01', '2026-06-03'],
+      returnDateFrom: '2026-06-10',
+      returnDateTo: '2026-06-11',
+    }))
   })
 
   it('runs a search automatically when the route contains search params', async () => {

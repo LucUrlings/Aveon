@@ -25,9 +25,13 @@ const destinationAirports = ref<AirportOption[]>([
   { code: 'AMS', name: 'Amsterdam Schiphol', displayLabel: 'Amsterdam Schiphol (AMS)' },
 ])
 
+const tripType = ref<'oneWay' | 'return'>('oneWay')
 const departureDateFrom = ref('2026-05-15')
 const departureDateTo = ref('2026-05-17')
 const selectedDepartureDates = ref<string[]>(['2026-05-15', '2026-05-16', '2026-05-17'])
+const returnDateFrom = ref<string | null>(null)
+const returnDateTo = ref<string | null>(null)
+const selectedReturnDates = ref<string[]>([])
 const adults = ref(1)
 const cabinClass = ref('economy')
 
@@ -144,12 +148,18 @@ const buildSearchRequestKey = (
   origins: string[],
   destinations: string[],
   dates: string[],
+  tripTypeValue: 'oneWay' | 'return',
+  returnDateFromValue: string | null,
+  returnDateToValue: string | null,
   adultsValue: number,
   cabinClassValue: string,
 ) => JSON.stringify({
   origins: [...origins].sort((left, right) => left.localeCompare(right)),
   destinations: [...destinations].sort((left, right) => left.localeCompare(right)),
   dates: [...dates].sort((left, right) => left.localeCompare(right)),
+  tripType: tripTypeValue,
+  returnDateFrom: returnDateFromValue,
+  returnDateTo: returnDateToValue,
   adults: adultsValue,
   cabinClass: cabinClassValue,
 })
@@ -163,7 +173,16 @@ const getCurrentSearchRequestKey = () => {
     return null
   }
 
-  return buildSearchRequestKey(origins, destinations, dates, adults.value, cabinClass.value)
+  return buildSearchRequestKey(
+    origins,
+    destinations,
+    dates,
+    tripType.value,
+    returnDateFrom.value,
+    returnDateTo.value,
+    adults.value,
+    cabinClass.value,
+  )
 }
 
 const getSearchRequestKeyFromQuery = (params: Record<string, LocationQueryValue | LocationQueryValue[] | undefined>) => {
@@ -179,6 +198,9 @@ const getSearchRequestKeyFromQuery = (params: Record<string, LocationQueryValue 
     origins,
     destinations,
     dates,
+    getQueryString(params.tripType) === 'return' ? 'return' : 'oneWay',
+    getQueryString(params.returnDateFrom),
+    getQueryString(params.returnDateTo),
     parseNumberParam(getQueryString(params.adults), 1),
     getQueryString(params.cabinClass)?.trim() || 'economy',
   )
@@ -203,6 +225,11 @@ const applyUrlState = () => {
     departureDateFrom.value = selectedDates[0]
     departureDateTo.value = selectedDates[selectedDates.length - 1]
   }
+
+  tripType.value = getQueryString(params.tripType) === 'return' ? 'return' : 'oneWay'
+  returnDateFrom.value = getQueryString(params.returnDateFrom)
+  returnDateTo.value = getQueryString(params.returnDateTo)
+  selectedReturnDates.value = buildReturnDatesFromBounds(returnDateFrom.value, returnDateTo.value)
 
   adults.value = parseNumberParam(getQueryString(params.adults), adults.value)
 
@@ -286,6 +313,15 @@ const updateRouteState = async () => {
   setListParam(query, 'origins', originAirports.value.map((airport) => airport.code))
   setListParam(query, 'destinations', destinationAirports.value.map((airport) => airport.code))
   setListParam(query, 'dates', selectedDepartureDates.value)
+  if (tripType.value === 'return') {
+    query.tripType = 'return'
+    if (returnDateFrom.value) {
+      query.returnDateFrom = returnDateFrom.value
+    }
+    if (returnDateTo.value) {
+      query.returnDateTo = returnDateTo.value
+    }
+  }
   query.adults = String(adults.value)
 
   if (cabinClass.value !== 'economy') {
@@ -386,7 +422,10 @@ const compactSearchSummary = computed(() => {
   const origins = originAirports.value.map((airport) => airport.code).join(', ')
   const destinations = destinationAirports.value.map((airport) => airport.code).join(', ')
   const dateSummary = selectedDepartureDates.value.join(', ')
-  return `${origins} to ${destinations} on ${dateSummary}`
+  const returnSummary = tripType.value === 'return' && returnDateFrom.value && returnDateTo.value
+    ? ` returning ${returnDateFrom.value}${returnDateTo.value !== returnDateFrom.value ? ` to ${returnDateTo.value}` : ''}`
+    : ''
+  return `${origins} to ${destinations} on ${dateSummary}${returnSummary}`
 })
 
 const uniqueAirportCodes = (airports: AirportOption[]) =>
@@ -421,7 +460,11 @@ const searchCombinationCount = computed(() => {
     count + destinations.filter((destination) => destination !== origin).length
   ), 0)
 
-  return routeCombinationCount * departureDateCount
+  const returnDateCount = tripType.value === 'return'
+    ? buildReturnDates().length
+    : 1
+
+  return routeCombinationCount * departureDateCount * returnDateCount
 })
 
 const addDays = (dateString: string, days: number) => {
@@ -429,6 +472,30 @@ const addDays = (dateString: string, days: number) => {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
+
+const buildDateRange = (start: string | null, end: string | null) => {
+  if (!start || !end) {
+    return []
+  }
+
+  const first = start <= end ? start : end
+  const last = start <= end ? end : start
+  const dates: string[] = []
+
+  for (let dateValue = first; dateValue <= last; dateValue = addDays(dateValue, 1)) {
+    dates.push(dateValue)
+  }
+
+  return dates
+}
+
+const buildReturnDatesFromBounds = (start: string | null, end: string | null) =>
+  buildDateRange(start, end)
+
+const buildReturnDates = () =>
+  tripType.value === 'return'
+    ? buildReturnDatesFromBounds(returnDateFrom.value, returnDateTo.value)
+    : []
 
 const isSelected = (items: AirportOption[], code: string) =>
   items.some((item) => item.code === code)
@@ -608,6 +675,55 @@ watch(departureDateTo, (value) => {
   }
 })
 
+watch(tripType, (value) => {
+  if (value === 'oneWay') {
+    returnDateFrom.value = null
+    returnDateTo.value = null
+    selectedReturnDates.value = []
+    return
+  }
+
+  if (!returnDateFrom.value) {
+    returnDateFrom.value = departureDateFrom.value
+  }
+
+  if (!returnDateTo.value) {
+    returnDateTo.value = returnDateFrom.value
+  }
+
+  selectedReturnDates.value = buildReturnDates()
+})
+
+watch(returnDateFrom, (value) => {
+  if (!value) {
+    return
+  }
+
+  if (value < departureDateFrom.value) {
+    returnDateFrom.value = departureDateFrom.value
+    return
+  }
+
+  if (returnDateTo.value && returnDateTo.value < value) {
+    returnDateTo.value = value
+  }
+
+  selectedReturnDates.value = buildReturnDates()
+})
+
+watch(returnDateTo, (value) => {
+  if (!value || !returnDateFrom.value) {
+    return
+  }
+
+  if (value < returnDateFrom.value) {
+    returnDateTo.value = returnDateFrom.value
+    return
+  }
+
+  selectedReturnDates.value = buildReturnDates()
+})
+
 watch(
   response,
   (nextResponse, previousResponse) => {
@@ -631,7 +747,11 @@ watch(
   [
     originAirports,
     destinationAirports,
+    tripType,
     selectedDepartureDates,
+    returnDateFrom,
+    returnDateTo,
+    selectedReturnDates,
     adults,
     cabinClass,
     includeDirectFlights,
@@ -771,8 +891,8 @@ const searchFlights = async () => {
       originAirports: originAirports.value.map((airport) => airport.code),
       destinationAirports: destinationAirports.value.map((airport) => airport.code),
       selectedDates: [...selectedDepartureDates.value],
-      returnDateFrom: null,
-      returnDateTo: null,
+      returnDateFrom: tripType.value === 'return' ? returnDateFrom.value : null,
+      returnDateTo: tripType.value === 'return' ? returnDateTo.value : null,
       adults: adults.value,
       cabinClass: cabinClass.value,
     }
@@ -836,9 +956,13 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
         v-model:destination-input="destinationInput"
         v-model:origin-airports="originAirports"
         v-model:destination-airports="destinationAirports"
+        v-model:trip-type="tripType"
         v-model:departure-date-from="departureDateFrom"
         v-model:departure-date-to="departureDateTo"
         v-model:selected-departure-dates="selectedDepartureDates"
+        v-model:return-date-from="returnDateFrom"
+        v-model:return-date-to="returnDateTo"
+        v-model:selected-return-dates="selectedReturnDates"
         v-model:adults="adults"
         v-model:cabin-class="cabinClass"
         :response-exists="Boolean(response)"

@@ -22,6 +22,25 @@ public static class ProviderCacheKeyBuilder
             cabinClass);
     }
 
+    public static string BuildFlightApiRoundTripSearchKey(ProviderRoundTripSearchRequest request)
+    {
+        var origin = request.OriginAirport.Trim().ToUpperInvariant();
+        var destination = request.DestinationAirport.Trim().ToUpperInvariant();
+        var cabinClass = request.CabinClass.Trim().ToLowerInvariant();
+
+        return string.Join(
+            ":",
+            "provider",
+            "flightapi",
+            "roundtrip",
+            origin,
+            destination,
+            request.DepartureDate.ToString("yyyy-MM-dd"),
+            request.ReturnDate.ToString("yyyy-MM-dd"),
+            request.Adults,
+            cabinClass);
+    }
+
     public static string BuildFlightApiAirportLookupKey(string query) =>
         string.Join(
             ":",
