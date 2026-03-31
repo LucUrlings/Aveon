@@ -62,6 +62,22 @@ describe('flight search api', () => {
                 ],
               },
             ],
+            filters: {
+              providers: [{ value: 'FlightApi:KLM', count: 1 }],
+              airlines: [{ value: 'KLM', count: 1 }],
+              departureAirports: [{ value: 'AMS', count: 1 }],
+              arrivalAirports: [{ value: 'DUB', count: 1 }],
+              durationMinutes: { min: 90, max: 90 },
+              departureTimeMinutes: { min: 480, max: 480 },
+              arrivalTimeMinutes: { min: 570, max: 570 },
+              stops: { direct: 1, oneStop: 0, twoPlusStop: 0 },
+            },
+            pagination: {
+              page: 1,
+              pageSize: 100,
+              totalResults: 1,
+              totalPages: 1,
+            },
           },
         }),
       })
@@ -93,6 +109,8 @@ describe('flight search api', () => {
       durationMinutes: 0,
     })
     expect(session.response.results[0].priceOptions[0].deepLink).toBe('')
+    expect(session.response.filters.providers).toEqual([{ value: 'FlightApi:KLM', count: 1 }])
+    expect(session.response.pagination.totalResults).toBe(1)
   })
 
   it('throws the backend message for non-ok responses', async () => {
@@ -104,6 +122,6 @@ describe('flight search api', () => {
 
     const { getSearchSession } = await import('../../../src/features/flight-search/api')
 
-    await expect(getSearchSession('search-1')).rejects.toThrow('Bad request from backend')
+    await expect(getSearchSession('search-1', { direct: true, providers: ['FlightApi:KLM'] })).rejects.toThrow('Bad request from backend')
   })
 })

@@ -35,6 +35,22 @@ const makeSession = (overrides: Partial<SearchSessionResponse> = {}): SearchSess
       returnedOneStopFlightCount: 0,
       returnedTwoPlusStopFlightCount: 0,
     },
+    filters: {
+      providers: [{ value: 'FlightApi:KLM', count: 2 }],
+      airlines: [{ value: 'KLM', count: 2 }],
+      departureAirports: [{ value: 'AMS', count: 2 }],
+      arrivalAirports: [{ value: 'DUB', count: 2 }],
+      durationMinutes: { min: 90, max: 90 },
+      departureTimeMinutes: { min: 540, max: 1200 },
+      arrivalTimeMinutes: { min: 630, max: 1290 },
+      stops: { direct: 2, oneStop: 0, twoPlusStop: 0 },
+    },
+    pagination: {
+      page: 1,
+      pageSize: 100,
+      totalResults: 2,
+      totalPages: 1,
+    },
     results: [
       {
         id: 'morning',
@@ -115,6 +131,7 @@ beforeEach(() => {
   mockGetSearchSession.mockReset()
   mockSearchFlightsRequest.mockReset()
   mockFetchAirportSuggestions.mockResolvedValue([])
+  mockGetSearchSession.mockResolvedValue(makeSession())
   document.title = ''
 })
 
@@ -172,11 +189,41 @@ describe('FlightSearch', () => {
     expect(mockSearchFlightsRequest).toHaveBeenCalledWith(expect.objectContaining({
       selectedDates: ['2026-05-15', '2026-05-16', '2026-05-17'],
     }))
+    expect(mockGetSearchSession).toHaveBeenCalledWith('search-1', expect.objectContaining({
+      direct: true,
+      oneStop: false,
+      twoPlusStop: false,
+    }))
     expect(router.currentRoute.value.query.adults).toBe('1')
   })
 
-  it('filters by local departure time and updates the page title from filtered results', async () => {
+  it('refetches the current session with backend filter params and updates the page title from filtered results', async () => {
     mockSearchFlightsRequest.mockResolvedValue(makeSession())
+    const filteredSession = makeSession({
+      response: {
+        ...makeSession().response,
+        metadata: {
+          ...makeSession().response.metadata,
+          providerResultCount: 1,
+          returnedResultCount: 1,
+          returnedDirectFlightCount: 1,
+        },
+        filters: {
+          ...makeSession().response.filters,
+          departureTimeMinutes: { min: 540, max: 540 },
+        },
+        pagination: {
+          page: 1,
+          pageSize: 100,
+          totalResults: 1,
+          totalPages: 1,
+        },
+        results: [makeSession().response.results[0]],
+      },
+    })
+    mockGetSearchSession
+      .mockResolvedValueOnce(makeSession())
+      .mockResolvedValue(filteredSession)
 
     const { wrapper } = await mountWithRouter('/', {
       global: {
@@ -203,9 +250,17 @@ describe('FlightSearch', () => {
     expect(wrapper.findAll('.result-card-stub')).toHaveLength(2)
 
     await wrapper.get('.set-departure-filter').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.findAll('.result-card-stub').map((node) => node.text())).toEqual(['morning'])
+    await vi.waitFor(() => {
+      expect(mockGetSearchSession).toHaveBeenLastCalledWith('search-1', expect.objectContaining({
+        direct: true,
+        oneStop: false,
+        twoPlusStop: false,
+        departureTime: [0, 720],
+      }))
+    })
+    await vi.waitFor(() => {
+      expect(wrapper.findAll('.result-card-stub').map((node) => node.text())).toEqual(['morning'])
+    })
     expect(document.title).toBe('Aveon · 1 flights from DUB to AMS')
   })
 
@@ -279,6 +334,11 @@ describe('FlightSearch', () => {
       selectedDates: ['2026-05-15', '2026-05-16', '2026-05-17'],
       adults: 1,
       cabinClass: 'economy',
+    }))
+    expect(mockGetSearchSession).toHaveBeenCalledWith('search-1', expect.objectContaining({
+      direct: true,
+      oneStop: false,
+      twoPlusStop: false,
     }))
     expect(wrapper.findAll('.result-card-stub')).toHaveLength(2)
   })

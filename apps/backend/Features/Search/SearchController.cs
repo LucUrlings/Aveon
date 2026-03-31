@@ -32,9 +32,10 @@ public class SearchController(ISearchService searchService) : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SearchSessionResponse>> Get(
         [FromRoute] string searchId,
+        [FromQuery] SearchResultsQuery query,
         CancellationToken cancellationToken)
     {
-        var response = await searchService.GetSearchAsync(searchId, cancellationToken);
+        var response = await searchService.GetSearchAsync(searchId, query, cancellationToken);
         return response is null ? NotFound() : Ok(response);
     }
 }

@@ -9,6 +9,7 @@ import {
   cabinOptions,
   type AirportOption,
   type SearchRequest,
+  type SearchResultsQuery,
   type SearchResponse,
   type SearchSessionResponse,
 } from '../features/flight-search/types'
@@ -47,7 +48,6 @@ const selectedProviders = ref<string[]>([])
 const selectedAirlines = ref<string[]>([])
 const selectedDepartureAirports = ref<string[]>([])
 const selectedArrivalAirports = ref<string[]>([])
-const priceRange = ref<[number, number]>([0, 0])
 const maxDurationMinutes = ref(0)
 const departureTimeRange = ref<[number, number]>([0, 1439])
 const arrivalTimeRange = ref<[number, number]>([0, 1439])
@@ -55,6 +55,7 @@ const arrivalTimeRange = ref<[number, number]>([0, 1439])
 let originRequestId = 0
 let destinationRequestId = 0
 let pollingTimer: number | null = null
+let filterRefreshTimer: number | null = null
 let hasMounted = false
 let hasHydratedFiltersFromUrl = false
 let isSyncingRoute = false
@@ -134,7 +135,6 @@ const hasActiveFilterQuery = (params: Record<string, LocationQueryValue | Locati
     'airlines',
     'departureAirports',
     'arrivalAirports',
-    'price',
     'maxDuration',
     'departureTime',
     'arrivalTime',
@@ -218,7 +218,6 @@ const applyUrlState = () => {
   selectedAirlines.value = parseStringListParam(getQueryString(params.airlines))
   selectedDepartureAirports.value = parseCodeListParam(getQueryString(params.departureAirports))
   selectedArrivalAirports.value = parseCodeListParam(getQueryString(params.arrivalAirports))
-  priceRange.value = parseRangeParam(getQueryString(params.price), priceRange.value)
   maxDurationMinutes.value = parseNumberParam(getQueryString(params.maxDuration), maxDurationMinutes.value)
   departureTimeRange.value = parseRangeParam(getQueryString(params.departureTime), departureTimeRange.value)
   arrivalTimeRange.value = parseRangeParam(getQueryString(params.arrivalTime), arrivalTimeRange.value)
@@ -262,6 +261,22 @@ const setRangeParam = (params: Record<string, string>, key: string, value: [numb
   params[key] = `${value[0]}-${value[1]}`
 }
 
+const getExplicitSelection = (selectedValues: string[], availableValues: string[]) => {
+  const cleanedSelectedValues = selectedValues.map((value) => value.trim()).filter(Boolean)
+  const cleanedAvailableValues = availableValues.map((value) => value.trim()).filter(Boolean)
+
+  if (
+    cleanedSelectedValues.length === 0 ||
+    (cleanedAvailableValues.length > 0 &&
+      cleanedSelectedValues.length === cleanedAvailableValues.length &&
+      cleanedAvailableValues.every((value) => cleanedSelectedValues.includes(value)))
+  ) {
+    return []
+  }
+
+  return cleanedSelectedValues
+}
+
 const updateRouteState = async () => {
   if (!hasMounted || isSyncingRoute) {
     return
@@ -280,12 +295,11 @@ const updateRouteState = async () => {
   setBooleanParam(query, 'direct', includeDirectFlights.value, true)
   setBooleanParam(query, 'oneStop', includeOneStopFlights.value, false)
   setBooleanParam(query, 'twoPlusStop', includeTwoPlusStopFlights.value, false)
-  setListParam(query, 'providers', selectedProviders.value)
-  setListParam(query, 'airlines', selectedAirlines.value)
-  setListParam(query, 'departureAirports', selectedDepartureAirports.value)
-  setListParam(query, 'arrivalAirports', selectedArrivalAirports.value)
-  setRangeParam(query, 'price', priceRange.value, [0, 0])
-  setNumberParam(query, 'maxDuration', maxDurationMinutes.value, 0)
+  setListParam(query, 'providers', getExplicitSelection(selectedProviders.value, providerFilters.value))
+  setListParam(query, 'airlines', getExplicitSelection(selectedAirlines.value, airlineFilters.value))
+  setListParam(query, 'departureAirports', getExplicitSelection(selectedDepartureAirports.value, departureAirportFilters.value))
+  setListParam(query, 'arrivalAirports', getExplicitSelection(selectedArrivalAirports.value, arrivalAirportFilters.value))
+  setNumberParam(query, 'maxDuration', maxDurationMinutes.value, response.value ? availableMaxDurationMinutes.value : 0)
   setRangeParam(query, 'departureTime', departureTimeRange.value, [0, 1439])
   setRangeParam(query, 'arrivalTime', arrivalTimeRange.value, [0, 1439])
 
@@ -311,11 +325,7 @@ const providerFilters = computed(() => {
     return []
   }
 
-  return [...new Set(
-    response.value.results.flatMap((result) =>
-      result.priceOptions.map((option) => option.provider),
-    ),
-  )].sort((left, right) => left.localeCompare(right))
+  return response.value.filters.providers.map((option: { value: string }) => option.value)
 })
 
 const airlineFilters = computed(() => {
@@ -323,15 +333,7 @@ const airlineFilters = computed(() => {
     return []
   }
 
-  return [...new Set(
-    response.value.results.flatMap((result) =>
-      result.legs.flatMap((leg) =>
-        leg.segments
-          .map((segment) => segment.marketingCarrierName?.trim())
-          .filter((name): name is string => Boolean(name)),
-      ),
-    ),
-  )].sort((left, right) => left.localeCompare(right))
+  return response.value.filters.airlines.map((option: { value: string }) => option.value)
 })
 
 const departureAirportFilters = computed(() => {
@@ -339,11 +341,7 @@ const departureAirportFilters = computed(() => {
     return []
   }
 
-  return [...new Set(
-    response.value.results
-      .map((result) => result.legs[0]?.originAirport?.trim())
-      .filter((airport): airport is string => Boolean(airport)),
-  )].sort((left, right) => left.localeCompare(right))
+  return response.value.filters.departureAirports.map((option: { value: string }) => option.value)
 })
 
 const arrivalAirportFilters = computed(() => {
@@ -351,136 +349,25 @@ const arrivalAirportFilters = computed(() => {
     return []
   }
 
-  return [...new Set(
-    response.value.results
-      .map((result) => result.legs[result.legs.length - 1]?.destinationAirport?.trim())
-      .filter((airport): airport is string => Boolean(airport)),
-  )].sort((left, right) => left.localeCompare(right))
-})
-
-const getVisiblePriceOptions = (result: SearchResponse['results'][number]) => {
-  const visibleOptions = selectedProviders.value.length > 0
-    ? result.priceOptions.filter((option) => selectedProviders.value.includes(option.provider))
-    : result.priceOptions
-
-  return [...visibleOptions].sort((left, right) => left.totalPrice.amount - right.totalPrice.amount)
-}
-
-const baseFilteredResults = computed(() => {
-  if (!response.value) {
-    return []
-  }
-
-  return response.value.results.flatMap((result) => {
-    const stopCount = getStopCount(result)
-    const includeByStopCount = (
-      (stopCount === 0 && includeDirectFlights.value) ||
-      (stopCount === 1 && includeOneStopFlights.value) ||
-      (stopCount >= 2 && includeTwoPlusStopFlights.value)
-    )
-
-    if (!includeByStopCount) {
-      return []
-    }
-
-    const visiblePriceOptions = getVisiblePriceOptions(result)
-    if (visiblePriceOptions.length === 0) {
-      return []
-    }
-
-    if (selectedAirlines.value.length > 0) {
-      const resultAirlines = new Set(
-        result.legs.flatMap((leg) =>
-          leg.segments
-            .map((segment) => segment.marketingCarrierName?.trim())
-            .filter((name): name is string => Boolean(name)),
-        ),
-      )
-
-      const hasSelectedAirline = selectedAirlines.value.some((airline) => resultAirlines.has(airline))
-      if (!hasSelectedAirline) {
-        return []
-      }
-    }
-
-    const departureAirport = result.legs[0]?.originAirport?.trim()
-    if (
-      selectedDepartureAirports.value.length > 0 &&
-      (!departureAirport || !selectedDepartureAirports.value.includes(departureAirport))
-    ) {
-      return []
-    }
-
-    const arrivalAirport = result.legs[result.legs.length - 1]?.destinationAirport?.trim()
-    if (
-      selectedArrivalAirports.value.length > 0 &&
-      (!arrivalAirport || !selectedArrivalAirports.value.includes(arrivalAirport))
-    ) {
-      return []
-    }
-
-    const firstDepartureMinutes = getClockMinutes(result.legs[0]?.departureLocalTime)
-    if (firstDepartureMinutes < departureTimeRange.value[0] || firstDepartureMinutes > departureTimeRange.value[1]) {
-      return []
-    }
-
-    const lastArrivalMinutes = getClockMinutes(result.legs[result.legs.length - 1]?.arrivalLocalTime)
-    if (lastArrivalMinutes < arrivalTimeRange.value[0] || lastArrivalMinutes > arrivalTimeRange.value[1]) {
-      return []
-    }
-
-    return [{
-      ...result,
-      priceOptions: visiblePriceOptions,
-    }]
-  })
+  return response.value.filters.arrivalAirports.map((option: { value: string }) => option.value)
 })
 
 const availableMaxDurationMinutes = computed(() => {
-  if (baseFilteredResults.value.length === 0) {
+  if (!response.value) {
     return 0
   }
 
-  return Math.max(...baseFilteredResults.value.map((result) => result.totalDurationMinutes))
+  return response.value.filters.durationMinutes.max
 })
 
-const availablePriceRange = computed<[number, number]>(() => {
-  if (baseFilteredResults.value.length === 0) {
-    return [0, 0]
-  }
-
-  const amounts = baseFilteredResults.value
-    .map((result) => result.priceOptions[0]?.totalPrice.amount ?? 0)
-    .filter((amount) => Number.isFinite(amount))
-
-  if (amounts.length === 0) {
-    return [0, 0]
-  }
-
-  return [Math.floor(Math.min(...amounts)), Math.ceil(Math.max(...amounts))]
-})
-
-const filteredResults = computed(() => {
-  return baseFilteredResults.value.filter((result) => {
-    if (maxDurationMinutes.value > 0 && result.totalDurationMinutes > maxDurationMinutes.value) {
-      return false
-    }
-
-    const cheapest = result.priceOptions[0]
-    if (cheapest.totalPrice.amount < priceRange.value[0] || cheapest.totalPrice.amount > priceRange.value[1]) {
-      return false
-    }
-
-    return true
-  })
-})
+const filteredResults = computed(() => response.value?.results ?? [])
 
 const searchSummary = computed(() => {
   if (!response.value) {
     return 'Search across multiple airports and compare grouped fares.'
   }
 
-  return `${filteredResults.value.length} flights after filters`
+  return `${response.value.pagination.totalResults} flights after filters`
 })
 
 const progressPercentage = computed(() => {
@@ -515,7 +402,7 @@ const pageTitle = computed(() => {
   }
 
   if (response.value && routeSummary) {
-    return `Aveon · ${filteredResults.value.length} flights from ${routeSummary}`
+    return `Aveon · ${response.value.pagination.totalResults} flights from ${routeSummary}`
   }
 
   return 'Aveon'
@@ -542,25 +429,6 @@ const addDays = (dateString: string, days: number) => {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
-
-const getClockMinutes = (value?: string) => {
-  if (!value) {
-    return 0
-  }
-
-  const match = value.match(/T(\d{2}):(\d{2})/)
-  if (!match) {
-    return 0
-  }
-
-  const hours = Number.parseInt(match[1], 10)
-  const minutes = Number.parseInt(match[2], 10)
-
-  return (hours * 60) + minutes
-}
-
-const getStopCount = (result: SearchResponse['results'][number]) =>
-  result.legs.reduce((totalStops, leg) => totalStops + Math.max(leg.segments.length - 1, 0), 0)
 
 const isSelected = (items: AirportOption[], code: string) =>
   items.some((item) => item.code === code)
@@ -636,15 +504,6 @@ const updateSuggestions = async (
   }
 }
 
-const resetPriceRangeToAvailable = () => {
-  const [minPrice, maxPrice] = availablePriceRange.value
-  priceRange.value = [minPrice, maxPrice]
-}
-
-const resetMaxDurationToAvailable = () => {
-  maxDurationMinutes.value = availableMaxDurationMinutes.value
-}
-
 const syncSelectedFiltersToAvailable = (
   selectedItems: typeof selectedProviders | typeof selectedAirlines | typeof selectedDepartureAirports | typeof selectedArrivalAirports,
   availableItems: string[],
@@ -664,26 +523,6 @@ const syncSelectedFiltersToAvailable = (
   selectedItems.value = selectedItems.value.filter((item) => availableItems.includes(item))
 }
 
-const syncPriceRangeToAvailable = (shouldReset: boolean) => {
-  const [availableMinPrice, availableMaxPrice] = availablePriceRange.value
-
-  if (shouldReset) {
-    priceRange.value = [availableMinPrice, availableMaxPrice]
-    return
-  }
-
-  const nextMinPrice = Math.min(
-    Math.max(priceRange.value[0], availableMinPrice),
-    availableMaxPrice,
-  )
-  const nextMaxPrice = Math.max(
-    Math.min(priceRange.value[1], availableMaxPrice),
-    nextMinPrice,
-  )
-
-  priceRange.value = [nextMinPrice, nextMaxPrice]
-}
-
 const syncMaxDurationToAvailable = (shouldReset: boolean) => {
   if (shouldReset) {
     maxDurationMinutes.value = availableMaxDurationMinutes.value
@@ -691,6 +530,48 @@ const syncMaxDurationToAvailable = (shouldReset: boolean) => {
   }
 
   maxDurationMinutes.value = Math.min(maxDurationMinutes.value, availableMaxDurationMinutes.value)
+}
+
+const buildSearchResultsQuery = (): SearchResultsQuery => {
+  const query: SearchResultsQuery = {
+    direct: includeDirectFlights.value,
+    oneStop: includeOneStopFlights.value,
+    twoPlusStop: includeTwoPlusStopFlights.value,
+  }
+
+  const explicitProviders = getExplicitSelection(selectedProviders.value, providerFilters.value)
+  if (explicitProviders.length > 0) {
+    query.providers = explicitProviders
+  }
+
+  const explicitAirlines = getExplicitSelection(selectedAirlines.value, airlineFilters.value)
+  if (explicitAirlines.length > 0) {
+    query.airlines = explicitAirlines
+  }
+
+  const explicitDepartureAirports = getExplicitSelection(selectedDepartureAirports.value, departureAirportFilters.value)
+  if (explicitDepartureAirports.length > 0) {
+    query.departureAirports = explicitDepartureAirports
+  }
+
+  const explicitArrivalAirports = getExplicitSelection(selectedArrivalAirports.value, arrivalAirportFilters.value)
+  if (explicitArrivalAirports.length > 0) {
+    query.arrivalAirports = explicitArrivalAirports
+  }
+
+  if (response.value && maxDurationMinutes.value > 0 && maxDurationMinutes.value < availableMaxDurationMinutes.value) {
+    query.maxDuration = maxDurationMinutes.value
+  }
+
+  if (departureTimeRange.value[0] !== 0 || departureTimeRange.value[1] !== 1439) {
+    query.departureTime = [...departureTimeRange.value] as [number, number]
+  }
+
+  if (arrivalTimeRange.value[0] !== 0 || arrivalTimeRange.value[1] !== 1439) {
+    query.arrivalTime = [...arrivalTimeRange.value] as [number, number]
+  }
+
+  return query
 }
 
 watch(originInput, (value) => {
@@ -728,66 +609,18 @@ watch(departureDateTo, (value) => {
 })
 
 watch(
-  [
-    includeDirectFlights,
-    includeOneStopFlights,
-    includeTwoPlusStopFlights,
-    selectedProviders,
-    selectedAirlines,
-    selectedDepartureAirports,
-    selectedArrivalAirports,
-    departureTimeRange,
-    arrivalTimeRange,
-  ],
-  () => {
-    resetPriceRangeToAvailable()
-    resetMaxDurationToAvailable()
-  },
-  { immediate: true, deep: true },
-)
-
-watch(
   response,
   (nextResponse, previousResponse) => {
     const shouldResetFilters = !previousResponse && Boolean(nextResponse) && !hasHydratedFiltersFromUrl
-    const previousProviderFilters = previousResponse
-      ? [...new Set(
-        previousResponse.results.flatMap((result) =>
-          result.priceOptions.map((option) => option.provider),
-        ),
-      )].sort((left, right) => left.localeCompare(right))
-      : []
-    const previousAirlineFilters = previousResponse
-      ? [...new Set(
-        previousResponse.results.flatMap((result) =>
-          result.legs.flatMap((leg) =>
-            leg.segments
-              .map((segment) => segment.marketingCarrierName?.trim())
-              .filter((name): name is string => Boolean(name)),
-          ),
-        ),
-      )].sort((left, right) => left.localeCompare(right))
-      : []
-    const previousDepartureAirportFilters = previousResponse
-      ? [...new Set(
-        previousResponse.results
-          .map((result) => result.legs[0]?.originAirport?.trim())
-          .filter((airport): airport is string => Boolean(airport)),
-      )].sort((left, right) => left.localeCompare(right))
-      : []
-    const previousArrivalAirportFilters = previousResponse
-      ? [...new Set(
-        previousResponse.results
-          .map((result) => result.legs[result.legs.length - 1]?.destinationAirport?.trim())
-          .filter((airport): airport is string => Boolean(airport)),
-      )].sort((left, right) => left.localeCompare(right))
-      : []
+    const previousProviderFilters = previousResponse?.filters.providers.map((option: { value: string }) => option.value) ?? []
+    const previousAirlineFilters = previousResponse?.filters.airlines.map((option: { value: string }) => option.value) ?? []
+    const previousDepartureAirportFilters = previousResponse?.filters.departureAirports.map((option: { value: string }) => option.value) ?? []
+    const previousArrivalAirportFilters = previousResponse?.filters.arrivalAirports.map((option: { value: string }) => option.value) ?? []
 
     syncSelectedFiltersToAvailable(selectedProviders, providerFilters.value, previousProviderFilters, shouldResetFilters)
     syncSelectedFiltersToAvailable(selectedAirlines, airlineFilters.value, previousAirlineFilters, shouldResetFilters)
     syncSelectedFiltersToAvailable(selectedDepartureAirports, departureAirportFilters.value, previousDepartureAirportFilters, shouldResetFilters)
     syncSelectedFiltersToAvailable(selectedArrivalAirports, arrivalAirportFilters.value, previousArrivalAirportFilters, shouldResetFilters)
-    syncPriceRangeToAvailable(shouldResetFilters)
     syncMaxDurationToAvailable(shouldResetFilters)
     hasHydratedFiltersFromUrl = false
   },
@@ -808,7 +641,6 @@ watch(
     selectedAirlines,
     selectedDepartureAirports,
     selectedArrivalAirports,
-    priceRange,
     maxDurationMinutes,
     departureTimeRange,
     arrivalTimeRange,
@@ -816,6 +648,49 @@ watch(
   ],
   () => {
     void updateRouteState()
+  },
+  { deep: true },
+)
+
+const loadSearchSession = async (searchId: string) => {
+  const session = await getSearchSession(searchId, buildSearchResultsQuery())
+  searchSession.value = session
+  response.value = session.response
+  error.value = session.errorMessage ?? null
+
+  return session
+}
+
+const scheduleSearchSessionRefresh = () => {
+  if (!hasMounted || !searchSession.value?.searchId) {
+    return
+  }
+
+  if (filterRefreshTimer !== null) {
+    window.clearTimeout(filterRefreshTimer)
+  }
+
+  filterRefreshTimer = window.setTimeout(() => {
+    filterRefreshTimer = null
+    void loadSearchSession(searchSession.value!.searchId)
+  }, 200)
+}
+
+watch(
+  [
+    includeDirectFlights,
+    includeOneStopFlights,
+    includeTwoPlusStopFlights,
+    selectedProviders,
+    selectedAirlines,
+    selectedDepartureAirports,
+    selectedArrivalAirports,
+    maxDurationMinutes,
+    departureTimeRange,
+    arrivalTimeRange,
+  ],
+  () => {
+    scheduleSearchSessionRefresh()
   },
   { deep: true },
 )
@@ -851,6 +726,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopPolling()
+  if (filterRefreshTimer !== null) {
+    window.clearTimeout(filterRefreshTimer)
+  }
 })
 
 const stopPolling = () => {
@@ -862,13 +740,7 @@ const stopPolling = () => {
 
 const pollSearchSession = async (searchId: string) => {
   try {
-    const session = await getSearchSession(searchId)
-    searchSession.value = session
-    response.value = session.response
-
-    if (session.errorMessage) {
-      error.value = session.errorMessage
-    }
+    const session = await loadSearchSession(searchId)
 
     if (session.status === 'running') {
       pollingTimer = window.setTimeout(() => {
@@ -913,6 +785,8 @@ const searchFlights = async () => {
 
     if (session.status === 'running') {
       await pollSearchSession(session.searchId)
+    } else {
+      await loadSearchSession(session.searchId)
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Unknown error'
@@ -1009,7 +883,6 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
     <section class="results-grid" :class="{ 'results-only': !response }">
       <SearchFilters
         v-if="response"
-        v-model:price-range="priceRange"
         v-model:include-direct-flights="includeDirectFlights"
         v-model:include-one-stop-flights="includeOneStopFlights"
         v-model:include-two-plus-stop-flights="includeTwoPlusStopFlights"
@@ -1020,7 +893,6 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
         v-model:departure-time-range="departureTimeRange"
         v-model:arrival-time-range="arrivalTimeRange"
         v-model:max-duration-minutes="maxDurationMinutes"
-        :available-price-range="availablePriceRange"
         :available-max-duration-minutes="availableMaxDurationMinutes"
         :airline-filters="airlineFilters"
         :departure-airport-filters="departureAirportFilters"

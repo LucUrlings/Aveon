@@ -10,5 +10,5 @@ public record RedisOptions
 
     public int AirportDataTtlMinutes { get; init; } = 10080;
 
-    public int SearchSessionTtlMinutes { get; init; } = 60;
+    public int SearchSessionTtlMinutes { get; init; } = 30;
 }

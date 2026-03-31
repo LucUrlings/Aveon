@@ -6,5 +6,5 @@ public interface ISearchService
 {
     Task<SearchSessionResponse> StartSearchAsync(SearchRequest request, CancellationToken cancellationToken);
 
-    Task<SearchSessionResponse?> GetSearchAsync(string searchId, CancellationToken cancellationToken);
+    Task<SearchSessionResponse?> GetSearchAsync(string searchId, SearchResultsQuery query, CancellationToken cancellationToken);
 }

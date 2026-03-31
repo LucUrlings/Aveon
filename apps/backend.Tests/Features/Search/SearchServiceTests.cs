@@ -164,6 +164,63 @@ public sealed class SearchServiceTests
         Assert.Single(finalSession.Response.Results);
     }
 
+    [Fact]
+    public async Task GetSearchAsync_AppliesBackendFilters_AndReturnsFilterMetadata()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        await store.SetAsync(CreateStoredSession(), CancellationToken.None);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
+
+        var response = await service.GetSearchAsync(
+            "search-1",
+            new SearchResultsQuery
+            {
+                Direct = true,
+                OneStop = false,
+                TwoPlusStop = false,
+                Providers = "FlightApi:KLM",
+                DepartureTime = "0-720",
+                MaxDuration = 120
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        var session = response!;
+        var result = Assert.Single(session.Response.Results);
+        Assert.Equal("result-1", result.Id);
+        Assert.Equal(1, session.Response.Metadata.ProviderResultCount);
+        Assert.Equal(1, session.Response.Metadata.ReturnedResultCount);
+        Assert.Contains(session.Response.Filters.Providers, option => option.Value == "FlightApi:Ryanair" && option.Count == 1);
+        Assert.Equal(100, session.Response.Filters.DurationMinutes.Min);
+        Assert.Equal(100, session.Response.Filters.DurationMinutes.Max);
+    }
+
+    [Fact]
+    public async Task GetSearchAsync_AppliesPagination_WhenRequested()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        await store.SetAsync(CreateStoredSession(), CancellationToken.None);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
+
+        var response = await service.GetSearchAsync(
+            "search-1",
+            new SearchResultsQuery
+            {
+                Page = 2,
+                PageSize = 1
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        var session = response!;
+        var result = Assert.Single(session.Response.Results);
+        Assert.Equal("result-2", result.Id);
+        Assert.Equal(2, session.Response.Pagination.Page);
+        Assert.Equal(1, session.Response.Pagination.PageSize);
+        Assert.Equal(3, session.Response.Pagination.TotalResults);
+        Assert.Equal(3, session.Response.Pagination.TotalPages);
+    }
+
     private static SearchRequest CreateRequest() =>
         new(
             ["DUB"],
@@ -173,6 +230,112 @@ public sealed class SearchServiceTests
             null,
             1,
             "economy");
+
+    private static SearchSessionResponse CreateStoredSession() =>
+        new(
+            "search-1",
+            "completed",
+            3,
+            3,
+            0,
+            new SearchResponse(
+                [
+                    CreateResult(
+                        "result-1",
+                        "DUB",
+                        "AMS",
+                        new DateTime(2026, 5, 15, 8, 0, 0),
+                        new DateTime(2026, 5, 15, 9, 40, 0),
+                        100,
+                        [
+                            CreateSegment("KLM", "KL", "100", "DUB", "AMS", new DateTime(2026, 5, 15, 8, 0, 0), new DateTime(2026, 5, 15, 9, 40, 0), 100)
+                        ],
+                        [
+                            CreatePriceOption("p1", "FlightApi:KLM", 120m),
+                            CreatePriceOption("p2", "FlightApi:Expedia", 125m)
+                        ]),
+                    CreateResult(
+                        "result-2",
+                        "DUB",
+                        "AMS",
+                        new DateTime(2026, 5, 15, 11, 0, 0),
+                        new DateTime(2026, 5, 15, 15, 0, 0),
+                        240,
+                        [
+                            CreateSegment("Air France", "AF", "200", "DUB", "CDG", new DateTime(2026, 5, 15, 11, 0, 0), new DateTime(2026, 5, 15, 13, 0, 0), 120),
+                            CreateSegment("Air France", "AF", "201", "CDG", "AMS", new DateTime(2026, 5, 15, 14, 0, 0), new DateTime(2026, 5, 15, 15, 0, 0), 60)
+                        ],
+                        [
+                            CreatePriceOption("p3", "FlightApi:Air France", 95m)
+                        ]),
+                    CreateResult(
+                        "result-3",
+                        "DUB",
+                        "AMS",
+                        new DateTime(2026, 5, 15, 18, 0, 0),
+                        new DateTime(2026, 5, 15, 19, 40, 0),
+                        100,
+                        [
+                            CreateSegment("Ryanair", "FR", "300", "DUB", "AMS", new DateTime(2026, 5, 15, 18, 0, 0), new DateTime(2026, 5, 15, 19, 40, 0), 100)
+                        ],
+                        [
+                            CreatePriceOption("p4", "FlightApi:Ryanair", 60m)
+                        ])
+                ],
+                new SearchMetadata(3, 4, 3, 2, 1, 0),
+                new SearchFiltersMetadata([], [], [], [], new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchStopFilterMetadata(0, 0, 0)),
+                new SearchPagination(1, 3, 3, 1)),
+            null);
+
+    private static SearchResult CreateResult(
+        string id,
+        string originAirport,
+        string destinationAirport,
+        DateTime departureLocalTime,
+        DateTime arrivalLocalTime,
+        int totalDurationMinutes,
+        List<SearchResultSegment> segments,
+        List<SearchResultPriceOption> priceOptions) =>
+        new(
+            id,
+            false,
+            [
+                new SearchResultLeg(
+                    originAirport,
+                    destinationAirport,
+                    departureLocalTime,
+                    arrivalLocalTime,
+                    totalDurationMinutes,
+                    segments)
+            ],
+            totalDurationMinutes,
+            priceOptions);
+
+    private static SearchResultSegment CreateSegment(
+        string carrierName,
+        string carrierCode,
+        string flightNumber,
+        string originAirport,
+        string destinationAirport,
+        DateTime departureLocalTime,
+        DateTime arrivalLocalTime,
+        int durationMinutes) =>
+        new(
+            carrierName,
+            carrierCode,
+            flightNumber,
+            originAirport,
+            destinationAirport,
+            departureLocalTime,
+            arrivalLocalTime,
+            durationMinutes);
+
+    private static SearchResultPriceOption CreatePriceOption(string id, string provider, decimal amount) =>
+        new(
+            id,
+            provider,
+            new SearchResultPrice(amount, "EUR"),
+            $"https://example.com/{id}");
 
     private static ISearchService CreateSearchService(
         ISearchSessionStore store,

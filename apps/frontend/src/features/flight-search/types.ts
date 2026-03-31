@@ -56,9 +56,60 @@ export type SearchMetadata = {
   returnedTwoPlusStopFlightCount: number
 }
 
+export type SearchFilterOptionCount = {
+  value: string
+  count: number
+}
+
+export type SearchRangeMetadata = {
+  min: number
+  max: number
+}
+
+export type SearchStopFilterMetadata = {
+  direct: number
+  oneStop: number
+  twoPlusStop: number
+}
+
+export type SearchFiltersMetadata = {
+  providers: SearchFilterOptionCount[]
+  airlines: SearchFilterOptionCount[]
+  departureAirports: SearchFilterOptionCount[]
+  arrivalAirports: SearchFilterOptionCount[]
+  durationMinutes: SearchRangeMetadata
+  departureTimeMinutes: SearchRangeMetadata
+  arrivalTimeMinutes: SearchRangeMetadata
+  stops: SearchStopFilterMetadata
+}
+
+export type SearchPagination = {
+  page: number
+  pageSize: number
+  totalResults: number
+  totalPages: number
+}
+
 export type SearchResponse = {
   results: SearchResult[]
   metadata: SearchMetadata
+  filters: SearchFiltersMetadata
+  pagination: SearchPagination
+}
+
+export type SearchResultsQuery = {
+  direct?: boolean
+  oneStop?: boolean
+  twoPlusStop?: boolean
+  providers?: string[]
+  airlines?: string[]
+  departureAirports?: string[]
+  arrivalAirports?: string[]
+  maxDuration?: number
+  departureTime?: [number, number]
+  arrivalTime?: [number, number]
+  page?: number
+  pageSize?: number
 }
 
 export type SearchSessionResponse = {

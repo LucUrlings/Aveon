@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-defineProps<{
+const props = defineProps<{
   providerFilters: string[]
   airlineFilters: string[]
   departureAirportFilters: string[]
   arrivalAirportFilters: string[]
-  availablePriceRange: [number, number]
   availableMaxDurationMinutes: number
 }>()
 
-const priceRange = defineModel<[number, number]>('priceRange', { required: true })
 const maxDurationMinutes = defineModel<number>('maxDurationMinutes', { required: true })
 const includeDirectFlights = defineModel<boolean>('includeDirectFlights', { required: true })
 const includeOneStopFlights = defineModel<boolean>('includeOneStopFlights', { required: true })
@@ -23,7 +21,6 @@ const departureTimeRange = defineModel<[number, number]>('departureTimeRange', {
 const arrivalTimeRange = defineModel<[number, number]>('arrivalTimeRange', { required: true })
 
 const expandedSections = ref({
-  price: true,
   duration: true,
   stops: true,
   departure: true,
@@ -87,18 +84,6 @@ const getRangeStyle = (range: [number, number]) => {
   }
 }
 
-const getPriceRangeStyle = (range: [number, number], availableRange: [number, number]) => {
-  const [minPrice, maxPrice] = availableRange
-  const span = Math.max(maxPrice - minPrice, 1)
-  const start = ((range[0] - minPrice) / span) * 100
-  const end = ((range[1] - minPrice) / span) * 100
-
-  return {
-    left: `${Math.max(start, 0)}%`,
-    width: `${Math.max(end - start, 0)}%`,
-  }
-}
-
 const toggleSection = (section: keyof typeof expandedSections.value) => {
   expandedSections.value[section] = !expandedSections.value[section]
 }
@@ -109,40 +94,6 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
     <div class="filters-card">
       <p class="eyebrow">Filters</p>
       <h3>Refine results</h3>
-
-      <section class="filter-section" :class="{ open: expandedSections.price }">
-        <button type="button" class="filter-section-summary" @click="toggleSection('price')">Price range</button>
-        <div class="filter-section-body" :class="{ open: expandedSections.price }">
-          <div class="filter-section-inner time-filter-group">
-            <div class="time-filter-header">
-              <span class="filter-label">Price range</span>
-              <strong>EUR {{ priceRange[0] }} - EUR {{ priceRange[1] }}</strong>
-            </div>
-            <div class="range-slider">
-              <div class="range-slider-track" />
-              <div class="range-slider-selected" :style="getPriceRangeStyle(priceRange, availablePriceRange)" />
-              <input
-                :key="`price-min-${availablePriceRange[0]}-${availablePriceRange[1]}`"
-                :value="priceRange[0]"
-                type="range"
-                :min="availablePriceRange[0]"
-                :max="availablePriceRange[1]"
-                step="1"
-                @input="ensureOrderedRange(priceRange, 0, Number(($event.target as HTMLInputElement).value), availablePriceRange[0], availablePriceRange[1])"
-              />
-              <input
-                :key="`price-max-${availablePriceRange[0]}-${availablePriceRange[1]}`"
-                :value="priceRange[1]"
-                type="range"
-                :min="availablePriceRange[0]"
-                :max="availablePriceRange[1]"
-                step="1"
-                @input="ensureOrderedRange(priceRange, 1, Number(($event.target as HTMLInputElement).value), availablePriceRange[0], availablePriceRange[1])"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
 
       <section class="filter-section" :class="{ open: expandedSections.stops }">
         <button type="button" class="filter-section-summary" @click="toggleSection('stops')">Stops</button>

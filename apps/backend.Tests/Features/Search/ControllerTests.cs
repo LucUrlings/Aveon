@@ -37,7 +37,7 @@ public sealed class SearchControllerTests
         var session = CreateSession(status: "completed");
         var controller = new SearchController(new StubSearchService(getResponse: session));
 
-        var result = await controller.Get("search-1", CancellationToken.None);
+        var result = await controller.Get("search-1", new SearchResultsQuery(), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(session, ok.Value);
@@ -48,7 +48,7 @@ public sealed class SearchControllerTests
     {
         var controller = new SearchController(new StubSearchService(getResponse: null));
 
-        var result = await controller.Get("missing", CancellationToken.None);
+        var result = await controller.Get("missing", new SearchResultsQuery(), CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result.Result);
     }
@@ -63,7 +63,11 @@ public sealed class SearchControllerTests
             1,
             status == "running" ? 0 : 1,
             0,
-            new SearchResponse([], new SearchMetadata(1, 0, 0, 0, 0, 0)),
+            new SearchResponse(
+                [],
+                new SearchMetadata(1, 0, 0, 0, 0, 0),
+                new SearchFiltersMetadata([], [], [], [], new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchStopFilterMetadata(0, 0, 0)),
+                new SearchPagination(1, 0, 0, 0)),
             null);
 
     private sealed class StubSearchService(
@@ -81,7 +85,7 @@ public sealed class SearchControllerTests
             return Task.FromResult(startResponse ?? throw new InvalidOperationException("Missing start response."));
         }
 
-        public Task<SearchSessionResponse?> GetSearchAsync(string searchId, CancellationToken cancellationToken) =>
+        public Task<SearchSessionResponse?> GetSearchAsync(string searchId, SearchResultsQuery query, CancellationToken cancellationToken) =>
             Task.FromResult(getResponse);
     }
 }
