@@ -10,10 +10,12 @@ import {
 defineProps<{
   result: SearchResult
   expanded: boolean
+  copyLabel: string
 }>()
 
 const emit = defineEmits<{
   toggleExpanded: [resultId: string]
+  copyFare: []
 }>()
 </script>
 
@@ -37,6 +39,9 @@ const emit = defineEmits<{
         </span>
         <strong>{{ formatDuration(result.totalDurationMinutes) }}</strong>
       </div>
+      <button class="copy-fare-button" type="button" :title="copyLabel" @click="emit('copyFare')">
+        {{ copyLabel }}
+      </button>
     </div>
 
     <div

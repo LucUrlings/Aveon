@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import type { SearchResult } from '../../features/flight-search/types'
 import OneWaySearchResultCard from './OneWaySearchResultCard.vue'
 import ReturnSearchResultCard from './ReturnSearchResultCard.vue'
 import SyntheticReturnSearchResultCard from './SyntheticReturnSearchResultCard.vue'
-import { isActualReturnFare, isSyntheticReturnFare } from './SearchResultCard.shared'
+import { formatResultForShare, isActualReturnFare, isSyntheticReturnFare } from './SearchResultCard.shared'
 
 const props = defineProps<{
   result: SearchResult
@@ -14,6 +14,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   toggleExpanded: [resultId: string]
 }>()
+
+const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
+let copyResetTimer: number | null = null
 
 const cardComponent = computed(() => {
   if (isSyntheticReturnFare(props.result)) {
@@ -26,6 +29,64 @@ const cardComponent = computed(() => {
 
   return OneWaySearchResultCard
 })
+
+const copyLabel = computed(() => {
+  if (copyState.value === 'copied') {
+    return 'Copied'
+  }
+
+  if (copyState.value === 'failed') {
+    return 'Failed'
+  }
+
+  return 'Copy'
+})
+
+const setCopyState = (nextState: 'idle' | 'copied' | 'failed') => {
+  copyState.value = nextState
+
+  if (copyResetTimer !== null) {
+    window.clearTimeout(copyResetTimer)
+  }
+
+  if (nextState !== 'idle') {
+    copyResetTimer = window.setTimeout(() => {
+      copyState.value = 'idle'
+      copyResetTimer = null
+    }, 1500)
+  }
+}
+
+const copyFare = async () => {
+  const message = formatResultForShare(props.result, 1)
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(message)
+      setCopyState('copied')
+      return
+    }
+
+    const textArea = document.createElement('textarea')
+    textArea.value = message
+    textArea.setAttribute('readonly', 'true')
+    textArea.style.position = 'absolute'
+    textArea.style.left = '-9999px'
+    document.body.appendChild(textArea)
+    textArea.select()
+    const didCopy = document.execCommand('copy')
+    document.body.removeChild(textArea)
+    setCopyState(didCopy ? 'copied' : 'failed')
+  } catch {
+    setCopyState('failed')
+  }
+}
+
+onBeforeUnmount(() => {
+  if (copyResetTimer !== null) {
+    window.clearTimeout(copyResetTimer)
+  }
+})
 </script>
 
 <template>
@@ -33,6 +94,10 @@ const cardComponent = computed(() => {
     :is="cardComponent"
     :result="result"
     :expanded="expanded"
+    :copy-label="copyLabel"
     @toggle-expanded="emit('toggleExpanded', $event)"
+    @copy-fare="copyFare"
   />
 </template>
+
+<style scoped src="./SearchResultCard.css"></style>

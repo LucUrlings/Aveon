@@ -1,7 +1,9 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SearchResultCard from '../../../src/components/flight-search/SearchResultCard.vue'
 import type { SearchResult } from '../../../src/features/flight-search/types'
+
+const clipboardWriteText = vi.fn()
 
 const directResult: SearchResult = {
   id: 'direct-1',
@@ -141,6 +143,16 @@ const syntheticReturnResult: SearchResult = {
 }
 
 describe('SearchResultCard', () => {
+  beforeEach(() => {
+    clipboardWriteText.mockReset()
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: clipboardWriteText,
+      },
+    })
+  })
+
   it('renders a direct one-way flight using local-time formatting', () => {
     const wrapper = mount(SearchResultCard, {
       props: {
@@ -188,5 +200,20 @@ describe('SearchResultCard', () => {
     expect(wrapper.emitted('toggleExpanded')).toEqual([['synthetic-return-1']])
     expect(wrapper.text()).toContain('Book outbound')
     expect(wrapper.text()).toContain('Book return')
+  })
+
+  it('copies a single fare into a shareable message from the corner button', async () => {
+    const wrapper = mount(SearchResultCard, {
+      props: {
+        result: syntheticReturnResult,
+        expanded: false,
+      },
+    })
+
+    await wrapper.get('.copy-fare-button').trigger('click')
+
+    expect(clipboardWriteText).toHaveBeenCalledWith(expect.stringContaining('1. Round trip | KLM, Air France'))
+    expect(clipboardWriteText).toHaveBeenCalledWith(expect.stringContaining('Outbound: AMS -> CDG'))
+    expect(clipboardWriteText).toHaveBeenCalledWith(expect.stringContaining('Book outbound: https://example.com/outbound'))
   })
 })

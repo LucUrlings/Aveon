@@ -24,6 +24,8 @@ export const formatDuration = (totalMinutes: number) => {
   return `${hours}h ${minutes}m`
 }
 
+export const formatPrice = (amount: number, currency: string) => `${currency} ${amount.toFixed(2)}`
+
 export const formatProviderName = (provider: string) => provider.replace(/^FlightApi:/, '').trim()
 
 export const getAirlineSummary = (result: SearchResult) => {
@@ -46,3 +48,22 @@ export const isSyntheticReturnFare = (result: SearchResult) =>
 
 export const isActualReturnFare = (result: SearchResult) =>
   result.isRoundTrip && !isSyntheticReturnFare(result)
+
+export const formatResultForShare = (result: SearchResult, index: number) => {
+  const primaryOption = result.priceOptions[0]
+  const legLines = result.legs.map((leg, legIndex) => {
+    const legLabel = result.isRoundTrip ? `${legIndex === 0 ? 'Outbound' : 'Return'}: ` : ''
+    return `${legLabel}${leg.originAirport} -> ${leg.destinationAirport} | ${formatDateTime(leg.departureLocalTime)} to ${formatDateTime(leg.arrivalLocalTime)} | ${formatDuration(leg.durationMinutes)}`
+  })
+  const linkLines = primaryOption.bookingLinks
+    .filter((link) => link.url)
+    .map((link) => `${link.label || 'View fare'}: ${link.url}`)
+
+  return [
+    `${index}. ${result.isRoundTrip ? 'Round trip' : 'One-way'} | ${getAirlineSummary(result)}`,
+    ...legLines,
+    `Total: ${formatDuration(result.totalDurationMinutes)}`,
+    `Fare: ${formatPrice(primaryOption.totalPrice.amount, primaryOption.totalPrice.currency)} via ${formatProviderName(primaryOption.provider)}`,
+    ...linkLines,
+  ].join('\n')
+}

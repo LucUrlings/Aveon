@@ -6,12 +6,36 @@
   box-shadow: 0 6px 16px rgba(41, 49, 61, 0.04);
 }
 
+.copy-fare-button {
+  flex: 0 0 auto;
+  align-self: start;
+  border: 1px solid rgba(29, 34, 40, 0.1);
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #5b6570;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.copy-fare-button:hover {
+  color: #1d2228;
+  border-color: rgba(31, 95, 191, 0.24);
+}
+
 .details-header {
   display: flex;
   justify-content: space-between;
   gap: 10px;
   align-items: start;
   margin-bottom: 8px;
+}
+
+.details-header .details-main {
+  flex: 1 1 auto;
 }
 
 .details-main,
