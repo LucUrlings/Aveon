@@ -15,6 +15,7 @@ import {
 } from '../features/flight-search/types'
 
 const MAX_DEPARTURE_RANGE_DAYS = 10
+const DEFAULT_PAGE_SIZE = 100
 
 const originInput = ref('')
 const destinationInput = ref('')
@@ -42,6 +43,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const response = ref<SearchResponse | null>(null)
 const searchSession = ref<SearchSessionResponse | null>(null)
+const loadedResults = ref<SearchResponse['results']>([])
 const expandedResultIds = ref<string[]>([])
 const isSearchCollapsed = ref(false)
 
@@ -55,11 +57,15 @@ const selectedArrivalAirports = ref<string[]>([])
 const maxDurationMinutes = ref(0)
 const departureTimeRange = ref<[number, number]>([0, 1439])
 const arrivalTimeRange = ref<[number, number]>([0, 1439])
+const currentPage = ref(1)
+const isLoadingMore = ref(false)
+const loadMoreSentinel = ref<HTMLElement | null>(null)
 
 let originRequestId = 0
 let destinationRequestId = 0
 let pollingTimer: number | null = null
 let filterRefreshTimer: number | null = null
+let loadMoreObserver: IntersectionObserver | null = null
 let hasMounted = false
 let hasHydratedFiltersFromUrl = false
 let isSyncingRoute = false
@@ -396,7 +402,41 @@ const availableMaxDurationMinutes = computed(() => {
   return response.value.filters.durationMinutes.max
 })
 
-const filteredResults = computed(() => response.value?.results ?? [])
+const filteredResults = computed(() => loadedResults.value)
+const totalPages = computed(() => response.value?.pagination.totalPages ?? 0)
+const hasMoreResults = computed(() => response.value !== null && currentPage.value < totalPages.value)
+const paginationSummary = computed(() => {
+  if (!response.value || response.value.pagination.totalResults === 0 || filteredResults.value.length === 0) {
+    return 'No results'
+  }
+
+  const totalResults = response.value.pagination.totalResults
+  const end = filteredResults.value.length
+
+  return `Showing ${end} of ${totalResults}`
+})
+
+const loadedStopCounts = computed(() => {
+  const counts = {
+    direct: 0,
+    oneStop: 0,
+    twoPlusStop: 0,
+  }
+
+  for (const result of filteredResults.value) {
+    const stops = result.legs.reduce((sum, leg) => sum + Math.max(leg.segments.length - 1, 0), 0)
+
+    if (stops <= 0) {
+      counts.direct += 1
+    } else if (stops === 1) {
+      counts.oneStop += 1
+    } else {
+      counts.twoPlusStop += 1
+    }
+  }
+
+  return counts
+})
 
 const searchSummary = computed(() => {
   if (!response.value) {
@@ -571,6 +611,9 @@ const updateSuggestions = async (
   }
 }
 
+const arraysEqual = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index])
+
 const syncSelectedFiltersToAvailable = (
   selectedItems: typeof selectedProviders | typeof selectedAirlines | typeof selectedDepartureAirports | typeof selectedArrivalAirports,
   availableItems: string[],
@@ -583,20 +626,30 @@ const syncSelectedFiltersToAvailable = (
       : previousAvailableItems.every((item) => selectedItems.value.includes(item))
 
   if (shouldReset || hadAllAvailableSelected) {
-    selectedItems.value = [...availableItems]
+    if (!arraysEqual(selectedItems.value, availableItems)) {
+      selectedItems.value = [...availableItems]
+    }
     return
   }
 
-  selectedItems.value = selectedItems.value.filter((item) => availableItems.includes(item))
+  const nextSelectedItems = selectedItems.value.filter((item) => availableItems.includes(item))
+  if (!arraysEqual(selectedItems.value, nextSelectedItems)) {
+    selectedItems.value = nextSelectedItems
+  }
 }
 
 const syncMaxDurationToAvailable = (shouldReset: boolean) => {
   if (shouldReset) {
-    maxDurationMinutes.value = availableMaxDurationMinutes.value
+    if (maxDurationMinutes.value !== availableMaxDurationMinutes.value) {
+      maxDurationMinutes.value = availableMaxDurationMinutes.value
+    }
     return
   }
 
-  maxDurationMinutes.value = Math.min(maxDurationMinutes.value, availableMaxDurationMinutes.value)
+  const nextMaxDuration = Math.min(maxDurationMinutes.value, availableMaxDurationMinutes.value)
+  if (maxDurationMinutes.value !== nextMaxDuration) {
+    maxDurationMinutes.value = nextMaxDuration
+  }
 }
 
 const buildSearchResultsQuery = (): SearchResultsQuery => {
@@ -604,6 +657,7 @@ const buildSearchResultsQuery = (): SearchResultsQuery => {
     direct: includeDirectFlights.value,
     oneStop: includeOneStopFlights.value,
     twoPlusStop: includeTwoPlusStopFlights.value,
+    pageSize: DEFAULT_PAGE_SIZE,
   }
 
   const explicitProviders = getExplicitSelection(selectedProviders.value, providerFilters.value)
@@ -745,6 +799,27 @@ watch(
 
 watch(
   [
+    includeDirectFlights,
+    includeOneStopFlights,
+    includeTwoPlusStopFlights,
+    selectedProviders,
+    selectedAirlines,
+    selectedDepartureAirports,
+    selectedArrivalAirports,
+    maxDurationMinutes,
+    departureTimeRange,
+    arrivalTimeRange,
+  ],
+  () => {
+    if (currentPage.value !== 1) {
+      currentPage.value = 1
+    }
+  },
+  { deep: true },
+)
+
+watch(
+  [
     originAirports,
     destinationAirports,
     tripType,
@@ -772,11 +847,26 @@ watch(
   { deep: true },
 )
 
-const loadSearchSession = async (searchId: string) => {
-  const session = await getSearchSession(searchId, buildSearchResultsQuery())
+const loadSearchSession = async (
+  searchId: string,
+  options: { page?: number; append?: boolean } = {},
+) => {
+  const page = options.page ?? currentPage.value
+  const append = options.append ?? false
+  const session = await getSearchSession(searchId, {
+    ...buildSearchResultsQuery(),
+    page,
+  })
   searchSession.value = session
-  response.value = session.response
+  loadedResults.value = append
+    ? [...loadedResults.value, ...session.response.results]
+    : [...session.response.results]
+  response.value = {
+    ...session.response,
+    results: [...loadedResults.value],
+  }
   error.value = session.errorMessage ?? null
+  currentPage.value = page
 
   return session
 }
@@ -792,7 +882,7 @@ const scheduleSearchSessionRefresh = () => {
 
   filterRefreshTimer = window.setTimeout(() => {
     filterRefreshTimer = null
-    void loadSearchSession(searchSession.value!.searchId)
+    void loadSearchSession(searchSession.value!.searchId, { page: 1, append: false })
   }, 200)
 }
 
@@ -835,6 +925,30 @@ watch(
   { immediate: true },
 )
 
+const setupLoadMoreObserver = () => {
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = null
+
+  if (!loadMoreSentinel.value || typeof IntersectionObserver === 'undefined') {
+    return
+  }
+
+  loadMoreObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        void loadNextPage()
+      }
+    },
+    {
+      root: null,
+      rootMargin: '0px 0px 320px 0px',
+      threshold: 0,
+    },
+  )
+
+  loadMoreObserver.observe(loadMoreSentinel.value)
+}
+
 onMounted(() => {
   applyUrlState()
   hasMounted = true
@@ -842,6 +956,15 @@ onMounted(() => {
   void fetchAirportSuggestions(originAirports.value[0].code)
   void fetchAirportSuggestions(destinationAirports.value[0].code)
   syncSearchFromRoute()
+  setupLoadMoreObserver()
+})
+
+watch(loadMoreSentinel, () => {
+  setupLoadMoreObserver()
+})
+
+watch(hasMoreResults, () => {
+  setupLoadMoreObserver()
 })
 
 onBeforeUnmount(() => {
@@ -849,6 +972,7 @@ onBeforeUnmount(() => {
   if (filterRefreshTimer !== null) {
     window.clearTimeout(filterRefreshTimer)
   }
+  loadMoreObserver?.disconnect()
 })
 
 const stopPolling = () => {
@@ -860,7 +984,7 @@ const stopPolling = () => {
 
 const pollSearchSession = async (searchId: string) => {
   try {
-    const session = await loadSearchSession(searchId)
+    const session = await loadSearchSession(searchId, { page: 1, append: false })
 
     if (session.status === 'running') {
       pollingTimer = window.setTimeout(() => {
@@ -882,6 +1006,7 @@ const searchFlights = async () => {
   error.value = null
   response.value = null
   searchSession.value = null
+  loadedResults.value = []
   expandedResultIds.value = []
 
   try {
@@ -899,14 +1024,19 @@ const searchFlights = async () => {
 
     const session = await searchFlightsRequest(request)
     searchSession.value = session
-    response.value = session.response
+    loadedResults.value = [...session.response.results]
+    response.value = {
+      ...session.response,
+      results: [...loadedResults.value],
+    }
     isSearchCollapsed.value = true
+    currentPage.value = 1
     loading.value = false
 
     if (session.status === 'running') {
       await pollSearchSession(session.searchId)
     } else {
-      await loadSearchSession(session.searchId)
+      await loadSearchSession(session.searchId, { page: 1, append: false })
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Unknown error'
@@ -934,6 +1064,22 @@ const addOriginAirport = (airport: AirportOption) => addAirport(originAirports, 
 const addDestinationAirport = (airport: AirportOption) => addAirport(destinationAirports, destinationInput, destinationSuggestions, airport)
 const confirmOriginInput = () => tryAddFromInput(originAirports, originInput, originSuggestions)
 const confirmDestinationInput = () => tryAddFromInput(destinationAirports, destinationInput, destinationSuggestions)
+
+const loadNextPage = async () => {
+  if (!searchSession.value?.searchId || isLoadingMore.value || !hasMoreResults.value || isPolling.value) {
+    return
+  }
+
+  isLoadingMore.value = true
+  try {
+    await loadSearchSession(searchSession.value.searchId, {
+      page: currentPage.value + 1,
+      append: true,
+    })
+  } finally {
+    isLoadingMore.value = false
+  }
+}
 </script>
 
 <template>
@@ -1033,9 +1179,12 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
             </div>
             <div class="results-stats">
               <span
-                :title="`Flight options: ${response.metadata.returnedResultCount}\nDirect: ${response.metadata.returnedDirectFlightCount}\n1 stop: ${response.metadata.returnedOneStopFlightCount}\n2+ stops: ${response.metadata.returnedTwoPlusStopFlightCount}`"
+                :title="`Loaded flights: ${filteredResults.length}\nDirect: ${loadedStopCounts.direct}\n1 stop: ${loadedStopCounts.oneStop}\n2+ stops: ${loadedStopCounts.twoPlusStop}`"
               >
-                {{ response.metadata.returnedResultCount }} flight options
+                {{ filteredResults.length }} loaded flights
+                <template v-if="response.pagination.totalResults > 0">
+                  (out of {{ response.pagination.totalResults }})
+                </template>
               </span>
               <span>{{ response.metadata.providerResultCount }} provider fares</span>
               <span>{{ response.metadata.searchCombinationCount }} search combinations</span>
@@ -1051,6 +1200,22 @@ const confirmDestinationInput = () => tryAddFromInput(destinationAirports, desti
               @toggle-expanded="toggleExpanded"
             />
           </TransitionGroup>
+
+          <div v-if="response.pagination.totalPages > 1" class="pagination-bar">
+            <span class="pagination-summary">{{ paginationSummary }}</span>
+            <span class="pagination-page">Page {{ currentPage }} of {{ totalPages }}</span>
+          </div>
+
+          <div
+            v-if="response.pagination.totalPages > 1 && hasMoreResults"
+            ref="loadMoreSentinel"
+            class="load-more-sentinel"
+            aria-hidden="true"
+          />
+
+          <div v-if="isLoadingMore" class="load-more-status">
+            Loading more fares…
+          </div>
         </div>
       </section>
     </section>

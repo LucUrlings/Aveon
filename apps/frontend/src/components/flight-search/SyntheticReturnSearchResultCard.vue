@@ -3,6 +3,7 @@ import type { SearchResult } from '../../features/flight-search/types'
 import {
   formatDateTime,
   formatDuration,
+  formatPrice,
   formatProviderName,
   getAirlineSummary,
 } from './SearchResultCard.shared'
@@ -83,16 +84,23 @@ const emit = defineEmits<{
             {{ result.priceOptions[0].totalPrice.amount.toFixed(2) }}
           </strong>
           <div class="primary-booking-links">
-            <a
+            <div
               v-for="link in result.priceOptions[0].bookingLinks"
               :key="`${result.priceOptions[0].id}-${link.url}`"
-              class="primary-fare-link"
-              :href="link.url"
-              target="_blank"
-              rel="noreferrer"
+              class="split-booking-link"
             >
-              {{ link.label }}
-            </a>
+              <a
+                class="primary-fare-link"
+                :href="link.url"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {{ link.label }}
+              </a>
+              <span v-if="link.price" class="split-booking-price">
+                {{ formatPrice(link.price.amount, link.price.currency) }}
+              </span>
+            </div>
           </div>
         </div>
       </div>

@@ -212,6 +212,17 @@
   gap: 8px;
 }
 
+.split-booking-link {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.split-booking-price {
+  color: #6a737d;
+  font-size: 0.74rem;
+}
+
 .price-block strong {
   font-size: 1rem;
   font-weight: 700;

@@ -15,7 +15,6 @@ public sealed class SearchService(
 {
     private const int MaxSearchCombinations = 60;
     private const int MaxConcurrentProviderCalls = 5;
-    private const int MaxResults = 2000;
     private const string ProviderName = "FlightApi";
     private const string StatusRunning = "running";
     private const string StatusCompleted = "completed";
@@ -412,7 +411,6 @@ public sealed class SearchService(
             })
             .OrderBy(result => result.PriceOptions[0].TotalPrice.Amount)
             .ThenBy(result => result.TotalDurationMinutes)
-            .Take(MaxResults)
             .ToList();
 
         return BuildSearchResponseFromResults(searchCombinationCount, groupedResults, fareOptions.Count, EmptyQuery);
@@ -684,8 +682,8 @@ public sealed class SearchService(
             legs.Sum(leg => leg.DurationMinutes),
             bookingLinks);
 
-    private static SearchResultBookingLink BuildBookingLink(string label, string url) =>
-        new(label, url);
+    private static SearchResultBookingLink BuildBookingLink(string label, string url, SearchResultPrice? price = null) =>
+        new(label, url, price);
 
     private static List<SearchFareOption> BuildSyntheticRoundTripFareOptions(
         IEnumerable<SearchFareOption> outboundFareOptions,
@@ -736,8 +734,14 @@ public sealed class SearchService(
                     outboundFare.TotalDurationMinutes + inboundFare.TotalDurationMinutes,
                     new List<SearchResultBookingLink>
                     {
-                        BuildBookingLink("Book outbound", outboundFare.BookingLinks.FirstOrDefault()?.Url ?? string.Empty),
-                        BuildBookingLink("Book return", inboundFare.BookingLinks.FirstOrDefault()?.Url ?? string.Empty)
+                        BuildBookingLink(
+                            "Book outbound",
+                            outboundFare.BookingLinks.FirstOrDefault()?.Url ?? string.Empty,
+                            outboundFare.TotalPrice),
+                        BuildBookingLink(
+                            "Book return",
+                            inboundFare.BookingLinks.FirstOrDefault()?.Url ?? string.Empty,
+                            inboundFare.TotalPrice)
                     }.Where(link => !string.IsNullOrWhiteSpace(link.Url)).ToList()));
             }
         }

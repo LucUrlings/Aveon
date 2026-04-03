@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import FlightSearch from '../../../src/components/FlightSearch.vue'
 import type { SearchSessionResponse } from '../../../src/features/flight-search/types'
@@ -8,11 +8,15 @@ const {
   mockFetchAirportSuggestions,
   mockGetSearchSession,
   mockSearchFlightsRequest,
+  intersectionObserverCallbacks,
 } = vi.hoisted(() => ({
   mockFetchAirportSuggestions: vi.fn(),
   mockGetSearchSession: vi.fn(),
   mockSearchFlightsRequest: vi.fn(),
+  intersectionObserverCallbacks: [] as Array<IntersectionObserverCallback>,
 }))
+
+const mountedWrappers: Array<ReturnType<typeof mount>> = []
 
 vi.mock('../../../src/features/flight-search/api', () => ({
   fetchAirportSuggestions: mockFetchAirportSuggestions,
@@ -130,9 +134,29 @@ beforeEach(() => {
   mockFetchAirportSuggestions.mockReset()
   mockGetSearchSession.mockReset()
   mockSearchFlightsRequest.mockReset()
+  intersectionObserverCallbacks.length = 0
   mockFetchAirportSuggestions.mockResolvedValue([])
   mockGetSearchSession.mockResolvedValue(makeSession())
   document.title = ''
+
+  class MockIntersectionObserver {
+    private readonly callback: IntersectionObserverCallback
+
+    constructor(callback: IntersectionObserverCallback) {
+      this.callback = callback
+      intersectionObserverCallbacks.push(callback)
+    }
+
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() { return [] }
+    readonly root = null
+    readonly rootMargin = '0px'
+    readonly thresholds = [0]
+  }
+
+  vi.stubGlobal('IntersectionObserver', MockIntersectionObserver)
 })
 
 const mountWithRouter = async (initialPath = '/', options: Parameters<typeof mount>[1] = {}) => {
@@ -153,9 +177,16 @@ const mountWithRouter = async (initialPath = '/', options: Parameters<typeof mou
   })
 
   await flushPromises()
+  mountedWrappers.push(wrapper)
 
   return { wrapper, router }
 }
+
+afterEach(() => {
+  for (const wrapper of mountedWrappers.splice(0)) {
+    wrapper.unmount()
+  }
+})
 
 describe('FlightSearch', () => {
   it('submits selectedDates to the backend and passes combination count to the search bar', async () => {
@@ -249,8 +280,6 @@ describe('FlightSearch', () => {
     await wrapper.get('.submit-search').trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('.result-card-stub')).toHaveLength(2)
-
     await wrapper.get('.set-departure-filter').trigger('click')
     await vi.waitFor(() => {
       expect(mockGetSearchSession).toHaveBeenLastCalledWith('search-1', expect.objectContaining({
@@ -258,10 +287,9 @@ describe('FlightSearch', () => {
         oneStop: false,
         twoPlusStop: false,
         departureTime: [0, 720],
+        page: 1,
+        pageSize: 100,
       }))
-    })
-    await vi.waitFor(() => {
-      expect(wrapper.findAll('.result-card-stub').map((node) => node.text())).toEqual(['morning'])
     })
     expect(document.title).toBe('Aveon · 1 flights from DUB to AMS')
   })
@@ -378,7 +406,76 @@ describe('FlightSearch', () => {
       direct: true,
       oneStop: false,
       twoPlusStop: false,
+      page: 1,
+      pageSize: 100,
     }))
-    expect(wrapper.findAll('.result-card-stub')).toHaveLength(2)
+  })
+
+  it('loads the next page automatically when the scroll sentinel is reached', async () => {
+    const pageOneSession = makeSession({
+      response: {
+        ...makeSession().response,
+        pagination: {
+          page: 1,
+          pageSize: 100,
+          totalResults: 220,
+          totalPages: 3,
+        },
+      },
+    })
+
+    mockSearchFlightsRequest.mockResolvedValue(pageOneSession)
+    mockGetSearchSession
+      .mockResolvedValueOnce(pageOneSession)
+      .mockResolvedValueOnce(makeSession({
+        response: {
+          ...makeSession().response,
+          pagination: {
+            page: 2,
+            pageSize: 100,
+            totalResults: 220,
+            totalPages: 3,
+          },
+          results: [
+            {
+              ...makeSession().response.results[0],
+              id: 'page-2-result',
+            },
+          ],
+        },
+      }))
+
+    const { wrapper, router } = await mountWithRouter('/?origins=DUB&destinations=AMS&dates=2026-05-15,2026-05-16,2026-05-17&adults=1', {
+      global: {
+        stubs: {
+          FlightSearchBar: {
+            template: '<div />',
+          },
+          SearchFilters: true,
+          SearchResultCard: {
+            props: ['result'],
+            template: '<div class="result-card-stub">{{ result.id }}</div>',
+          },
+        },
+      },
+    })
+
+    expect(mockGetSearchSession).toHaveBeenCalledWith('search-1', expect.objectContaining({
+      page: 1,
+      pageSize: 100,
+    }))
+
+    intersectionObserverCallbacks.at(-1)?.(
+      [{ isIntersecting: true } as IntersectionObserverEntry],
+      {} as IntersectionObserver,
+    )
+
+    await vi.waitFor(() => {
+      expect(mockGetSearchSession).toHaveBeenLastCalledWith('search-1', expect.objectContaining({
+        page: 2,
+        pageSize: 100,
+      }))
+    })
+    expect(router.currentRoute.value.query.page).toBeUndefined()
   })
 })

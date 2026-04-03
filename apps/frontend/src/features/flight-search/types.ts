@@ -39,6 +39,10 @@ export type SearchResultPriceOption = {
   bookingLinks: {
     label: string
     url: string
+    price?: {
+      amount: number
+      currency: string
+    } | null
   }[]
 }
 

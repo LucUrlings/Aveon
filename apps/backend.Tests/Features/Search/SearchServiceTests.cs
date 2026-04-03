@@ -220,6 +220,8 @@ public sealed class SearchServiceTests
         Assert.Equal(2, syntheticResult.PriceOptions[0].BookingLinks.Count);
         Assert.Equal("Book outbound", syntheticResult.PriceOptions[0].BookingLinks[0].Label);
         Assert.Equal("Book return", syntheticResult.PriceOptions[0].BookingLinks[1].Label);
+        Assert.Equal(110m, syntheticResult.PriceOptions[0].BookingLinks[0].Price?.Amount);
+        Assert.Equal(80m, syntheticResult.PriceOptions[0].BookingLinks[1].Price?.Amount);
     }
 
     [Fact]
@@ -319,6 +321,62 @@ public sealed class SearchServiceTests
         Assert.Equal(1, session.Response.Pagination.PageSize);
         Assert.Equal(3, session.Response.Pagination.TotalResults);
         Assert.Equal(3, session.Response.Pagination.TotalPages);
+    }
+
+    [Fact]
+    public async Task GetSearchAsync_PaginatesBeyondFormerCanonicalCap()
+    {
+        var results = Enumerable.Range(1, 2050)
+            .Select(index => CreateResult(
+                $"result-{index}",
+                "DUB",
+                "AMS",
+                new DateTime(2026, 5, 15, 8, 0, 0).AddMinutes(index),
+                new DateTime(2026, 5, 15, 9, 40, 0).AddMinutes(index),
+                100,
+                [
+                    CreateSegment("KLM", "KL", $"F{index}", "DUB", "AMS", new DateTime(2026, 5, 15, 8, 0, 0).AddMinutes(index), new DateTime(2026, 5, 15, 9, 40, 0).AddMinutes(index), 100)
+                ],
+                [
+                    CreatePriceOption($"p{index}", "FlightApi:KLM", 100m + index)
+                ]))
+            .ToList();
+
+        var session = new SearchSessionResponse(
+            "search-many",
+            "completed",
+            2050,
+            2050,
+            0,
+            new SearchResponse(
+                results,
+                new SearchMetadata(2050, 2050, 2050, 2050, 0, 0),
+                new SearchFiltersMetadata([], [], [], [], new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchStopFilterMetadata(0, 0, 0)),
+                new SearchPagination(1, 2050, 2050, 1)),
+            null);
+
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        await store.SetAsync(session, CancellationToken.None);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
+
+        var response = await service.GetSearchAsync(
+            "search-many",
+            new SearchResultsQuery
+            {
+                Page = 21,
+                PageSize = 100
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        var pagedSession = response!;
+        Assert.Equal(50, pagedSession.Response.Results.Count);
+        Assert.Equal("result-2001", pagedSession.Response.Results[0].Id);
+        Assert.Equal("result-2050", pagedSession.Response.Results[^1].Id);
+        Assert.Equal(21, pagedSession.Response.Pagination.Page);
+        Assert.Equal(100, pagedSession.Response.Pagination.PageSize);
+        Assert.Equal(2050, pagedSession.Response.Pagination.TotalResults);
+        Assert.Equal(21, pagedSession.Response.Pagination.TotalPages);
     }
 
     private static SearchRequest CreateRequest() =>

@@ -176,6 +176,38 @@ h1 {
   gap: 16px;
 }
 
+.pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(29, 34, 40, 0.08);
+}
+
+.pagination-summary {
+  color: #5b6570;
+  font-size: 0.82rem;
+}
+
+.pagination-page {
+  color: #33404d;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.load-more-sentinel {
+  height: 1px;
+}
+
+.load-more-status {
+  margin-top: 10px;
+  color: #5b6570;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
 .progress-shell-enter-active,
 .progress-shell-leave-active {
   transition:
@@ -244,6 +276,11 @@ h1 {
   .results-stats {
     justify-content: start;
   }
+
+  .pagination-bar {
+    flex-direction: column;
+    align-items: start;
+  }
 }
 
 @media (max-width: 640px) {
@@ -304,6 +341,10 @@ h1 {
 
   .results-list {
     gap: 10px;
+  }
+
+  .load-more-status {
+    font-size: 0.78rem;
   }
 }
 

@@ -97,8 +97,8 @@ const multiLegResult: SearchResult = {
       provider: 'FlightApi:KLM',
       totalPrice: { amount: 150, currency: 'EUR' },
       bookingLinks: [
-        { label: 'Book outbound', url: 'https://example.com/outbound' },
-        { label: 'Book return', url: 'https://example.com/return' },
+        { label: 'Book outbound', url: 'https://example.com/outbound', price: { amount: 80, currency: 'EUR' } },
+        { label: 'Book return', url: 'https://example.com/return', price: { amount: 70, currency: 'EUR' } },
       ],
     },
   ],
@@ -126,8 +126,8 @@ const syntheticReturnResult: SearchResult = {
       provider: 'FlightApi:Combined one-way (KLM + Air France)',
       totalPrice: { amount: 150, currency: 'EUR' },
       bookingLinks: [
-        { label: 'Book outbound', url: 'https://example.com/outbound' },
-        { label: 'Book return', url: 'https://example.com/return' },
+        { label: 'Book outbound', url: 'https://example.com/outbound', price: { amount: 80, currency: 'EUR' } },
+        { label: 'Book return', url: 'https://example.com/return', price: { amount: 70, currency: 'EUR' } },
       ],
     },
     {
@@ -135,8 +135,8 @@ const syntheticReturnResult: SearchResult = {
       provider: 'FlightApi:Combined one-way (KLM + KLM)',
       totalPrice: { amount: 170, currency: 'EUR' },
       bookingLinks: [
-        { label: 'Book outbound', url: 'https://example.com/outbound-2' },
-        { label: 'Book return', url: 'https://example.com/return-2' },
+        { label: 'Book outbound', url: 'https://example.com/outbound-2', price: { amount: 85, currency: 'EUR' } },
+        { label: 'Book return', url: 'https://example.com/return-2', price: { amount: 85, currency: 'EUR' } },
       ],
     },
   ],
@@ -200,6 +200,8 @@ describe('SearchResultCard', () => {
     expect(wrapper.emitted('toggleExpanded')).toEqual([['synthetic-return-1']])
     expect(wrapper.text()).toContain('Book outbound')
     expect(wrapper.text()).toContain('Book return')
+    expect(wrapper.text()).toContain('EUR 80.00')
+    expect(wrapper.text()).toContain('EUR 70.00')
   })
 
   it('copies a single fare into a shareable message from the corner button', async () => {

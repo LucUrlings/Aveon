@@ -44,6 +44,29 @@ public sealed class SearchControllerTests
     }
 
     [Fact]
+    public async Task Get_PassesQueryThroughToService()
+    {
+        var session = CreateSession(status: "completed");
+        var stub = new StubSearchService(getResponse: session);
+        var controller = new SearchController(stub);
+        var query = new SearchResultsQuery
+        {
+            Direct = true,
+            Providers = "FlightApi:KLM",
+            Page = 2,
+            PageSize = 100
+        };
+
+        await controller.Get("search-1", query, CancellationToken.None);
+
+        Assert.NotNull(stub.LastGetQuery);
+        Assert.True(stub.LastGetQuery!.Direct);
+        Assert.Equal("FlightApi:KLM", stub.LastGetQuery.Providers);
+        Assert.Equal(2, stub.LastGetQuery.Page);
+        Assert.Equal(100, stub.LastGetQuery.PageSize);
+    }
+
+    [Fact]
     public async Task Get_ReturnsNotFound_WhenSessionMissing()
     {
         var controller = new SearchController(new StubSearchService(getResponse: null));
@@ -75,6 +98,8 @@ public sealed class SearchControllerTests
         SearchSessionResponse? getResponse = null,
         Exception? startException = null) : ISearchService
     {
+        public SearchResultsQuery? LastGetQuery { get; private set; }
+
         public Task<SearchSessionResponse> StartSearchAsync(SearchRequest request, CancellationToken cancellationToken)
         {
             if (startException is not null)
@@ -85,7 +110,10 @@ public sealed class SearchControllerTests
             return Task.FromResult(startResponse ?? throw new InvalidOperationException("Missing start response."));
         }
 
-        public Task<SearchSessionResponse?> GetSearchAsync(string searchId, SearchResultsQuery query, CancellationToken cancellationToken) =>
-            Task.FromResult(getResponse);
+        public Task<SearchSessionResponse?> GetSearchAsync(string searchId, SearchResultsQuery query, CancellationToken cancellationToken)
+        {
+            LastGetQuery = query;
+            return Task.FromResult(getResponse);
+        }
     }
 }

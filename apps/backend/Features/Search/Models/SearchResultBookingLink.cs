@@ -2,5 +2,6 @@ namespace backend.Features.Search.Models;
 
 public record SearchResultBookingLink(
     string Label,
-    string Url
+    string Url,
+    SearchResultPrice? Price = null
 );

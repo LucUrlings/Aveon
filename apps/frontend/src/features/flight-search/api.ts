@@ -26,6 +26,10 @@ type ApiSearchResultPriceOption = components['schemas']['SearchResultPriceOption
 type ApiSearchResultBookingLink = {
   label?: string | null
   url?: string | null
+  price?: {
+    amount?: number | null
+    currency?: string | null
+  } | null
 }
 type ApiSearchResultPriceOptionWithLinks = ApiSearchResultPriceOption & {
   bookingLinks?: ApiSearchResultBookingLink[] | null
@@ -111,6 +115,12 @@ const normalizePriceOption = (option: ApiSearchResultPriceOptionWithLinks): Sear
       .map((link) => ({
         label: link.label ?? '',
         url: link.url ?? '',
+        price: link.price
+          ? {
+              amount: link.price.amount ?? 0,
+              currency: link.price.currency ?? '',
+            }
+          : null,
       }))
       .filter((link) => link.url)
 

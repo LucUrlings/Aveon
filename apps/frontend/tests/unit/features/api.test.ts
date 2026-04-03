@@ -57,7 +57,7 @@ describe('flight search api', () => {
                     id: 'price-1',
                     provider: 'FlightApi:KLM',
                     totalPrice: { amount: 123.45, currency: 'EUR' },
-                    bookingLinks: [{ label: 'View fare', url: 'https://example.com/fare' }],
+                    bookingLinks: [{ label: 'View fare', url: 'https://example.com/fare', price: { amount: 123.45, currency: 'EUR' } }],
                   },
                 ],
               },
@@ -109,7 +109,7 @@ describe('flight search api', () => {
       durationMinutes: 0,
     })
     expect(session.response.results[0].priceOptions[0].bookingLinks).toEqual([
-      { label: 'View fare', url: 'https://example.com/fare' },
+      { label: 'View fare', url: 'https://example.com/fare', price: { amount: 123.45, currency: 'EUR' } },
     ])
     expect(session.response.filters.providers).toEqual([{ value: 'FlightApi:KLM', count: 1 }])
     expect(session.response.pagination.totalResults).toBe(1)
@@ -125,5 +125,68 @@ describe('flight search api', () => {
     const { getSearchSession } = await import('../../../src/features/flight-search/api')
 
     await expect(getSearchSession('search-1', { direct: true, providers: ['FlightApi:KLM'] })).rejects.toThrow('Bad request from backend')
+  })
+
+  it('serializes pagination and filter query params for session reads', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        searchId: 'search-1',
+        status: 'completed',
+        totalCombinations: 1,
+        completedCombinations: 1,
+        failedCombinations: 0,
+        response: {
+          results: [],
+          filters: {
+            providers: [],
+            airlines: [],
+            departureAirports: [],
+            arrivalAirports: [],
+            durationMinutes: { min: 0, max: 0 },
+            departureTimeMinutes: { min: 0, max: 0 },
+            arrivalTimeMinutes: { min: 0, max: 0 },
+            stops: { direct: 0, oneStop: 0, twoPlusStop: 0 },
+          },
+          pagination: {
+            page: 2,
+            pageSize: 100,
+            totalResults: 150,
+            totalPages: 2,
+          },
+          metadata: {
+            searchCombinationCount: 1,
+            providerResultCount: 0,
+            returnedResultCount: 0,
+            returnedDirectFlightCount: 0,
+            returnedOneStopFlightCount: 0,
+            returnedTwoPlusStopFlightCount: 0,
+          },
+        },
+      }),
+    })
+
+    const { getSearchSession } = await import('../../../src/features/flight-search/api')
+
+    await getSearchSession('search-1', {
+      direct: true,
+      oneStop: false,
+      providers: ['FlightApi:KLM'],
+      departureTime: [0, 720],
+      page: 2,
+      pageSize: 100,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/search/search-1?'),
+    )
+
+    const requestUrl = new URL(fetchMock.mock.calls[0][0] as string)
+    expect(requestUrl.searchParams.get('direct')).toBe('true')
+    expect(requestUrl.searchParams.get('oneStop')).toBe('false')
+    expect(requestUrl.searchParams.get('providers')).toBe('FlightApi:KLM')
+    expect(requestUrl.searchParams.get('departureTime')).toBe('0-720')
+    expect(requestUrl.searchParams.get('page')).toBe('2')
+    expect(requestUrl.searchParams.get('pageSize')).toBe('100')
   })
 })
