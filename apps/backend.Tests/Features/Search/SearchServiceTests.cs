@@ -6,6 +6,7 @@ using backend.Infrastructure.Providers.FlightApi;
 using backend.Infrastructure.Providers.FlightApi.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace backend.Tests;
@@ -82,8 +83,8 @@ public sealed class SearchServiceTests
         var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
 
         var request = new SearchRequest(
-            OriginAirports: ["DUB", "ORK", "SNN", "NOC", "KIR", "WAT", "SXL"],
-            DestinationAirports: ["AMS", "BCN", "CDG", "FRA", "MAD", "LHR", "OSL", "CPH", "MXP"],
+            OriginAirports: ["DUB", "ORK", "SNN", "NOC", "KIR", "WAT", "SXL", "CFN", "KNO"],
+            DestinationAirports: ["AMS", "BCN", "CDG", "FRA", "MAD", "LHR", "OSL", "CPH", "MXP", "ARN", "HEL", "BER"],
             SelectedDates: [new DateOnly(2026, 5, 15)],
             ReturnDateFrom: null,
             ReturnDateTo: null,
@@ -92,7 +93,27 @@ public sealed class SearchServiceTests
 
         var error = await Assert.ThrowsAsync<ArgumentException>(() => service.StartSearchAsync(request, CancellationToken.None));
 
-        Assert.Equal("Search exceeds the limit of 60 combinations.", error.Message);
+        Assert.Equal("Search exceeds the limit of 100 combinations.", error.Message);
+    }
+
+    [Fact]
+    public async Task StartSearchAsync_UsesConfiguredMaxSearchCombinationLimit()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider(), maxSearchCombinations: 2);
+
+        var request = new SearchRequest(
+            OriginAirports: ["DUB"],
+            DestinationAirports: ["AMS"],
+            SelectedDates: [new DateOnly(2026, 5, 15)],
+            ReturnDateFrom: new DateOnly(2026, 5, 15),
+            ReturnDateTo: new DateOnly(2026, 5, 15),
+            Adults: 1,
+            CabinClass: "economy");
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => service.StartSearchAsync(request, CancellationToken.None));
+
+        Assert.Equal("Search exceeds the limit of 2 combinations.", error.Message);
     }
 
     [Fact]
@@ -143,7 +164,11 @@ public sealed class SearchServiceTests
         var store = new FlakySearchSessionStore(failingCalls: []);
         var provider = new TimedFlightSearchProvider();
         var scopeFactory = new ThrowOnSecondScopeFactory(provider);
-        var service = new SearchService(scopeFactory, store, NullLogger<SearchService>.Instance);
+        var service = new SearchService(
+            scopeFactory,
+            store,
+            Options.Create(new SearchOptions()),
+            NullLogger<SearchService>.Instance);
 
         var request = new SearchRequest(
             ["DUB"],
@@ -520,10 +545,15 @@ public sealed class SearchServiceTests
 
     private static ISearchService CreateSearchService(
         ISearchSessionStore store,
-        IFlightSearchProvider flightSearchProvider)
+        IFlightSearchProvider flightSearchProvider,
+        int maxSearchCombinations = 100)
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<IOptions<SearchOptions>>(Options.Create(new SearchOptions
+        {
+            MaxSearchCombinations = maxSearchCombinations
+        }));
         services.AddSingleton<ISearchSessionStore>(store);
         services.AddSingleton<IFlightSearchProvider>(flightSearchProvider);
         services.AddSingleton<ISearchService, SearchService>();

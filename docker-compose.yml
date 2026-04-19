@@ -15,6 +15,7 @@ services:
       Redis__FlightApiOneWayTtlMinutes: ${REDIS_FLIGHT_API_ONE_WAY_TTL_MINUTES:-30}
       Redis__AirportDataTtlMinutes: ${REDIS_AIRPORT_DATA_TTL_MINUTES:-10080}
       Redis__SearchSessionTtlMinutes: ${REDIS_SEARCH_SESSION_TTL_MINUTES:-30}
+      Search__MaxSearchCombinations: ${SEARCH_MAX_SEARCH_COMBINATIONS:-100}
     networks:
       - aveon-network
 

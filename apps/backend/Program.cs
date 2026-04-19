@@ -1,5 +1,6 @@
 using backend.Features.Airports;
 using backend.Features.Search;
+using backend.Features.Search.Models;
 using backend.Infrastructure.Caching;
 using backend.Infrastructure.Models;
 using backend.Infrastructure.Providers.FlightApi;
@@ -19,6 +20,8 @@ builder.Services.Configure<FlightApiOptions>(
     builder.Configuration.GetSection(FlightApiOptions.SectionName));
 builder.Services.Configure<RedisOptions>(
     builder.Configuration.GetSection(RedisOptions.SectionName));
+builder.Services.Configure<SearchOptions>(
+    builder.Configuration.GetSection(SearchOptions.SectionName));
 builder.Services.AddScoped<IAirportService, AirportService>();
 builder.Services.AddSingleton<ISearchSessionStore, RedisSearchSessionStore>();
 builder.Services.AddSingleton<ISearchService, SearchService>();
