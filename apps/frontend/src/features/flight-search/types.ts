@@ -87,6 +87,8 @@ export type SearchFiltersMetadata = {
   durationMinutes: SearchRangeMetadata
   departureTimeMinutes: SearchRangeMetadata
   arrivalTimeMinutes: SearchRangeMetadata
+  returnDepartureTimeMinutes: SearchRangeMetadata
+  returnArrivalTimeMinutes: SearchRangeMetadata
   stops: SearchStopFilterMetadata
 }
 
@@ -115,6 +117,8 @@ export type SearchResultsQuery = {
   maxDuration?: number
   departureTime?: [number, number]
   arrivalTime?: [number, number]
+  returnDepartureTime?: [number, number]
+  returnArrivalTime?: [number, number]
   page?: number
   pageSize?: number
 }

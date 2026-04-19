@@ -70,6 +70,8 @@ describe('flight search api', () => {
               durationMinutes: { min: 90, max: 90 },
               departureTimeMinutes: { min: 480, max: 480 },
               arrivalTimeMinutes: { min: 570, max: 570 },
+              returnDepartureTimeMinutes: { min: 0, max: 0 },
+              returnArrivalTimeMinutes: { min: 0, max: 0 },
               stops: { direct: 1, oneStop: 0, twoPlusStop: 0 },
             },
             pagination: {
@@ -146,6 +148,8 @@ describe('flight search api', () => {
             durationMinutes: { min: 0, max: 0 },
             departureTimeMinutes: { min: 0, max: 0 },
             arrivalTimeMinutes: { min: 0, max: 0 },
+            returnDepartureTimeMinutes: { min: 0, max: 0 },
+            returnArrivalTimeMinutes: { min: 0, max: 0 },
             stops: { direct: 0, oneStop: 0, twoPlusStop: 0 },
           },
           pagination: {
@@ -173,6 +177,8 @@ describe('flight search api', () => {
       oneStop: false,
       providers: ['FlightApi:KLM'],
       departureTime: [0, 720],
+      returnDepartureTime: [900, 1200],
+      returnArrivalTime: [960, 1260],
       page: 2,
       pageSize: 100,
     })
@@ -186,6 +192,8 @@ describe('flight search api', () => {
     expect(requestUrl.searchParams.get('oneStop')).toBe('false')
     expect(requestUrl.searchParams.get('providers')).toBe('FlightApi:KLM')
     expect(requestUrl.searchParams.get('departureTime')).toBe('0-720')
+    expect(requestUrl.searchParams.get('returnDepartureTime')).toBe('900-1200')
+    expect(requestUrl.searchParams.get('returnArrivalTime')).toBe('960-1260')
     expect(requestUrl.searchParams.get('page')).toBe('2')
     expect(requestUrl.searchParams.get('pageSize')).toBe('100')
   })

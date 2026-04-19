@@ -372,6 +372,34 @@ public sealed class SearchServiceTests
     }
 
     [Fact]
+    public async Task GetSearchAsync_AppliesReturnLegTimeFilters_AndReturnsReturnLegMetadata()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        await store.SetAsync(CreateStoredRoundTripSession(), CancellationToken.None);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
+
+        var response = await service.GetSearchAsync(
+            "search-roundtrip",
+            new SearchResultsQuery
+            {
+                DepartureTime = "480-600",
+                ArrivalTime = "600-720",
+                ReturnDepartureTime = "1080-1260",
+                ReturnArrivalTime = "1200-1380"
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        var session = response!;
+        var result = Assert.Single(session.Response.Results);
+        Assert.Equal("roundtrip-1", result.Id);
+        Assert.Equal(480, session.Response.Filters.DepartureTimeMinutes.Min);
+        Assert.Equal(660, session.Response.Filters.ArrivalTimeMinutes.Max);
+        Assert.Equal(1140, session.Response.Filters.ReturnDepartureTimeMinutes.Min);
+        Assert.Equal(1320, session.Response.Filters.ReturnArrivalTimeMinutes.Max);
+    }
+
+    [Fact]
     public async Task GetSearchAsync_PaginatesBeyondFormerCanonicalCap()
     {
         var results = Enumerable.Range(1, 2050)
@@ -399,7 +427,7 @@ public sealed class SearchServiceTests
             new SearchResponse(
                 results,
                 new SearchMetadata(2050, 2050, 2050, 2050, 0, 0),
-                new SearchFiltersMetadata([], [], [], [], new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchStopFilterMetadata(0, 0, 0)),
+                new SearchFiltersMetadata([], [], [], [], new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchStopFilterMetadata(0, 0, 0)),
                 new SearchPagination(1, 2050, 2050, 1)),
             null);
 
@@ -489,8 +517,37 @@ public sealed class SearchServiceTests
                         ])
                 ],
                 new SearchMetadata(3, 4, 3, 2, 1, 0),
-                new SearchFiltersMetadata([], [], [], [], new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchStopFilterMetadata(0, 0, 0)),
+                new SearchFiltersMetadata([], [], [], [], new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchStopFilterMetadata(0, 0, 0)),
                 new SearchPagination(1, 3, 3, 1)),
+            null);
+
+    private static SearchSessionResponse CreateStoredRoundTripSession() =>
+        new(
+            "search-roundtrip",
+            "completed",
+            2,
+            2,
+            0,
+            new SearchResponse(
+                [
+                    CreateRoundTripResult(
+                        "roundtrip-1",
+                        new DateTime(2026, 5, 15, 8, 0, 0),
+                        new DateTime(2026, 5, 15, 11, 0, 0),
+                        new DateTime(2026, 5, 18, 19, 0, 0),
+                        new DateTime(2026, 5, 18, 22, 0, 0),
+                        "FlightApi:KLM"),
+                    CreateRoundTripResult(
+                        "roundtrip-2",
+                        new DateTime(2026, 5, 15, 13, 0, 0),
+                        new DateTime(2026, 5, 15, 16, 0, 0),
+                        new DateTime(2026, 5, 18, 7, 0, 0),
+                        new DateTime(2026, 5, 18, 10, 0, 0),
+                        "FlightApi:Air France")
+                ],
+                new SearchMetadata(2, 2, 2, 2, 0, 0),
+                new SearchFiltersMetadata([], [], [], [], new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchStopFilterMetadata(0, 0, 0)),
+                new SearchPagination(1, 2, 2, 1)),
             null);
 
     private static SearchResult CreateResult(
@@ -516,6 +573,41 @@ public sealed class SearchServiceTests
             ],
             totalDurationMinutes,
             priceOptions);
+
+    private static SearchResult CreateRoundTripResult(
+        string id,
+        DateTime outboundDeparture,
+        DateTime outboundArrival,
+        DateTime returnDeparture,
+        DateTime returnArrival,
+        string provider) =>
+        new(
+            id,
+            true,
+            [
+                new SearchResultLeg(
+                    "DUB",
+                    "AMS",
+                    outboundDeparture,
+                    outboundArrival,
+                    (int)(outboundArrival - outboundDeparture).TotalMinutes,
+                    [
+                        CreateSegment("KLM", "KL", $"{id}-out", "DUB", "AMS", outboundDeparture, outboundArrival, (int)(outboundArrival - outboundDeparture).TotalMinutes)
+                    ]),
+                new SearchResultLeg(
+                    "AMS",
+                    "DUB",
+                    returnDeparture,
+                    returnArrival,
+                    (int)(returnArrival - returnDeparture).TotalMinutes,
+                    [
+                        CreateSegment("KLM", "KL", $"{id}-ret", "AMS", "DUB", returnDeparture, returnArrival, (int)(returnArrival - returnDeparture).TotalMinutes)
+                    ])
+            ],
+            (int)(outboundArrival - outboundDeparture + (returnArrival - returnDeparture)).TotalMinutes,
+            [
+                CreatePriceOption($"{id}-price", provider, 150m)
+            ]);
 
     private static SearchResultSegment CreateSegment(
         string carrierName,

@@ -53,6 +53,7 @@ public sealed class SearchControllerTests
         {
             Direct = true,
             Providers = "FlightApi:KLM",
+            ReturnDepartureTime = "600-900",
             Page = 2,
             PageSize = 100
         };
@@ -62,6 +63,7 @@ public sealed class SearchControllerTests
         Assert.NotNull(stub.LastGetQuery);
         Assert.True(stub.LastGetQuery!.Direct);
         Assert.Equal("FlightApi:KLM", stub.LastGetQuery.Providers);
+        Assert.Equal("600-900", stub.LastGetQuery.ReturnDepartureTime);
         Assert.Equal(2, stub.LastGetQuery.Page);
         Assert.Equal(100, stub.LastGetQuery.PageSize);
     }
@@ -89,7 +91,7 @@ public sealed class SearchControllerTests
             new SearchResponse(
                 [],
                 new SearchMetadata(1, 0, 0, 0, 0, 0),
-                new SearchFiltersMetadata([], [], [], [], new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchStopFilterMetadata(0, 0, 0)),
+                new SearchFiltersMetadata([], [], [], [], new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchStopFilterMetadata(0, 0, 0)),
                 new SearchPagination(1, 0, 0, 0)),
             null);
 

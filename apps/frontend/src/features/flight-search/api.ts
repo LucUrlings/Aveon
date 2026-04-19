@@ -57,6 +57,8 @@ type ApiSearchFiltersMetadata = {
   durationMinutes?: ApiSearchRangeMetadata
   departureTimeMinutes?: ApiSearchRangeMetadata
   arrivalTimeMinutes?: ApiSearchRangeMetadata
+  returnDepartureTimeMinutes?: ApiSearchRangeMetadata
+  returnArrivalTimeMinutes?: ApiSearchRangeMetadata
   stops?: ApiSearchStopFilterMetadata
 }
 type ApiSearchPagination = {
@@ -169,6 +171,8 @@ const normalizeFilters = (filters: ApiSearchFiltersMetadata | undefined): Search
   durationMinutes: normalizeRange(filters?.durationMinutes),
   departureTimeMinutes: normalizeRange(filters?.departureTimeMinutes),
   arrivalTimeMinutes: normalizeRange(filters?.arrivalTimeMinutes),
+  returnDepartureTimeMinutes: normalizeRange(filters?.returnDepartureTimeMinutes),
+  returnArrivalTimeMinutes: normalizeRange(filters?.returnArrivalTimeMinutes),
   stops: {
     direct: filters?.stops?.direct ?? 0,
     oneStop: filters?.stops?.oneStop ?? 0,
@@ -267,6 +271,14 @@ const buildResultsQueryParams = (query: SearchResultsQuery) => {
 
   if (query.arrivalTime) {
     params.set('arrivalTime', `${query.arrivalTime[0]}-${query.arrivalTime[1]}`)
+  }
+
+  if (query.returnDepartureTime) {
+    params.set('returnDepartureTime', `${query.returnDepartureTime[0]}-${query.returnDepartureTime[1]}`)
+  }
+
+  if (query.returnArrivalTime) {
+    params.set('returnArrivalTime', `${query.returnArrivalTime[0]}-${query.returnArrivalTime[1]}`)
   }
 
   if (query.page !== undefined) {

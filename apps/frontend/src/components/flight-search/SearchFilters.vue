@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 
 const props = defineProps<{
+  tripType: 'oneWay' | 'return'
   providerFilters: string[]
   airlineFilters: string[]
   departureAirportFilters: string[]
@@ -19,12 +20,16 @@ const selectedDepartureAirports = defineModel<string[]>('selectedDepartureAirpor
 const selectedArrivalAirports = defineModel<string[]>('selectedArrivalAirports', { required: true })
 const departureTimeRange = defineModel<[number, number]>('departureTimeRange', { required: true })
 const arrivalTimeRange = defineModel<[number, number]>('arrivalTimeRange', { required: true })
+const returnDepartureTimeRange = defineModel<[number, number]>('returnDepartureTimeRange', { required: true })
+const returnArrivalTimeRange = defineModel<[number, number]>('returnArrivalTimeRange', { required: true })
 
 const expandedSections = ref({
   duration: true,
   stops: true,
   departure: true,
   arrival: true,
+  returnDeparture: true,
+  returnArrival: true,
   departureAirports: false,
   arrivalAirports: false,
   sources: false,
@@ -143,11 +148,13 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
       </section>
 
       <section class="filter-section" :class="{ open: expandedSections.departure }">
-        <button type="button" class="filter-section-summary" @click="toggleSection('departure')">Departure time</button>
+        <button type="button" class="filter-section-summary" @click="toggleSection('departure')">
+          {{ props.tripType === 'return' ? 'Outbound departure time' : 'Departure time' }}
+        </button>
         <div class="filter-section-body" :class="{ open: expandedSections.departure }">
           <div class="filter-section-inner time-filter-group">
             <div class="time-filter-header">
-              <span class="filter-label">Departure time</span>
+              <span class="filter-label">{{ props.tripType === 'return' ? 'Outbound departure time' : 'Departure time' }}</span>
               <strong>{{ formatMinutes(departureTimeRange[0]) }} - {{ formatMinutes(departureTimeRange[1]) }}</strong>
             </div>
             <div class="range-slider">
@@ -175,11 +182,13 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
       </section>
 
       <section class="filter-section" :class="{ open: expandedSections.arrival }">
-        <button type="button" class="filter-section-summary" @click="toggleSection('arrival')">Arrival time</button>
+        <button type="button" class="filter-section-summary" @click="toggleSection('arrival')">
+          {{ props.tripType === 'return' ? 'Outbound arrival time' : 'Arrival time' }}
+        </button>
         <div class="filter-section-body" :class="{ open: expandedSections.arrival }">
           <div class="filter-section-inner time-filter-group">
             <div class="time-filter-header">
-              <span class="filter-label">Arrival time</span>
+              <span class="filter-label">{{ props.tripType === 'return' ? 'Outbound arrival time' : 'Arrival time' }}</span>
               <strong>{{ formatMinutes(arrivalTimeRange[0]) }} - {{ formatMinutes(arrivalTimeRange[1]) }}</strong>
             </div>
             <div class="range-slider">
@@ -200,6 +209,78 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
                 max="1440"
                 step="15"
                 @input="ensureOrderedRange(arrivalTimeRange, 1, Number(($event.target as HTMLInputElement).value), 0, 1440)"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        v-if="props.tripType === 'return'"
+        class="filter-section"
+        :class="{ open: expandedSections.returnDeparture }"
+      >
+        <button type="button" class="filter-section-summary" @click="toggleSection('returnDeparture')">Return departure time</button>
+        <div class="filter-section-body" :class="{ open: expandedSections.returnDeparture }">
+          <div class="filter-section-inner time-filter-group">
+            <div class="time-filter-header">
+              <span class="filter-label">Return departure time</span>
+              <strong>{{ formatMinutes(returnDepartureTimeRange[0]) }} - {{ formatMinutes(returnDepartureTimeRange[1]) }}</strong>
+            </div>
+            <div class="range-slider">
+              <div class="range-slider-track" />
+              <div class="range-slider-selected" :style="getRangeStyle(returnDepartureTimeRange)" />
+              <input
+                :value="returnDepartureTimeRange[0]"
+                type="range"
+                min="0"
+                max="1440"
+                step="15"
+                @input="ensureOrderedRange(returnDepartureTimeRange, 0, Number(($event.target as HTMLInputElement).value), 0, 1440)"
+              />
+              <input
+                :value="returnDepartureTimeRange[1]"
+                type="range"
+                min="0"
+                max="1440"
+                step="15"
+                @input="ensureOrderedRange(returnDepartureTimeRange, 1, Number(($event.target as HTMLInputElement).value), 0, 1440)"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        v-if="props.tripType === 'return'"
+        class="filter-section"
+        :class="{ open: expandedSections.returnArrival }"
+      >
+        <button type="button" class="filter-section-summary" @click="toggleSection('returnArrival')">Return arrival time</button>
+        <div class="filter-section-body" :class="{ open: expandedSections.returnArrival }">
+          <div class="filter-section-inner time-filter-group">
+            <div class="time-filter-header">
+              <span class="filter-label">Return arrival time</span>
+              <strong>{{ formatMinutes(returnArrivalTimeRange[0]) }} - {{ formatMinutes(returnArrivalTimeRange[1]) }}</strong>
+            </div>
+            <div class="range-slider">
+              <div class="range-slider-track" />
+              <div class="range-slider-selected" :style="getRangeStyle(returnArrivalTimeRange)" />
+              <input
+                :value="returnArrivalTimeRange[0]"
+                type="range"
+                min="0"
+                max="1440"
+                step="15"
+                @input="ensureOrderedRange(returnArrivalTimeRange, 0, Number(($event.target as HTMLInputElement).value), 0, 1440)"
+              />
+              <input
+                :value="returnArrivalTimeRange[1]"
+                type="range"
+                min="0"
+                max="1440"
+                step="15"
+                @input="ensureOrderedRange(returnArrivalTimeRange, 1, Number(($event.target as HTMLInputElement).value), 0, 1440)"
               />
             </div>
           </div>

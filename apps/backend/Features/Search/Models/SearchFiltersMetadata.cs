@@ -8,5 +8,7 @@ public record SearchFiltersMetadata(
     SearchRangeMetadata DurationMinutes,
     SearchRangeMetadata DepartureTimeMinutes,
     SearchRangeMetadata ArrivalTimeMinutes,
+    SearchRangeMetadata ReturnDepartureTimeMinutes,
+    SearchRangeMetadata ReturnArrivalTimeMinutes,
     SearchStopFilterMetadata Stops
 );

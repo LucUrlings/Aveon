@@ -57,6 +57,8 @@ const selectedArrivalAirports = ref<string[]>([])
 const maxDurationMinutes = ref(0)
 const departureTimeRange = ref<[number, number]>([0, 1439])
 const arrivalTimeRange = ref<[number, number]>([0, 1439])
+const returnDepartureTimeRange = ref<[number, number]>([0, 1439])
+const returnArrivalTimeRange = ref<[number, number]>([0, 1439])
 const currentPage = ref(1)
 const isLoadingMore = ref(false)
 const loadMoreSentinel = ref<HTMLElement | null>(null)
@@ -148,6 +150,8 @@ const hasActiveFilterQuery = (params: Record<string, LocationQueryValue | Locati
     'maxDuration',
     'departureTime',
     'arrivalTime',
+    'returnDepartureTime',
+    'returnArrivalTime',
   ].some((key) => params[key] !== undefined)
 
 const buildSearchRequestKey = (
@@ -254,6 +258,8 @@ const applyUrlState = () => {
   maxDurationMinutes.value = parseNumberParam(getQueryString(params.maxDuration), maxDurationMinutes.value)
   departureTimeRange.value = parseRangeParam(getQueryString(params.departureTime), departureTimeRange.value)
   arrivalTimeRange.value = parseRangeParam(getQueryString(params.arrivalTime), arrivalTimeRange.value)
+  returnDepartureTimeRange.value = parseRangeParam(getQueryString(params.returnDepartureTime), returnDepartureTimeRange.value)
+  returnArrivalTimeRange.value = parseRangeParam(getQueryString(params.returnArrivalTime), returnArrivalTimeRange.value)
   hasHydratedFiltersFromUrl = hasActiveFilterQuery(params)
 }
 
@@ -344,6 +350,10 @@ const updateRouteState = async () => {
   setNumberParam(query, 'maxDuration', maxDurationMinutes.value, response.value ? availableMaxDurationMinutes.value : 0)
   setRangeParam(query, 'departureTime', departureTimeRange.value, [0, 1439])
   setRangeParam(query, 'arrivalTime', arrivalTimeRange.value, [0, 1439])
+  if (tripType.value === 'return') {
+    setRangeParam(query, 'returnDepartureTime', returnDepartureTimeRange.value, [0, 1439])
+    setRangeParam(query, 'returnArrivalTime', returnArrivalTimeRange.value, [0, 1439])
+  }
 
   isSyncingRoute = true
   try {
@@ -692,6 +702,16 @@ const buildSearchResultsQuery = (): SearchResultsQuery => {
     query.arrivalTime = [...arrivalTimeRange.value] as [number, number]
   }
 
+  if (tripType.value === 'return') {
+    if (returnDepartureTimeRange.value[0] !== 0 || returnDepartureTimeRange.value[1] !== 1439) {
+      query.returnDepartureTime = [...returnDepartureTimeRange.value] as [number, number]
+    }
+
+    if (returnArrivalTimeRange.value[0] !== 0 || returnArrivalTimeRange.value[1] !== 1439) {
+      query.returnArrivalTime = [...returnArrivalTimeRange.value] as [number, number]
+    }
+  }
+
   return query
 }
 
@@ -734,6 +754,8 @@ watch(tripType, (value) => {
     returnDateFrom.value = null
     returnDateTo.value = null
     selectedReturnDates.value = []
+    returnDepartureTimeRange.value = [0, 1439]
+    returnArrivalTimeRange.value = [0, 1439]
     return
   }
 
@@ -809,6 +831,8 @@ watch(
     maxDurationMinutes,
     departureTimeRange,
     arrivalTimeRange,
+    returnDepartureTimeRange,
+    returnArrivalTimeRange,
   ],
   () => {
     if (currentPage.value !== 1) {
@@ -839,6 +863,8 @@ watch(
     maxDurationMinutes,
     departureTimeRange,
     arrivalTimeRange,
+    returnDepartureTimeRange,
+    returnArrivalTimeRange,
     isSearchCollapsed,
   ],
   () => {
@@ -898,6 +924,8 @@ watch(
     maxDurationMinutes,
     departureTimeRange,
     arrivalTimeRange,
+    returnDepartureTimeRange,
+    returnArrivalTimeRange,
   ],
   () => {
     scheduleSearchSessionRefresh()
@@ -1153,6 +1181,7 @@ const loadNextPage = async () => {
     <section class="results-grid" :class="{ 'results-only': !response }">
       <SearchFilters
         v-if="response"
+        :trip-type="tripType"
         v-model:include-direct-flights="includeDirectFlights"
         v-model:include-one-stop-flights="includeOneStopFlights"
         v-model:include-two-plus-stop-flights="includeTwoPlusStopFlights"
@@ -1162,6 +1191,8 @@ const loadNextPage = async () => {
         v-model:selected-arrival-airports="selectedArrivalAirports"
         v-model:departure-time-range="departureTimeRange"
         v-model:arrival-time-range="arrivalTimeRange"
+        v-model:return-departure-time-range="returnDepartureTimeRange"
+        v-model:return-arrival-time-range="returnArrivalTimeRange"
         v-model:max-duration-minutes="maxDurationMinutes"
         :available-max-duration-minutes="availableMaxDurationMinutes"
         :airline-filters="airlineFilters"

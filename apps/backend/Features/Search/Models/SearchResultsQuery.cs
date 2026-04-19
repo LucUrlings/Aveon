@@ -25,6 +25,10 @@ public record SearchResultsQuery
 
     public string? ArrivalTime { get; init; }
 
+    public string? ReturnDepartureTime { get; init; }
+
+    public string? ReturnArrivalTime { get; init; }
+
     public int? Page { get; init; }
 
     public int? PageSize { get; init; }
@@ -52,6 +56,10 @@ public record SearchResultsQuery
     public (int Min, int Max)? GetDepartureTimeRange() => ParseIntRange(DepartureTime);
 
     public (int Min, int Max)? GetArrivalTimeRange() => ParseIntRange(ArrivalTime);
+
+    public (int Min, int Max)? GetReturnDepartureTimeRange() => ParseIntRange(ReturnDepartureTime);
+
+    public (int Min, int Max)? GetReturnArrivalTimeRange() => ParseIntRange(ReturnArrivalTime);
 
     private static List<string> ParseStringList(string? value) =>
         (value ?? string.Empty)

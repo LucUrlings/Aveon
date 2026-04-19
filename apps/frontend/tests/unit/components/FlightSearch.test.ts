@@ -47,6 +47,8 @@ const makeSession = (overrides: Partial<SearchSessionResponse> = {}): SearchSess
       durationMinutes: { min: 90, max: 90 },
       departureTimeMinutes: { min: 540, max: 1200 },
       arrivalTimeMinutes: { min: 630, max: 1290 },
+      returnDepartureTimeMinutes: { min: 0, max: 0 },
+      returnArrivalTimeMinutes: { min: 0, max: 0 },
       stops: { direct: 2, oneStop: 0, twoPlusStop: 0 },
     },
     pagination: {
@@ -371,6 +373,95 @@ describe('FlightSearch', () => {
       returnDateFrom: '2026-06-10',
       returnDateTo: '2026-06-11',
     }))
+  })
+
+  it('refetches return searches with per-leg time filters', async () => {
+    mockSearchFlightsRequest.mockResolvedValue(makeSession({
+      response: {
+        ...makeSession().response,
+        results: [
+          {
+            id: 'return-1',
+            isRoundTrip: true,
+            totalDurationMinutes: 180,
+            legs: [
+              {
+                originAirport: 'AMS',
+                destinationAirport: 'DUB',
+                departureLocalTime: '2026-06-01T09:00:00',
+                arrivalLocalTime: '2026-06-01T10:30:00',
+                durationMinutes: 90,
+                segments: [],
+              },
+              {
+                originAirport: 'DUB',
+                destinationAirport: 'AMS',
+                departureLocalTime: '2026-06-10T18:00:00',
+                arrivalLocalTime: '2026-06-10T19:30:00',
+                durationMinutes: 90,
+                segments: [],
+              },
+            ],
+            priceOptions: [
+              {
+                id: 'rp1',
+                provider: 'FlightApi:KLM',
+                totalPrice: { amount: 200, currency: 'EUR' },
+                bookingLinks: [{ label: 'View fare', url: 'https://example.com/return-1' }],
+              },
+            ],
+          },
+        ],
+        filters: {
+          ...makeSession().response.filters,
+          returnDepartureTimeMinutes: { min: 1080, max: 1080 },
+          returnArrivalTimeMinutes: { min: 1170, max: 1170 },
+        },
+      },
+    }))
+    mockGetSearchSession.mockResolvedValue(makeSession())
+
+    const { wrapper } = await mountWithRouter(
+      '/?origins=AMS&destinations=DUB&dates=2026-06-01&tripType=return&returnDateFrom=2026-06-10&returnDateTo=2026-06-10',
+      {
+        global: {
+          stubs: {
+            FlightSearchBar: {
+              emits: ['submit'],
+              template: '<button class="submit-search" @click="$emit(\'submit\')">submit</button>',
+            },
+            SearchFilters: {
+              emits: ['update:returnDepartureTimeRange', 'update:returnArrivalTimeRange'],
+              template: `
+                <div>
+                  <button class="set-return-departure-filter" @click="$emit('update:returnDepartureTimeRange', [1080, 1260])">return departure</button>
+                  <button class="set-return-arrival-filter" @click="$emit('update:returnArrivalTimeRange', [1140, 1320])">return arrival</button>
+                </div>
+              `,
+            },
+            SearchResultCard: true,
+          },
+        },
+      },
+    )
+
+    await wrapper.get('.submit-search').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('.set-return-departure-filter').trigger('click')
+    await wrapper.get('.set-return-arrival-filter').trigger('click')
+
+    await vi.waitFor(() => {
+      expect(mockGetSearchSession).toHaveBeenLastCalledWith('search-1', expect.objectContaining({
+        direct: true,
+        oneStop: false,
+        twoPlusStop: false,
+        returnDepartureTime: [1080, 1260],
+        returnArrivalTime: [1140, 1320],
+        page: 1,
+        pageSize: 100,
+      }))
+    })
   })
 
   it('runs a search automatically when the route contains search params', async () => {

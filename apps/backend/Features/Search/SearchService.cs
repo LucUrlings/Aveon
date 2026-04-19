@@ -1041,6 +1041,8 @@ public sealed class SearchService(
         var arrivalAirports = query.GetArrivalAirports();
         var departureTimeRange = query.GetDepartureTimeRange();
         var arrivalTimeRange = query.GetArrivalTimeRange();
+        var returnDepartureTimeRange = query.GetReturnDepartureTimeRange();
+        var returnArrivalTimeRange = query.GetReturnArrivalTimeRange();
 
         return results
             .Select(result =>
@@ -1062,7 +1064,7 @@ public sealed class SearchService(
             .Where(result => MatchesStopFilters(result, query))
             .Where(result => MatchesAirlineFilters(result, airlines))
             .Where(result => MatchesAirportFilters(result, departureAirports, arrivalAirports))
-            .Where(result => MatchesTimeFilters(result, departureTimeRange, arrivalTimeRange))
+            .Where(result => MatchesTimeFilters(result, departureTimeRange, arrivalTimeRange, returnDepartureTimeRange, returnArrivalTimeRange))
             .ToList();
     }
 
@@ -1106,8 +1108,10 @@ public sealed class SearchService(
             BuildAirportCounts(results, result => result.Legs.FirstOrDefault()?.OriginAirport),
             BuildAirportCounts(results, result => result.Legs.LastOrDefault()?.DestinationAirport),
             BuildDurationRange(results),
-            BuildTimeRange(results, leg => leg.DepartureLocalTime),
-            BuildTimeRange(results, leg => leg.ArrivalLocalTime),
+            BuildTimeRange(results, 0, leg => leg.DepartureLocalTime),
+            BuildTimeRange(results, 0, leg => leg.ArrivalLocalTime),
+            BuildTimeRange(results, 1, leg => leg.DepartureLocalTime),
+            BuildTimeRange(results, 1, leg => leg.ArrivalLocalTime),
             BuildStopFilterMetadata(results));
 
     private static SearchFiltersMetadata BuildFiltersMetadata(
@@ -1116,8 +1120,10 @@ public sealed class SearchService(
         globalFilters with
         {
             DurationMinutes = BuildDurationRange(baseFilteredResults),
-            DepartureTimeMinutes = BuildTimeRange(baseFilteredResults, leg => leg.DepartureLocalTime),
-            ArrivalTimeMinutes = BuildTimeRange(baseFilteredResults, leg => leg.ArrivalLocalTime)
+            DepartureTimeMinutes = BuildTimeRange(baseFilteredResults, 0, leg => leg.DepartureLocalTime),
+            ArrivalTimeMinutes = BuildTimeRange(baseFilteredResults, 0, leg => leg.ArrivalLocalTime),
+            ReturnDepartureTimeMinutes = BuildTimeRange(baseFilteredResults, 1, leg => leg.DepartureLocalTime),
+            ReturnArrivalTimeMinutes = BuildTimeRange(baseFilteredResults, 1, leg => leg.ArrivalLocalTime)
         };
 
     private static List<SearchFilterOptionCount> BuildProviderCounts(IEnumerable<SearchResult> results) =>
@@ -1163,10 +1169,13 @@ public sealed class SearchService(
 
     private static SearchRangeMetadata BuildTimeRange(
         IEnumerable<SearchResult> results,
+        int legIndex,
         Func<SearchResultLeg, DateTime> selector)
     {
         var minutes = results
-            .SelectMany(result => result.Legs)
+            .Select(result => result.Legs.ElementAtOrDefault(legIndex))
+            .Where(leg => leg is not null)
+            .Cast<SearchResultLeg>()
             .Select(leg => GetClockMinutes(selector(leg)))
             .ToList();
 
@@ -1240,24 +1249,49 @@ public sealed class SearchService(
     private static bool MatchesTimeFilters(
         SearchResult result,
         (int Min, int Max)? departureTimeRange,
-        (int Min, int Max)? arrivalTimeRange)
+        (int Min, int Max)? arrivalTimeRange,
+        (int Min, int Max)? returnDepartureTimeRange,
+        (int Min, int Max)? returnArrivalTimeRange)
     {
         var firstLeg = result.Legs.FirstOrDefault();
-        var lastLeg = result.Legs.LastOrDefault();
-        if (firstLeg is null || lastLeg is null)
+        if (firstLeg is null)
         {
             return false;
         }
 
         var departureMinutes = GetClockMinutes(firstLeg.DepartureLocalTime);
-        var arrivalMinutes = GetClockMinutes(lastLeg.ArrivalLocalTime);
+        var arrivalMinutes = GetClockMinutes(firstLeg.ArrivalLocalTime);
 
         var matchesDeparture = !departureTimeRange.HasValue ||
             (departureMinutes >= departureTimeRange.Value.Min && departureMinutes <= departureTimeRange.Value.Max);
         var matchesArrival = !arrivalTimeRange.HasValue ||
             (arrivalMinutes >= arrivalTimeRange.Value.Min && arrivalMinutes <= arrivalTimeRange.Value.Max);
 
-        return matchesDeparture && matchesArrival;
+        if (!matchesDeparture || !matchesArrival)
+        {
+            return false;
+        }
+
+        if (!returnDepartureTimeRange.HasValue && !returnArrivalTimeRange.HasValue)
+        {
+            return true;
+        }
+
+        var returnLeg = result.Legs.ElementAtOrDefault(1);
+        if (returnLeg is null)
+        {
+            return false;
+        }
+
+        var returnDepartureMinutes = GetClockMinutes(returnLeg.DepartureLocalTime);
+        var returnArrivalMinutes = GetClockMinutes(returnLeg.ArrivalLocalTime);
+
+        var matchesReturnDeparture = !returnDepartureTimeRange.HasValue ||
+            (returnDepartureMinutes >= returnDepartureTimeRange.Value.Min && returnDepartureMinutes <= returnDepartureTimeRange.Value.Max);
+        var matchesReturnArrival = !returnArrivalTimeRange.HasValue ||
+            (returnArrivalMinutes >= returnArrivalTimeRange.Value.Min && returnArrivalMinutes <= returnArrivalTimeRange.Value.Max);
+
+        return matchesReturnDeparture && matchesReturnArrival;
     }
 
     private static int GetClockMinutes(DateTime dateTime) => (dateTime.Hour * 60) + dateTime.Minute;
