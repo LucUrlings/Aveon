@@ -142,6 +142,21 @@ const syntheticReturnResult: SearchResult = {
   ],
 }
 
+const malformedSyntheticReturnResult: SearchResult = {
+  ...multiLegResult,
+  id: 'synthetic-return-malformed',
+  priceOptions: [
+    {
+      id: 'price-malformed',
+      provider: 'FlightApi:Combined one-way (eDreams + Ryanair)',
+      totalPrice: { amount: 141.2, currency: 'EUR' },
+      bookingLinks: [
+        { label: 'Book return', url: 'https://example.com/return-only', price: { amount: 70, currency: 'EUR' } },
+      ],
+    },
+  ],
+}
+
 describe('SearchResultCard', () => {
   beforeEach(() => {
     clipboardWriteText.mockReset()
@@ -202,6 +217,19 @@ describe('SearchResultCard', () => {
     expect(wrapper.text()).toContain('Book return')
     expect(wrapper.text()).toContain('EUR 80.00')
     expect(wrapper.text()).toContain('EUR 70.00')
+  })
+
+  it('still renders malformed combined one-way fares as separate bookings', () => {
+    const wrapper = mount(SearchResultCard, {
+      props: {
+        result: malformedSyntheticReturnResult,
+        expanded: false,
+      },
+    })
+
+    expect(wrapper.text()).toContain('Separate bookings')
+    expect(wrapper.text()).not.toContain('Single round-trip booking')
+    expect(wrapper.text()).toContain('Book return')
   })
 
   it('copies a single fare into a shareable message from the corner button', async () => {

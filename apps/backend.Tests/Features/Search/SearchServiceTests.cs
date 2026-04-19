@@ -225,6 +225,29 @@ public sealed class SearchServiceTests
     }
 
     [Fact]
+    public async Task StartSearchAsync_DropsSyntheticRoundTripFares_WhenEitherHalfLacksABookingLink()
+    {
+        var request = new SearchRequest(
+            ["DUB"],
+            ["AMS"],
+            [new DateOnly(2026, 5, 15)],
+            new DateOnly(2026, 5, 15),
+            new DateOnly(2026, 5, 15),
+            1,
+            "economy");
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var service = CreateSearchService(store, new MissingSyntheticBookingLinkFlightSearchProvider());
+
+        var initialSession = await service.StartSearchAsync(request, CancellationToken.None);
+        var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
+
+        Assert.Equal("completed", finalSession.Status);
+        Assert.DoesNotContain(
+            finalSession.Response.Results.SelectMany(result => result.PriceOptions),
+            option => option.Provider.Contains("Combined one-way", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task StartSearchAsync_BuildsMixedDestinationSyntheticReturns_ForSelectedDestinationSet()
     {
         var request = new SearchRequest(
@@ -916,6 +939,122 @@ public sealed class SearchServiceTests
                         Arrival = inboundArrival,
                         Duration = (int)(inboundArrival - inboundDeparture).TotalMinutes,
                         MarketingFlightNumber = "inbound-late",
+                        MarketingCarrierId = 1
+                    }
+                ]);
+        }
+
+        private sealed record FlightApiTestItinerary(
+            FlightApiItinerary Itinerary,
+            List<FlightApiLeg> Legs,
+            List<FlightApiSegment> Segments);
+    }
+
+    private sealed class MissingSyntheticBookingLinkFlightSearchProvider : IFlightSearchProvider
+    {
+        public Task<FlightApiOneWayResponse> SearchOneWayAsync(
+            ProviderSearchRequest request,
+            CancellationToken cancellationToken)
+        {
+            if (request.OriginAirport == "DUB" && request.DestinationAirport == "AMS")
+            {
+                return Task.FromResult(CreateResponse(
+                    CreateSingleLegItinerary(
+                        "outbound-missing-link",
+                        "pricing-outbound-missing-link",
+                        1,
+                        2,
+                        new DateTime(2026, 5, 15, 8, 0, 0),
+                        new DateTime(2026, 5, 15, 10, 0, 0),
+                        100m,
+                        string.Empty)));
+            }
+
+            return Task.FromResult(CreateResponse(
+                CreateSingleLegItinerary(
+                    "inbound-valid-link",
+                    "pricing-inbound-valid-link",
+                    2,
+                    1,
+                    new DateTime(2026, 5, 15, 20, 0, 0),
+                    new DateTime(2026, 5, 15, 22, 0, 0),
+                    80m,
+                    "https://example.com/inbound-valid-link")));
+        }
+
+        public Task<FlightApiOneWayResponse> SearchRoundTripAsync(
+            ProviderRoundTripSearchRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new FlightApiOneWayResponse());
+
+        private static FlightApiOneWayResponse CreateResponse(params FlightApiTestItinerary[] itineraries) =>
+            new()
+            {
+                Itineraries = itineraries.Select(item => item.Itinerary).ToList(),
+                Legs = itineraries.SelectMany(item => item.Legs).ToList(),
+                Segments = itineraries.SelectMany(item => item.Segments).ToList(),
+                Places =
+                [
+                    new FlightApiPlace { Id = 1, Iata = "DUB", DisplayCode = "DUB", Name = "Dublin" },
+                    new FlightApiPlace { Id = 2, Iata = "AMS", DisplayCode = "AMS", Name = "Amsterdam" }
+                ],
+                Carriers =
+                [
+                    new FlightApiCarrier { Id = 1, Name = "Test Airline", DisplayCode = "TA" }
+                ]
+            };
+
+        private static FlightApiTestItinerary CreateSingleLegItinerary(
+            string id,
+            string pricingId,
+            int originPlaceId,
+            int destinationPlaceId,
+            DateTime departure,
+            DateTime arrival,
+            decimal amount,
+            string deepLink)
+        {
+            var legId = $"{id}-leg";
+            var segmentId = $"{id}-segment";
+
+            return new FlightApiTestItinerary(
+                new FlightApiItinerary
+                {
+                    Id = id,
+                    LegIds = [legId],
+                    DeepLink = deepLink,
+                    PricingOptions =
+                    [
+                        new FlightApiPricingOption
+                        {
+                            Id = pricingId,
+                            Price = new FlightApiPrice { Amount = amount },
+                            Items = []
+                        }
+                    ]
+                },
+                [
+                    new FlightApiLeg
+                    {
+                        Id = legId,
+                        OriginPlaceId = originPlaceId,
+                        DestinationPlaceId = destinationPlaceId,
+                        Departure = departure,
+                        Arrival = arrival,
+                        SegmentIds = [segmentId],
+                        Duration = (int)(arrival - departure).TotalMinutes
+                    }
+                ],
+                [
+                    new FlightApiSegment
+                    {
+                        Id = segmentId,
+                        OriginPlaceId = originPlaceId,
+                        DestinationPlaceId = destinationPlaceId,
+                        Departure = departure,
+                        Arrival = arrival,
+                        Duration = (int)(arrival - departure).TotalMinutes,
+                        MarketingFlightNumber = id,
                         MarketingCarrierId = 1
                     }
                 ]);

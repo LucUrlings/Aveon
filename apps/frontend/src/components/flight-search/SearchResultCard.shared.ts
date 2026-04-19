@@ -43,8 +43,14 @@ export const getPrimaryBookingLink = (result: SearchResult) => result.priceOptio
 export const isDirectFlight = (result: SearchResult) =>
   result.legs.every((leg) => leg.segments.length === 1)
 
+const isCombinedOneWayProvider = (provider: string) =>
+  provider.includes('Combined one-way')
+
 export const isSyntheticReturnFare = (result: SearchResult) =>
-  result.isRoundTrip && (result.priceOptions[0]?.bookingLinks.length ?? 0) > 1
+  result.isRoundTrip && (
+    isCombinedOneWayProvider(result.priceOptions[0]?.provider ?? '') ||
+    (result.priceOptions[0]?.bookingLinks.length ?? 0) > 1
+  )
 
 export const isActualReturnFare = (result: SearchResult) =>
   result.isRoundTrip && !isSyntheticReturnFare(result)

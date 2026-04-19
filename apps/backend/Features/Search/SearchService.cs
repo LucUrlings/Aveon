@@ -722,6 +722,15 @@ public sealed class SearchService(
                     continue;
                 }
 
+                var outboundBookingLink = outboundFare.BookingLinks.FirstOrDefault(link => !string.IsNullOrWhiteSpace(link.Url));
+                var inboundBookingLink = inboundFare.BookingLinks.FirstOrDefault(link => !string.IsNullOrWhiteSpace(link.Url));
+
+                // Synthetic fares are only valid if both halves are independently bookable.
+                if (outboundBookingLink is null || inboundBookingLink is null)
+                {
+                    continue;
+                }
+
                 syntheticFareOptions.Add(new SearchFareOption(
                     $"synthetic:{outboundFare.Id}:{inboundFare.Id}",
                     $"{outboundFare.FlightId}|{inboundFare.FlightId}",
@@ -736,13 +745,13 @@ public sealed class SearchService(
                     {
                         BuildBookingLink(
                             "Book outbound",
-                            outboundFare.BookingLinks.FirstOrDefault()?.Url ?? string.Empty,
+                            outboundBookingLink.Url,
                             outboundFare.TotalPrice),
                         BuildBookingLink(
                             "Book return",
-                            inboundFare.BookingLinks.FirstOrDefault()?.Url ?? string.Empty,
+                            inboundBookingLink.Url,
                             inboundFare.TotalPrice)
-                    }.Where(link => !string.IsNullOrWhiteSpace(link.Url)).ToList()));
+                    }));
             }
         }
 
