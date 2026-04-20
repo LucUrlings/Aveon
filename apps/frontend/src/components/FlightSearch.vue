@@ -1141,6 +1141,21 @@ const addOriginAirport = (airport: AirportOption) => addAirport(originAirports, 
 const addDestinationAirport = (airport: AirportOption) => addAirport(destinationAirports, destinationInput, destinationSuggestions, airport)
 const confirmOriginInput = () => tryAddFromInput(originAirports, originInput, originSuggestions)
 const confirmDestinationInput = () => tryAddFromInput(destinationAirports, destinationInput, destinationSuggestions)
+const swapLocations = () => {
+  const previousOriginAirports = [...originAirports.value]
+  const previousDestinationAirports = [...destinationAirports.value]
+  const previousOriginInput = originInput.value
+  const previousDestinationInput = destinationInput.value
+  const previousOriginSuggestions = [...originSuggestions.value]
+  const previousDestinationSuggestions = [...destinationSuggestions.value]
+
+  originAirports.value = previousDestinationAirports
+  destinationAirports.value = previousOriginAirports
+  originInput.value = previousDestinationInput
+  destinationInput.value = previousOriginInput
+  originSuggestions.value = previousDestinationSuggestions
+  destinationSuggestions.value = previousOriginSuggestions
+}
 
 const loadNextPage = async () => {
   if (!searchSession.value?.searchId || isLoadingMore.value || !hasMoreResults.value || isPolling.value) {
@@ -1203,6 +1218,7 @@ const loadNextPage = async () => {
         @confirm-destination-input="confirmDestinationInput"
         @remove-origin-airport="removeOriginAirport"
         @remove-destination-airport="removeDestinationAirport"
+        @swap-locations="swapLocations"
         @add-origin-airport="addOriginAirport"
         @add-destination-airport="addDestinationAirport"
       />

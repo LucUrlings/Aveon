@@ -53,11 +53,13 @@ describe('FlightSearchBar', () => {
 
     await wrapper.get('form').trigger('submit')
     await wrapper.get('.collapse-toggle').trigger('click')
+    await wrapper.get('.swap-locations-button').trigger('click')
     await wrapper.get('input[placeholder="Add airport or city"]').trigger('keydown.enter')
     await wrapper.findAll('.suggestion-button')[0].trigger('click')
 
     expect(wrapper.emitted('submit')).toBeTruthy()
     expect(wrapper.emitted('toggleCollapse')).toBeTruthy()
+    expect(wrapper.emitted('swapLocations')).toBeTruthy()
     expect(wrapper.emitted('confirmOriginInput')).toBeTruthy()
     expect(wrapper.emitted('addOriginAirport')).toBeTruthy()
   })

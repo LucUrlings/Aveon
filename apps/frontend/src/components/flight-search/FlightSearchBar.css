@@ -67,8 +67,44 @@ h2 {
 
 .airport-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 10px;
+  align-items: start;
+}
+
+.swap-locations-wrap {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  align-self: start;
+  padding-top: 64px;
+}
+
+.swap-locations-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  border: 1px solid rgba(29, 34, 40, 0.12);
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: #fff;
+  color: #33404d;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(41, 49, 61, 0.05);
+}
+
+.swap-locations-button:hover {
+  border-color: rgba(31, 95, 191, 0.24);
+  color: #1f5fbf;
+}
+
+.swap-locations-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .settings-grid {
@@ -248,6 +284,12 @@ h2 {
   .airport-grid,
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .swap-locations-wrap {
+    align-items: center;
+    justify-content: start;
+    padding-top: 0;
   }
 
   .field-compact {

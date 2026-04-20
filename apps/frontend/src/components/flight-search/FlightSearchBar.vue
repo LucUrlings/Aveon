@@ -31,6 +31,7 @@ const cabinClass = defineModel<string>('cabinClass', { required: true })
 const emit = defineEmits<{
   submit: []
   toggleCollapse: []
+  swapLocations: []
   confirmOriginInput: []
   confirmDestinationInput: []
   removeOriginAirport: [code: string]
@@ -92,6 +93,39 @@ const emit = defineEmits<{
                   </li>
                 </ul>
               </div>
+            </div>
+
+            <div class="swap-locations-wrap">
+              <button
+                type="button"
+                class="swap-locations-button"
+                title="Swap origin and destination"
+                aria-label="Swap origin and destination"
+                @click="emit('swapLocations')"
+              >
+                <svg
+                  class="swap-locations-icon"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M3 6H14M14 6L11.5 3.5M14 6L11.5 8.5"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <path
+                    d="M17 14H6M6 14L8.5 11.5M6 14L8.5 16.5"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
             </div>
 
             <div class="field">
