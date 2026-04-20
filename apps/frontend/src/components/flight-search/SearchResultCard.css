@@ -102,7 +102,7 @@
 
 .leg-summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.35fr) auto;
   gap: 10px;
   align-items: center;
 }
@@ -128,6 +128,35 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.leg-actions {
+  display: flex;
+  align-items: center;
+}
+
+.leg-filter-button {
+  border: 1px solid rgba(29, 34, 40, 0.12);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #fff;
+  color: #5b6570;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.leg-filter-button:hover {
+  color: #1d2228;
+  border-color: rgba(31, 95, 191, 0.24);
+}
+
+.leg-filter-button.active {
+  background: #e9f1ff;
+  border-color: rgba(31, 95, 191, 0.28);
+  color: #1f5fbf;
 }
 
 .leg-times {

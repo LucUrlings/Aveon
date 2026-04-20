@@ -12,11 +12,14 @@ defineProps<{
   result: SearchResult
   expanded: boolean
   copyLabel: string
+  selectedOutboundLegId?: string | null
+  selectedReturnLegId?: string | null
 }>()
 
 const emit = defineEmits<{
   toggleExpanded: [resultId: string]
   copyFare: []
+  filterLeg: [payload: { legId: string; legIndex: number }]
 }>()
 </script>
 
@@ -54,6 +57,16 @@ const emit = defineEmits<{
         <div class="return-leg-copy">
           <span class="return-leg-label">{{ legIndex === 0 ? 'Outbound' : 'Return' }}</span>
           <p class="leg-route">{{ leg.originAirport }} → {{ leg.destinationAirport }}</p>
+        </div>
+        <div class="leg-actions">
+          <button
+            class="leg-filter-button"
+            :class="{ active: legIndex === 0 ? selectedOutboundLegId === leg.id : selectedReturnLegId === leg.id }"
+            type="button"
+            @click="emit('filterLeg', { legId: leg.id, legIndex })"
+          >
+            {{ legIndex === 0 ? (selectedOutboundLegId === leg.id ? 'Selected leg' : 'Show combos') : (selectedReturnLegId === leg.id ? 'Selected leg' : 'Show combos') }}
+          </button>
         </div>
         <span class="leg-times">{{ formatDateTime(leg.departureLocalTime) }} to {{ formatDateTime(leg.arrivalLocalTime) }}</span>
         <strong>{{ formatDuration(leg.durationMinutes) }}</strong>

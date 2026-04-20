@@ -820,13 +820,16 @@ public sealed class SearchService(
             .Cast<SearchResultSegment>()
             .ToList();
 
-        return new SearchResultLeg(
+        var searchLeg = new SearchResultLeg(
+            string.Empty,
             ResolvePlaceCode(leg.OriginPlaceId, placesById),
             ResolvePlaceCode(leg.DestinationPlaceId, placesById),
             DateTime.SpecifyKind(leg.Departure, DateTimeKind.Unspecified),
             DateTime.SpecifyKind(leg.Arrival, DateTimeKind.Unspecified),
             leg.Duration,
             segments);
+
+        return searchLeg with { Id = BuildLegFilterKey(searchLeg) };
     }
 
     private static SearchResultSegment? BuildSearchResultSegment(
@@ -1043,6 +1046,8 @@ public sealed class SearchService(
         var arrivalTimeRange = query.GetArrivalTimeRange();
         var returnDepartureTimeRange = query.GetReturnDepartureTimeRange();
         var returnArrivalTimeRange = query.GetReturnArrivalTimeRange();
+        var outboundLegId = query.GetOutboundLegId();
+        var returnLegId = query.GetReturnLegId();
 
         return results
             .Select(result =>
@@ -1065,6 +1070,7 @@ public sealed class SearchService(
             .Where(result => MatchesAirlineFilters(result, airlines))
             .Where(result => MatchesAirportFilters(result, departureAirports, arrivalAirports))
             .Where(result => MatchesTimeFilters(result, departureTimeRange, arrivalTimeRange, returnDepartureTimeRange, returnArrivalTimeRange))
+            .Where(result => MatchesLegFilters(result, outboundLegId, returnLegId))
             .ToList();
     }
 
@@ -1294,7 +1300,38 @@ public sealed class SearchService(
         return matchesReturnDeparture && matchesReturnArrival;
     }
 
+    private static bool MatchesLegFilters(
+        SearchResult result,
+        string? outboundLegId,
+        string? returnLegId)
+    {
+        if (outboundLegId is null && returnLegId is null)
+        {
+            return true;
+        }
+
+        var outboundLeg = result.Legs.ElementAtOrDefault(0);
+        var returnLeg = result.Legs.ElementAtOrDefault(1);
+
+        var matchesOutbound = outboundLegId is null ||
+            (outboundLeg is not null && string.Equals(outboundLeg.Id, outboundLegId, StringComparison.Ordinal));
+        var matchesReturn = returnLegId is null ||
+            (returnLeg is not null && string.Equals(returnLeg.Id, returnLegId, StringComparison.Ordinal));
+
+        return matchesOutbound && matchesReturn;
+    }
+
     private static int GetClockMinutes(DateTime dateTime) => (dateTime.Hour * 60) + dateTime.Minute;
+
+    private static string BuildLegFilterKey(SearchResultLeg leg)
+    {
+        var segmentKey = string.Join(
+            "|",
+            leg.Segments.Select(segment =>
+                $"{segment.MarketingCarrierCode}-{segment.FlightNumber}-{segment.OriginAirport}-{segment.DestinationAirport}-{segment.DepartureLocalTime:O}-{segment.ArrivalLocalTime:O}"));
+
+        return $"{leg.OriginAirport}-{leg.DestinationAirport}-{leg.DepartureLocalTime:O}-{leg.ArrivalLocalTime:O}-{segmentKey}";
+    }
 
     private sealed record SearchFareOption(
         string Id,

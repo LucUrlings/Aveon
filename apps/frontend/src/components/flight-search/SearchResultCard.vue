@@ -9,10 +9,13 @@ import { formatResultForShare, isActualReturnFare, isSyntheticReturnFare } from 
 const props = defineProps<{
   result: SearchResult
   expanded: boolean
+  selectedOutboundLegId?: string | null
+  selectedReturnLegId?: string | null
 }>()
 
 const emit = defineEmits<{
   toggleExpanded: [resultId: string]
+  filterLeg: [payload: { legId: string; legIndex: number }]
 }>()
 
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
@@ -95,8 +98,11 @@ onBeforeUnmount(() => {
     :result="result"
     :expanded="expanded"
     :copy-label="copyLabel"
+    :selected-outbound-leg-id="selectedOutboundLegId"
+    :selected-return-leg-id="selectedReturnLegId"
     @toggle-expanded="emit('toggleExpanded', $event)"
     @copy-fare="copyFare"
+    @filter-leg="emit('filterLeg', $event)"
   />
 </template>
 

@@ -59,6 +59,8 @@ const departureTimeRange = ref<[number, number]>([0, 1439])
 const arrivalTimeRange = ref<[number, number]>([0, 1439])
 const returnDepartureTimeRange = ref<[number, number]>([0, 1439])
 const returnArrivalTimeRange = ref<[number, number]>([0, 1439])
+const selectedOutboundLegId = ref<string | null>(null)
+const selectedReturnLegId = ref<string | null>(null)
 const currentPage = ref(1)
 const isLoadingMore = ref(false)
 const loadMoreSentinel = ref<HTMLElement | null>(null)
@@ -152,6 +154,8 @@ const hasActiveFilterQuery = (params: Record<string, LocationQueryValue | Locati
     'arrivalTime',
     'returnDepartureTime',
     'returnArrivalTime',
+    'outboundLegId',
+    'returnLegId',
   ].some((key) => params[key] !== undefined)
 
 const buildSearchRequestKey = (
@@ -260,6 +264,8 @@ const applyUrlState = () => {
   arrivalTimeRange.value = parseRangeParam(getQueryString(params.arrivalTime), arrivalTimeRange.value)
   returnDepartureTimeRange.value = parseRangeParam(getQueryString(params.returnDepartureTime), returnDepartureTimeRange.value)
   returnArrivalTimeRange.value = parseRangeParam(getQueryString(params.returnArrivalTime), returnArrivalTimeRange.value)
+  selectedOutboundLegId.value = getQueryString(params.outboundLegId)
+  selectedReturnLegId.value = getQueryString(params.returnLegId)
   hasHydratedFiltersFromUrl = hasActiveFilterQuery(params)
 }
 
@@ -353,6 +359,14 @@ const updateRouteState = async () => {
   if (tripType.value === 'return') {
     setRangeParam(query, 'returnDepartureTime', returnDepartureTimeRange.value, [0, 1439])
     setRangeParam(query, 'returnArrivalTime', returnArrivalTimeRange.value, [0, 1439])
+
+    if (selectedOutboundLegId.value) {
+      query.outboundLegId = selectedOutboundLegId.value
+    }
+
+    if (selectedReturnLegId.value) {
+      query.returnLegId = selectedReturnLegId.value
+    }
   }
 
   isSyncingRoute = true
@@ -413,6 +427,9 @@ const availableMaxDurationMinutes = computed(() => {
 })
 
 const filteredResults = computed(() => loadedResults.value)
+const hasSelectedLegFilters = computed(() =>
+  Boolean(selectedOutboundLegId.value || selectedReturnLegId.value),
+)
 const totalPages = computed(() => response.value?.pagination.totalPages ?? 0)
 const hasMoreResults = computed(() => response.value !== null && currentPage.value < totalPages.value)
 const paginationSummary = computed(() => {
@@ -710,6 +727,14 @@ const buildSearchResultsQuery = (): SearchResultsQuery => {
     if (returnArrivalTimeRange.value[0] !== 0 || returnArrivalTimeRange.value[1] !== 1439) {
       query.returnArrivalTime = [...returnArrivalTimeRange.value] as [number, number]
     }
+
+    if (selectedOutboundLegId.value) {
+      query.outboundLegId = selectedOutboundLegId.value
+    }
+
+    if (selectedReturnLegId.value) {
+      query.returnLegId = selectedReturnLegId.value
+    }
   }
 
   return query
@@ -756,6 +781,8 @@ watch(tripType, (value) => {
     selectedReturnDates.value = []
     returnDepartureTimeRange.value = [0, 1439]
     returnArrivalTimeRange.value = [0, 1439]
+    selectedOutboundLegId.value = null
+    selectedReturnLegId.value = null
     return
   }
 
@@ -833,6 +860,8 @@ watch(
     arrivalTimeRange,
     returnDepartureTimeRange,
     returnArrivalTimeRange,
+    selectedOutboundLegId,
+    selectedReturnLegId,
   ],
   () => {
     if (currentPage.value !== 1) {
@@ -865,6 +894,8 @@ watch(
     arrivalTimeRange,
     returnDepartureTimeRange,
     returnArrivalTimeRange,
+    selectedOutboundLegId,
+    selectedReturnLegId,
     isSearchCollapsed,
   ],
   () => {
@@ -926,6 +957,8 @@ watch(
     arrivalTimeRange,
     returnDepartureTimeRange,
     returnArrivalTimeRange,
+    selectedOutboundLegId,
+    selectedReturnLegId,
   ],
   () => {
     scheduleSearchSessionRefresh()
@@ -1036,6 +1069,8 @@ const searchFlights = async () => {
   searchSession.value = null
   loadedResults.value = []
   expandedResultIds.value = []
+  selectedOutboundLegId.value = null
+  selectedReturnLegId.value = null
 
   try {
     lastExecutedSearchKey = getCurrentSearchRequestKey()
@@ -1085,6 +1120,20 @@ const toggleExpanded = (resultId: string) => {
 }
 
 const isExpanded = (resultId: string) => expandedResultIds.value.includes(resultId)
+
+const toggleLegFilter = ({ legId, legIndex }: { legId: string; legIndex: number }) => {
+  if (legIndex === 0) {
+    selectedOutboundLegId.value = selectedOutboundLegId.value === legId ? null : legId
+    return
+  }
+
+  selectedReturnLegId.value = selectedReturnLegId.value === legId ? null : legId
+}
+
+const clearLegFilters = () => {
+  selectedOutboundLegId.value = null
+  selectedReturnLegId.value = null
+}
 
 const removeOriginAirport = (code: string) => removeAirport(originAirports, code)
 const removeDestinationAirport = (code: string) => removeAirport(destinationAirports, code)
@@ -1207,6 +1256,12 @@ const loadNextPage = async () => {
             <div>
               <p class="eyebrow">Results</p>
               <h2>{{ searchSummary }}</h2>
+              <div v-if="hasSelectedLegFilters" class="results-active-filters">
+                <span class="active-filter-chip">Leg combinations filtered</span>
+                <button class="clear-active-filter" type="button" @click="clearLegFilters">
+                  Clear
+                </button>
+              </div>
             </div>
             <div class="results-stats">
               <span
@@ -1228,7 +1283,10 @@ const loadNextPage = async () => {
               :key="result.id"
               :result="result"
               :expanded="isExpanded(result.id)"
+              :selected-outbound-leg-id="selectedOutboundLegId"
+              :selected-return-leg-id="selectedReturnLegId"
               @toggle-expanded="toggleExpanded"
+              @filter-leg="toggleLegFilter"
             />
           </TransitionGroup>
 

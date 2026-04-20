@@ -1,6 +1,7 @@
 namespace backend.Features.Search.Models;
 
 public record SearchResultLeg(
+    string Id,
     string OriginAirport,
     string DestinationAirport,
     DateTime DepartureLocalTime,

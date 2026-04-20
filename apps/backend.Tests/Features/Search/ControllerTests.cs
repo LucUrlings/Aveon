@@ -54,6 +54,7 @@ public sealed class SearchControllerTests
             Direct = true,
             Providers = "FlightApi:KLM",
             ReturnDepartureTime = "600-900",
+            OutboundLegId = "leg-out-1",
             Page = 2,
             PageSize = 100
         };
@@ -64,6 +65,7 @@ public sealed class SearchControllerTests
         Assert.True(stub.LastGetQuery!.Direct);
         Assert.Equal("FlightApi:KLM", stub.LastGetQuery.Providers);
         Assert.Equal("600-900", stub.LastGetQuery.ReturnDepartureTime);
+        Assert.Equal("leg-out-1", stub.LastGetQuery.OutboundLegId);
         Assert.Equal(2, stub.LastGetQuery.Page);
         Assert.Equal(100, stub.LastGetQuery.PageSize);
     }

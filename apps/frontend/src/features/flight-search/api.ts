@@ -22,6 +22,9 @@ type ApiSearchResponse = components['schemas']['SearchResponse']
 type ApiSearchMetadata = components['schemas']['SearchMetadata']
 type ApiSearchResult = components['schemas']['SearchResult']
 type ApiSearchResultLeg = components['schemas']['SearchResultLeg']
+type ApiSearchResultLegWithId = ApiSearchResultLeg & {
+  id?: string | null
+}
 type ApiSearchResultPriceOption = components['schemas']['SearchResultPriceOption']
 type ApiSearchResultBookingLink = {
   label?: string | null
@@ -96,7 +99,8 @@ const normalizeSegment = (segment: ApiSearchResultSegment): SearchResultSegment 
   durationMinutes: segment.durationMinutes ?? 0,
 })
 
-const normalizeLeg = (leg: ApiSearchResultLeg): SearchResultLeg => ({
+const normalizeLeg = (leg: ApiSearchResultLegWithId): SearchResultLeg => ({
+  id: leg.id ?? '',
   originAirport: leg.originAirport ?? '',
   destinationAirport: leg.destinationAirport ?? '',
   departureLocalTime: leg.departureLocalTime ?? '',
@@ -139,7 +143,7 @@ const normalizePriceOption = (option: ApiSearchResultPriceOptionWithLinks): Sear
 const normalizeResult = (result: ApiSearchResult): SearchResult => ({
   id: result.id ?? '',
   isRoundTrip: result.isRoundTrip ?? false,
-  legs: (result.legs ?? []).map(normalizeLeg),
+  legs: ((result.legs as ApiSearchResultLegWithId[] | null | undefined) ?? []).map(normalizeLeg),
   totalDurationMinutes: result.totalDurationMinutes ?? 0,
   priceOptions: (result.priceOptions ?? []).map(normalizePriceOption),
 })
@@ -279,6 +283,14 @@ const buildResultsQueryParams = (query: SearchResultsQuery) => {
 
   if (query.returnArrivalTime) {
     params.set('returnArrivalTime', `${query.returnArrivalTime[0]}-${query.returnArrivalTime[1]}`)
+  }
+
+  if (query.outboundLegId) {
+    params.set('outboundLegId', query.outboundLegId)
+  }
+
+  if (query.returnLegId) {
+    params.set('returnLegId', query.returnLegId)
   }
 
   if (query.page !== undefined) {

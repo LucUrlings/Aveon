@@ -171,6 +171,40 @@ h1 {
   background: #eef2f6;
 }
 
+.results-active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #e9f1ff;
+  color: #1f5fbf;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.clear-active-filter {
+  border: none;
+  background: transparent;
+  color: #5b6570;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.clear-active-filter:hover {
+  color: #1d2228;
+}
+
 .results-list {
   display: grid;
   gap: 16px;

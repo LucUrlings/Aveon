@@ -13,6 +13,8 @@ defineProps<{
   result: SearchResult
   expanded: boolean
   copyLabel: string
+  selectedOutboundLegId?: string | null
+  selectedReturnLegId?: string | null
 }>()
 
 const emit = defineEmits<{

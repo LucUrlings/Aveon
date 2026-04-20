@@ -32,6 +32,7 @@ describe('flight search api', () => {
                 id: 'result-1',
                 legs: [
                   {
+                    id: 'leg-1',
                     originAirport: 'AMS',
                     destinationAirport: 'DUB',
                     departureLocalTime: '2026-05-15T08:00:00',
@@ -179,6 +180,8 @@ describe('flight search api', () => {
       departureTime: [0, 720],
       returnDepartureTime: [900, 1200],
       returnArrivalTime: [960, 1260],
+      outboundLegId: 'out-1',
+      returnLegId: 'ret-1',
       page: 2,
       pageSize: 100,
     })
@@ -194,6 +197,8 @@ describe('flight search api', () => {
     expect(requestUrl.searchParams.get('departureTime')).toBe('0-720')
     expect(requestUrl.searchParams.get('returnDepartureTime')).toBe('900-1200')
     expect(requestUrl.searchParams.get('returnArrivalTime')).toBe('960-1260')
+    expect(requestUrl.searchParams.get('outboundLegId')).toBe('out-1')
+    expect(requestUrl.searchParams.get('returnLegId')).toBe('ret-1')
     expect(requestUrl.searchParams.get('page')).toBe('2')
     expect(requestUrl.searchParams.get('pageSize')).toBe('100')
   })

@@ -29,6 +29,10 @@ public record SearchResultsQuery
 
     public string? ReturnArrivalTime { get; init; }
 
+    public string? OutboundLegId { get; init; }
+
+    public string? ReturnLegId { get; init; }
+
     public int? Page { get; init; }
 
     public int? PageSize { get; init; }
@@ -61,6 +65,10 @@ public record SearchResultsQuery
 
     public (int Min, int Max)? GetReturnArrivalTimeRange() => ParseIntRange(ReturnArrivalTime);
 
+    public string? GetOutboundLegId() => NormalizeString(OutboundLegId);
+
+    public string? GetReturnLegId() => NormalizeString(ReturnLegId);
+
     private static List<string> ParseStringList(string? value) =>
         (value ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -84,5 +92,15 @@ public record SearchResultsQuery
         }
 
         return (Math.Min(min, max), Math.Max(min, max));
+    }
+
+    private static string? NormalizeString(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 }

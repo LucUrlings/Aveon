@@ -21,6 +21,7 @@ export type SearchResultSegment = {
 }
 
 export type SearchResultLeg = {
+  id: string
   originAirport: string
   destinationAirport: string
   departureLocalTime: string
@@ -119,6 +120,8 @@ export type SearchResultsQuery = {
   arrivalTime?: [number, number]
   returnDepartureTime?: [number, number]
   returnArrivalTime?: [number, number]
+  outboundLegId?: string
+  returnLegId?: string
   page?: number
   pageSize?: number
 }

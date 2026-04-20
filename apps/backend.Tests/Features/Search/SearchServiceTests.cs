@@ -400,6 +400,71 @@ public sealed class SearchServiceTests
     }
 
     [Fact]
+    public async Task GetSearchAsync_FiltersRoundTripsBySelectedLeg()
+    {
+        var roundTripSession = CreateStoredRoundTripSession();
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        await store.SetAsync(roundTripSession, CancellationToken.None);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
+
+        var outboundLegId = roundTripSession.Response.Results[0].Legs[0].Id;
+        var returnLegId = roundTripSession.Response.Results[1].Legs[1].Id;
+
+        var outboundResponse = await service.GetSearchAsync(
+            "search-roundtrip",
+            new SearchResultsQuery
+            {
+                OutboundLegId = outboundLegId
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(outboundResponse);
+        Assert.Single(outboundResponse!.Response.Results);
+        Assert.Equal("roundtrip-1", outboundResponse.Response.Results[0].Id);
+
+        var returnResponse = await service.GetSearchAsync(
+            "search-roundtrip",
+            new SearchResultsQuery
+            {
+                ReturnLegId = returnLegId
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(returnResponse);
+        Assert.Single(returnResponse!.Response.Results);
+        Assert.Equal("roundtrip-2", returnResponse.Response.Results[0].Id);
+    }
+
+    [Fact]
+    public async Task GetSearchAsync_FiltersByExactLegInstance_NotJustFlightCode()
+    {
+        var session = CreateStoredRoundTripSessionWithRepeatedFlightNumbers();
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        await store.SetAsync(session, CancellationToken.None);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
+
+        var firstOutboundLeg = session.Response.Results[0].Legs[0];
+        var secondOutboundLeg = session.Response.Results[1].Legs[0];
+
+        Assert.Equal(
+            firstOutboundLeg.Segments[0].FlightNumber,
+            secondOutboundLeg.Segments[0].FlightNumber);
+        Assert.NotEqual(firstOutboundLeg.Id, secondOutboundLeg.Id);
+
+        var response = await service.GetSearchAsync(
+            "search-roundtrip-repeated-flight-numbers",
+            new SearchResultsQuery
+            {
+                OutboundLegId = firstOutboundLeg.Id
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Single(response!.Response.Results);
+        Assert.Equal("roundtrip-a", response.Response.Results[0].Id);
+    }
+
+    [Fact]
     public async Task GetSearchAsync_PaginatesBeyondFormerCanonicalCap()
     {
         var results = Enumerable.Range(1, 2050)
@@ -550,6 +615,39 @@ public sealed class SearchServiceTests
                 new SearchPagination(1, 2, 2, 1)),
             null);
 
+    private static SearchSessionResponse CreateStoredRoundTripSessionWithRepeatedFlightNumbers() =>
+        new(
+            "search-roundtrip-repeated-flight-numbers",
+            "completed",
+            2,
+            2,
+            0,
+            new SearchResponse(
+                [
+                    CreateRoundTripResult(
+                        "roundtrip-a",
+                        new DateTime(2026, 5, 5, 8, 0, 0),
+                        new DateTime(2026, 5, 5, 11, 0, 0),
+                        new DateTime(2026, 5, 12, 19, 0, 0),
+                        new DateTime(2026, 5, 12, 22, 0, 0),
+                        "FlightApi:KLM",
+                        outboundFlightNumber: "1234",
+                        returnFlightNumber: "5678"),
+                    CreateRoundTripResult(
+                        "roundtrip-b",
+                        new DateTime(2026, 5, 19, 8, 0, 0),
+                        new DateTime(2026, 5, 19, 11, 0, 0),
+                        new DateTime(2026, 5, 26, 19, 0, 0),
+                        new DateTime(2026, 5, 26, 22, 0, 0),
+                        "FlightApi:KLM",
+                        outboundFlightNumber: "1234",
+                        returnFlightNumber: "5678")
+                ],
+                new SearchMetadata(2, 2, 2, 2, 0, 0),
+                new SearchFiltersMetadata([], [], [], [], new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchRangeMetadata(0, 0), new SearchStopFilterMetadata(0, 0, 0)),
+                new SearchPagination(1, 2, 2, 1)),
+            null);
+
     private static SearchResult CreateResult(
         string id,
         string originAirport,
@@ -564,6 +662,7 @@ public sealed class SearchServiceTests
             false,
             [
                 new SearchResultLeg(
+                    $"{id}-leg",
                     originAirport,
                     destinationAirport,
                     departureLocalTime,
@@ -580,28 +679,32 @@ public sealed class SearchServiceTests
         DateTime outboundArrival,
         DateTime returnDeparture,
         DateTime returnArrival,
-        string provider) =>
+        string provider,
+        string outboundFlightNumber = "100",
+        string returnFlightNumber = "200") =>
         new(
             id,
             true,
             [
                 new SearchResultLeg(
+                    $"{id}-outbound-leg",
                     "DUB",
                     "AMS",
                     outboundDeparture,
                     outboundArrival,
                     (int)(outboundArrival - outboundDeparture).TotalMinutes,
                     [
-                        CreateSegment("KLM", "KL", $"{id}-out", "DUB", "AMS", outboundDeparture, outboundArrival, (int)(outboundArrival - outboundDeparture).TotalMinutes)
+                        CreateSegment("KLM", "KL", outboundFlightNumber, "DUB", "AMS", outboundDeparture, outboundArrival, (int)(outboundArrival - outboundDeparture).TotalMinutes)
                     ]),
                 new SearchResultLeg(
+                    $"{id}-return-leg",
                     "AMS",
                     "DUB",
                     returnDeparture,
                     returnArrival,
                     (int)(returnArrival - returnDeparture).TotalMinutes,
                     [
-                        CreateSegment("KLM", "KL", $"{id}-ret", "AMS", "DUB", returnDeparture, returnArrival, (int)(returnArrival - returnDeparture).TotalMinutes)
+                        CreateSegment("KLM", "KL", returnFlightNumber, "AMS", "DUB", returnDeparture, returnArrival, (int)(returnArrival - returnDeparture).TotalMinutes)
                     ])
             ],
             (int)(outboundArrival - outboundDeparture + (returnArrival - returnDeparture)).TotalMinutes,

@@ -64,6 +64,7 @@ const makeSession = (overrides: Partial<SearchSessionResponse> = {}): SearchSess
         totalDurationMinutes: 90,
         legs: [
           {
+            id: 'morning-leg',
             originAirport: 'AMS',
             destinationAirport: 'DUB',
             departureLocalTime: '2026-05-15T09:00:00',
@@ -98,6 +99,7 @@ const makeSession = (overrides: Partial<SearchSessionResponse> = {}): SearchSess
         totalDurationMinutes: 90,
         legs: [
           {
+            id: 'evening-leg',
             originAirport: 'AMS',
             destinationAirport: 'DUB',
             departureLocalTime: '2026-05-15T20:00:00',
@@ -386,6 +388,7 @@ describe('FlightSearch', () => {
             totalDurationMinutes: 180,
             legs: [
               {
+                id: 'return-outbound-leg',
                 originAirport: 'AMS',
                 destinationAirport: 'DUB',
                 departureLocalTime: '2026-06-01T09:00:00',
@@ -394,6 +397,7 @@ describe('FlightSearch', () => {
                 segments: [],
               },
               {
+                id: 'return-return-leg',
                 originAirport: 'DUB',
                 destinationAirport: 'AMS',
                 departureLocalTime: '2026-06-10T18:00:00',
@@ -458,6 +462,85 @@ describe('FlightSearch', () => {
         twoPlusStop: false,
         returnDepartureTime: [1080, 1260],
         returnArrivalTime: [1140, 1320],
+        page: 1,
+        pageSize: 100,
+      }))
+    })
+  })
+
+  it('filters return combinations by a selected leg through the backend query', async () => {
+    mockSearchFlightsRequest.mockResolvedValue(makeSession({
+      response: {
+        ...makeSession().response,
+        results: [
+          {
+            id: 'return-1',
+            isRoundTrip: true,
+            totalDurationMinutes: 180,
+            legs: [
+              {
+                id: 'return-outbound-leg',
+                originAirport: 'AMS',
+                destinationAirport: 'DUB',
+                departureLocalTime: '2026-06-01T09:00:00',
+                arrivalLocalTime: '2026-06-01T10:30:00',
+                durationMinutes: 90,
+                segments: [],
+              },
+              {
+                id: 'return-return-leg',
+                originAirport: 'DUB',
+                destinationAirport: 'AMS',
+                departureLocalTime: '2026-06-10T18:00:00',
+                arrivalLocalTime: '2026-06-10T19:30:00',
+                durationMinutes: 90,
+                segments: [],
+              },
+            ],
+            priceOptions: [
+              {
+                id: 'rp1',
+                provider: 'FlightApi:KLM',
+                totalPrice: { amount: 200, currency: 'EUR' },
+                bookingLinks: [{ label: 'View fare', url: 'https://example.com/return-1' }],
+              },
+            ],
+          },
+        ],
+      },
+    }))
+    mockGetSearchSession.mockResolvedValue(makeSession())
+
+    const { wrapper } = await mountWithRouter(
+      '/?origins=AMS&destinations=DUB&dates=2026-06-01&tripType=return&returnDateFrom=2026-06-10&returnDateTo=2026-06-10',
+      {
+        global: {
+          stubs: {
+            FlightSearchBar: {
+              emits: ['submit'],
+              template: '<button class="submit-search" @click="$emit(\'submit\')">submit</button>',
+            },
+            SearchFilters: true,
+            SearchResultCard: {
+              emits: ['filterLeg'],
+              template: '<button class="filter-leg" @click="$emit(\'filterLeg\', { legId: \'return-outbound-leg\', legIndex: 0 })">filter leg</button>',
+            },
+          },
+        },
+      },
+    )
+
+    await wrapper.get('.submit-search').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('.filter-leg').trigger('click')
+
+    await vi.waitFor(() => {
+      expect(mockGetSearchSession).toHaveBeenLastCalledWith('search-1', expect.objectContaining({
+        direct: true,
+        oneStop: false,
+        twoPlusStop: false,
+        outboundLegId: 'return-outbound-leg',
         page: 1,
         pageSize: 100,
       }))

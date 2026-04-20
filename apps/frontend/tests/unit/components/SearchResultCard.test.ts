@@ -11,6 +11,7 @@ const directResult: SearchResult = {
   totalDurationMinutes: 95,
   legs: [
     {
+      id: 'direct-leg-1',
       originAirport: 'AMS',
       destinationAirport: 'DUB',
       departureLocalTime: '2026-05-15T09:45:00',
@@ -47,6 +48,7 @@ const multiLegResult: SearchResult = {
   totalDurationMinutes: 240,
   legs: [
     {
+      id: 'return-outbound-leg',
       originAirport: 'AMS',
       destinationAirport: 'CDG',
       departureLocalTime: '2026-05-15T08:00:00',
@@ -66,6 +68,7 @@ const multiLegResult: SearchResult = {
       ],
     },
     {
+      id: 'return-return-leg',
       originAirport: 'CDG',
       destinationAirport: 'AMS',
       departureLocalTime: '2026-05-18T10:30:00',
@@ -217,6 +220,23 @@ describe('SearchResultCard', () => {
     expect(wrapper.text()).toContain('Book return')
     expect(wrapper.text()).toContain('EUR 80.00')
     expect(wrapper.text()).toContain('EUR 70.00')
+  })
+
+  it('emits a leg filter selection from return cards', async () => {
+    const wrapper = mount(SearchResultCard, {
+      props: {
+        result: syntheticReturnResult,
+        expanded: false,
+        selectedOutboundLegId: null,
+        selectedReturnLegId: null,
+      },
+    })
+
+    await wrapper.get('.leg-filter-button').trigger('click')
+
+    expect(wrapper.emitted('filterLeg')).toEqual([
+      [{ legId: 'return-outbound-leg', legIndex: 0 }],
+    ])
   })
 
   it('still renders malformed combined one-way fares as separate bookings', () => {
