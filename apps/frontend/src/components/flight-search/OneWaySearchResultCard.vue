@@ -6,7 +6,6 @@ import {
   formatProviderName,
   getAirlineSummary,
   getPrimaryBookingLink,
-  isDirectFlight,
 } from './SearchResultCard.shared'
 
 defineProps<{
@@ -33,19 +32,12 @@ const emit = defineEmits<{
           {{ result.legs[result.legs.length - 1]?.destinationAirport }}
         </p>
       </div>
-      <div v-if="isDirectFlight(result)" class="details-timing">
-        <span>
-          {{ formatDateTime(result.legs[0]?.departureLocalTime ?? '') }} to
-          {{ formatDateTime(result.legs[result.legs.length - 1]?.arrivalLocalTime ?? '') }}
-        </span>
-        <strong>{{ formatDuration(result.totalDurationMinutes) }}</strong>
-      </div>
       <button class="copy-fare-button" type="button" :title="copyLabel" @click="emit('copyFare')">
         {{ copyLabel }}
       </button>
     </div>
 
-    <div v-if="!isDirectFlight(result)">
+    <div>
       <div
         v-for="(leg, legIndex) in result.legs"
         :key="`${result.id}-${legIndex}`"
@@ -53,6 +45,7 @@ const emit = defineEmits<{
       >
         <div class="leg-summary">
           <p class="leg-route">{{ leg.originAirport }} → {{ leg.destinationAirport }}</p>
+          <span class="leg-actions" aria-hidden="true"></span>
           <span class="leg-times">{{ formatDateTime(leg.departureLocalTime) }} to {{ formatDateTime(leg.arrivalLocalTime) }}</span>
           <strong>{{ formatDuration(leg.durationMinutes) }}</strong>
         </div>

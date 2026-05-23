@@ -24,6 +24,21 @@ vi.mock('../../../src/features/flight-search/api', () => ({
   searchFlightsRequest: mockSearchFlightsRequest,
 }))
 
+const getDateAheadOfToday = (daysAhead: number) => {
+  const today = new Date()
+  return new Date(Date.UTC(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() + daysAhead,
+  )).toISOString().slice(0, 10)
+}
+
+const getDefaultDepartureDates = () => [
+  getDateAheadOfToday(7),
+  getDateAheadOfToday(8),
+  getDateAheadOfToday(9),
+]
+
 const makeSession = (overrides: Partial<SearchSessionResponse> = {}): SearchSessionResponse => ({
   searchId: 'search-1',
   status: 'completed',
@@ -222,7 +237,7 @@ describe('FlightSearch', () => {
 
     expect(wrapper.get('.combination-prop').text()).toBe('3')
     expect(mockSearchFlightsRequest).toHaveBeenCalledWith(expect.objectContaining({
-      selectedDates: ['2026-05-15', '2026-05-16', '2026-05-17'],
+      selectedDates: getDefaultDepartureDates(),
       returnDateFrom: null,
       returnDateTo: null,
     }))

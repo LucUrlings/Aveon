@@ -17,6 +17,23 @@ import {
 const MAX_DEPARTURE_RANGE_DAYS = 10
 const DEFAULT_PAGE_SIZE = 100
 
+const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10)
+
+const getDateAheadOfToday = (daysAhead: number) => {
+  const today = new Date()
+  return toDateInputValue(new Date(Date.UTC(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() + daysAhead,
+  )))
+}
+
+const defaultDepartureDates = [
+  getDateAheadOfToday(7),
+  getDateAheadOfToday(8),
+  getDateAheadOfToday(9),
+]
+
 const originInput = ref('')
 const destinationInput = ref('')
 const originAirports = ref<AirportOption[]>([
@@ -27,9 +44,9 @@ const destinationAirports = ref<AirportOption[]>([
 ])
 
 const tripType = ref<'oneWay' | 'return'>('oneWay')
-const departureDateFrom = ref('2026-05-15')
-const departureDateTo = ref('2026-05-17')
-const selectedDepartureDates = ref<string[]>(['2026-05-15', '2026-05-16', '2026-05-17'])
+const departureDateFrom = ref(defaultDepartureDates[0])
+const departureDateTo = ref(defaultDepartureDates[defaultDepartureDates.length - 1])
+const selectedDepartureDates = ref<string[]>([...defaultDepartureDates])
 const returnDateFrom = ref<string | null>(null)
 const returnDateTo = ref<string | null>(null)
 const selectedReturnDates = ref<string[]>([])
