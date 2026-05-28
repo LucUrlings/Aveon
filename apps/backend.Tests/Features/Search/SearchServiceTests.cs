@@ -19,7 +19,7 @@ public sealed class SearchServiceTests
         var store = new FlakySearchSessionStore(failingCalls: [2]);
         var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
 
-        var initialSession = await service.StartSearchAsync(CreateRequest(), CancellationToken.None);
+        var initialSession = await service.StartSearchAsync(CreateRequest(), new SearchLimit(100, null), CancellationToken.None);
 
         var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
 
@@ -35,7 +35,7 @@ public sealed class SearchServiceTests
         var store = new FlakySearchSessionStore(failingCalls: [2]);
         var service = CreateSearchService(store, new ThrowingFlightSearchProvider());
 
-        var initialSession = await service.StartSearchAsync(CreateRequest(), CancellationToken.None);
+        var initialSession = await service.StartSearchAsync(CreateRequest(), new SearchLimit(100, null), CancellationToken.None);
 
         var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
 
@@ -67,7 +67,7 @@ public sealed class SearchServiceTests
             Adults: 1,
             CabinClass: "economy");
 
-        var initialSession = await service.StartSearchAsync(request, CancellationToken.None);
+        var initialSession = await service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None);
         var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
 
         Assert.Equal(60, initialSession.TotalCombinations);
@@ -91,16 +91,16 @@ public sealed class SearchServiceTests
             Adults: 1,
             CabinClass: "economy");
 
-        var error = await Assert.ThrowsAsync<ArgumentException>(() => service.StartSearchAsync(request, CancellationToken.None));
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None));
 
         Assert.Equal("Search exceeds the limit of 100 combinations.", error.Message);
     }
 
     [Fact]
-    public async Task StartSearchAsync_UsesConfiguredMaxSearchCombinationLimit()
+    public async Task StartSearchAsync_UsesProvidedSearchCombinationLimit()
     {
         var store = new FlakySearchSessionStore(failingCalls: []);
-        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider(), maxSearchCombinations: 2);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
 
         var request = new SearchRequest(
             OriginAirports: ["DUB"],
@@ -111,9 +111,56 @@ public sealed class SearchServiceTests
             Adults: 1,
             CabinClass: "economy");
 
-        var error = await Assert.ThrowsAsync<ArgumentException>(() => service.StartSearchAsync(request, CancellationToken.None));
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => service.StartSearchAsync(request, new SearchLimit(2, null), CancellationToken.None));
 
         Assert.Equal("Search exceeds the limit of 2 combinations.", error.Message);
+    }
+
+    [Fact]
+    public async Task StartSearchAsync_UsesProvidedLimitExceededMessage()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
+
+        var request = new SearchRequest(
+            OriginAirports: ["DUB"],
+            DestinationAirports: ["AMS"],
+            SelectedDates: [new DateOnly(2026, 5, 15), new DateOnly(2026, 5, 16)],
+            ReturnDateFrom: null,
+            ReturnDateTo: null,
+            Adults: 1,
+            CabinClass: "economy");
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.StartSearchAsync(
+                request,
+                new SearchLimit(1, "Sign up or log in to search up to 100 combinations."),
+                CancellationToken.None));
+
+        Assert.Equal("Sign up or log in to search up to 100 combinations.", error.Message);
+    }
+
+    [Fact]
+    public async Task StartSearchAsync_AllowsUnlimitedSearchCombinationLimit()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var provider = new RecordingFlightSearchProvider();
+        var service = CreateSearchService(store, provider);
+
+        var request = new SearchRequest(
+            OriginAirports: ["DUB", "ORK", "SNN"],
+            DestinationAirports: ["AMS", "BCN", "CDG", "FRA", "MAD", "LHR"],
+            SelectedDates: [new DateOnly(2026, 5, 15)],
+            ReturnDateFrom: null,
+            ReturnDateTo: null,
+            Adults: 1,
+            CabinClass: "economy");
+
+        var initialSession = await service.StartSearchAsync(request, new SearchLimit(null, null), CancellationToken.None);
+        var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
+
+        Assert.Equal("completed", finalSession.Status);
+        Assert.Equal(18, provider.Requests.Count);
     }
 
     [Fact]
@@ -131,7 +178,7 @@ public sealed class SearchServiceTests
             Adults: 1,
             CabinClass: "economy");
 
-        var error = await Assert.ThrowsAsync<ArgumentException>(() => service.StartSearchAsync(request, CancellationToken.None));
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None));
 
         Assert.Equal("Search must contain at least one valid origin, destination, and departure date combination.", error.Message);
     }
@@ -142,7 +189,7 @@ public sealed class SearchServiceTests
         var store = new FlakySearchSessionStore(failingCalls: []);
         var service = CreateSearchService(store, new TimedFlightSearchProvider());
 
-        var initialSession = await service.StartSearchAsync(CreateRequest(), CancellationToken.None);
+        var initialSession = await service.StartSearchAsync(CreateRequest(), new SearchLimit(100, null), CancellationToken.None);
         var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
         var result = Assert.Single(finalSession.Response.Results);
         var leg = Assert.Single(result.Legs);
@@ -167,7 +214,6 @@ public sealed class SearchServiceTests
         var service = new SearchService(
             scopeFactory,
             store,
-            Options.Create(new SearchOptions()),
             NullLogger<SearchService>.Instance);
 
         var request = new SearchRequest(
@@ -179,7 +225,7 @@ public sealed class SearchServiceTests
             1,
             "economy");
 
-        var initialSession = await service.StartSearchAsync(request, CancellationToken.None);
+        var initialSession = await service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None);
         var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
 
         Assert.Equal("failed", finalSession.Status);
@@ -204,7 +250,7 @@ public sealed class SearchServiceTests
         var provider = new RecordingFlightSearchProvider();
         var service = CreateSearchService(store, provider);
 
-        var initialSession = await service.StartSearchAsync(request, CancellationToken.None);
+        var initialSession = await service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None);
         var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
 
         Assert.Equal("completed", finalSession.Status);
@@ -227,7 +273,7 @@ public sealed class SearchServiceTests
         var store = new FlakySearchSessionStore(failingCalls: []);
         var service = CreateSearchService(store, new RoundTripMergeFlightSearchProvider());
 
-        var initialSession = await service.StartSearchAsync(request, CancellationToken.None);
+        var initialSession = await service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None);
         var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
 
         Assert.Equal("completed", finalSession.Status);
@@ -263,7 +309,7 @@ public sealed class SearchServiceTests
         var store = new FlakySearchSessionStore(failingCalls: []);
         var service = CreateSearchService(store, new MissingSyntheticBookingLinkFlightSearchProvider());
 
-        var initialSession = await service.StartSearchAsync(request, CancellationToken.None);
+        var initialSession = await service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None);
         var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
 
         Assert.Equal("completed", finalSession.Status);
@@ -286,7 +332,7 @@ public sealed class SearchServiceTests
         var store = new FlakySearchSessionStore(failingCalls: []);
         var service = CreateSearchService(store, new OpenJawSyntheticFlightSearchProvider());
 
-        var initialSession = await service.StartSearchAsync(request, CancellationToken.None);
+        var initialSession = await service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None);
         var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
 
         Assert.Equal("completed", finalSession.Status);
@@ -740,15 +786,10 @@ public sealed class SearchServiceTests
 
     private static ISearchService CreateSearchService(
         ISearchSessionStore store,
-        IFlightSearchProvider flightSearchProvider,
-        int maxSearchCombinations = 100)
+        IFlightSearchProvider flightSearchProvider)
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IOptions<SearchOptions>>(Options.Create(new SearchOptions
-        {
-            MaxSearchCombinations = maxSearchCombinations
-        }));
         services.AddSingleton<ISearchSessionStore>(store);
         services.AddSingleton<IFlightSearchProvider>(flightSearchProvider);
         services.AddSingleton<ISearchService, SearchService>();

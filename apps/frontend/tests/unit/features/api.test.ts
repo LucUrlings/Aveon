@@ -116,18 +116,53 @@ describe('flight search api', () => {
     ])
     expect(session.response.filters.providers).toEqual([{ value: 'FlightApi:KLM', count: 1 }])
     expect(session.response.pagination.totalResults).toBe(1)
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining('/api/v1/search'),
+      expect.objectContaining({ credentials: 'include' }),
+    )
   })
 
   it('throws the backend message for non-ok responses', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 400,
+      headers: {
+        get: () => null,
+      },
       text: async () => 'Bad request from backend',
     })
 
     const { getSearchSession } = await import('../../../src/features/flight-search/api')
 
     await expect(getSearchSession('search-1', { direct: true, providers: ['FlightApi:KLM'] })).rejects.toThrow('Bad request from backend')
+  })
+
+  it('throws validation messages from problem details for failed search requests', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 400,
+      headers: {
+        get: (key: string) => key.toLowerCase() === 'content-type' ? 'application/problem+json' : null,
+      },
+      json: async () => ({
+        title: 'One or more validation errors occurred.',
+        errors: {
+          SearchRequest: ['Search exceeds the limit of 15 combinations.'],
+        },
+      }),
+    })
+
+    const { searchFlightsRequest } = await import('../../../src/features/flight-search/api')
+
+    await expect(searchFlightsRequest({
+      originAirports: ['DUB'],
+      destinationAirports: ['AMS'],
+      selectedDates: ['2026-05-15'],
+      returnDateFrom: null,
+      returnDateTo: null,
+      adults: 1,
+      cabinClass: 'economy',
+    })).rejects.toThrow('Search exceeds the limit of 15 combinations.')
   })
 
   it('serializes pagination and filter query params for session reads', async () => {
@@ -188,6 +223,7 @@ describe('flight search api', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/search/search-1?'),
+      expect.objectContaining({ credentials: 'include' }),
     )
 
     const requestUrl = new URL(fetchMock.mock.calls[0][0] as string)

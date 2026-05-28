@@ -1,6 +1,7 @@
 using backend.Features.Search;
 using backend.Features.Search.Models;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using Xunit;
 
 namespace backend.Tests;
@@ -11,7 +12,7 @@ public sealed class SearchControllerTests
     public async Task Search_ReturnsAccepted_WhenServiceSucceeds()
     {
         var session = CreateSession(status: "running");
-        var controller = new SearchController(new StubSearchService(startResponse: session));
+        var controller = new SearchController(new StubSearchService(startResponse: session), new StubSearchLimitResolver(new SearchLimit(15, "limit")));
 
         var result = await controller.Search(CreateRequest(), CancellationToken.None);
 
@@ -20,9 +21,21 @@ public sealed class SearchControllerTests
     }
 
     [Fact]
+    public async Task Search_PassesResolvedSearchLimitToService()
+    {
+        var session = CreateSession(status: "running");
+        var stub = new StubSearchService(startResponse: session);
+        var controller = new SearchController(stub, new StubSearchLimitResolver(new SearchLimit(null, null)));
+
+        await controller.Search(CreateRequest(), CancellationToken.None);
+
+        Assert.Null(stub.LastSearchLimit?.MaxSearchCombinations);
+    }
+
+    [Fact]
     public async Task Search_ReturnsValidationProblem_WhenServiceThrowsArgumentException()
     {
-        var controller = new SearchController(new StubSearchService(startException: new ArgumentException("Bad request")));
+        var controller = new SearchController(new StubSearchService(startException: new ArgumentException("Bad request")), new StubSearchLimitResolver(new SearchLimit(15, "limit")));
 
         var result = await controller.Search(CreateRequest(), CancellationToken.None);
 
@@ -35,7 +48,7 @@ public sealed class SearchControllerTests
     public async Task Get_ReturnsOk_WhenSessionExists()
     {
         var session = CreateSession(status: "completed");
-        var controller = new SearchController(new StubSearchService(getResponse: session));
+        var controller = new SearchController(new StubSearchService(getResponse: session), new StubSearchLimitResolver(new SearchLimit(15, "limit")));
 
         var result = await controller.Get("search-1", new SearchResultsQuery(), CancellationToken.None);
 
@@ -48,7 +61,7 @@ public sealed class SearchControllerTests
     {
         var session = CreateSession(status: "completed");
         var stub = new StubSearchService(getResponse: session);
-        var controller = new SearchController(stub);
+        var controller = new SearchController(stub, new StubSearchLimitResolver(new SearchLimit(15, "limit")));
         var query = new SearchResultsQuery
         {
             Direct = true,
@@ -73,7 +86,7 @@ public sealed class SearchControllerTests
     [Fact]
     public async Task Get_ReturnsNotFound_WhenSessionMissing()
     {
-        var controller = new SearchController(new StubSearchService(getResponse: null));
+        var controller = new SearchController(new StubSearchService(getResponse: null), new StubSearchLimitResolver(new SearchLimit(15, "limit")));
 
         var result = await controller.Get("missing", new SearchResultsQuery(), CancellationToken.None);
 
@@ -103,9 +116,11 @@ public sealed class SearchControllerTests
         Exception? startException = null) : ISearchService
     {
         public SearchResultsQuery? LastGetQuery { get; private set; }
+        public SearchLimit? LastSearchLimit { get; private set; }
 
-        public Task<SearchSessionResponse> StartSearchAsync(SearchRequest request, CancellationToken cancellationToken)
+        public Task<SearchSessionResponse> StartSearchAsync(SearchRequest request, SearchLimit searchLimit, CancellationToken cancellationToken)
         {
+            LastSearchLimit = searchLimit;
             if (startException is not null)
             {
                 throw startException;
@@ -119,5 +134,10 @@ public sealed class SearchControllerTests
             LastGetQuery = query;
             return Task.FromResult(getResponse);
         }
+    }
+
+    private sealed class StubSearchLimitResolver(SearchLimit searchLimit) : ISearchLimitResolver
+    {
+        public SearchLimit Resolve(ClaimsPrincipal user) => searchLimit;
     }
 }

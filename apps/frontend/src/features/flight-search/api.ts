@@ -210,6 +210,28 @@ const normalizeSearchSessionResponse = (session: ApiSearchSessionResponse): Sear
   }
 }
 
+const readErrorMessage = async (response: Response) => {
+  const fallback = `HTTP ${response.status}`
+  const contentType = response.headers.get('content-type') ?? ''
+
+  if (contentType.includes('application/json') || contentType.includes('+json')) {
+    const problem = await response.json().catch(() => null) as {
+      title?: string
+      detail?: string
+      errors?: Record<string, string[]>
+    } | null
+
+    const validationMessage = problem?.errors
+      ? Object.values(problem.errors).flat().filter(Boolean).join(' ')
+      : ''
+
+    return validationMessage || problem?.detail || problem?.title || fallback
+  }
+
+  const message = await response.text()
+  return message || fallback
+}
+
 export const fetchAirportSuggestions = async (query: string) => {
   const res = await fetch(`${apiBaseUrl}/api/v1/airports?query=${encodeURIComponent(query)}`)
   if (!res.ok) {
@@ -223,6 +245,7 @@ export const fetchAirportSuggestions = async (query: string) => {
 export const searchFlightsRequest = async (request: SearchRequest) => {
   const res = await fetch(`${apiBaseUrl}/api/v1/search`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
@@ -230,8 +253,7 @@ export const searchFlightsRequest = async (request: SearchRequest) => {
   })
 
   if (!res.ok) {
-    const message = await res.text()
-    throw new Error(message || `HTTP ${res.status}`)
+    throw new Error(await readErrorMessage(res))
   }
 
   return normalizeSearchSessionResponse((await res.json()) as ApiSearchSessionResponse)
@@ -310,11 +332,12 @@ export const getSearchSession = async (searchId: string, query: SearchResultsQue
     ? `${apiBaseUrl}/api/v1/search/${encodeURIComponent(searchId)}?${queryString}`
     : `${apiBaseUrl}/api/v1/search/${encodeURIComponent(searchId)}`
 
-  const res = await fetch(url)
+  const res = await fetch(url, {
+    credentials: 'include',
+  })
 
   if (!res.ok) {
-    const message = await res.text()
-    throw new Error(message || `HTTP ${res.status}`)
+    throw new Error(await readErrorMessage(res))
   }
 
   return normalizeSearchSessionResponse((await res.json()) as ApiSearchSessionResponse)

@@ -6,6 +6,8 @@ services:
     depends_on:
       aveon-redis:
         condition: service_healthy
+      aveon-postgres:
+        condition: service_healthy
     ports:
       - "${AVEON_PORT:-8080}:8080"
     environment:
@@ -15,7 +17,27 @@ services:
       Redis__FlightApiOneWayTtlMinutes: ${REDIS_FLIGHT_API_ONE_WAY_TTL_MINUTES:-30}
       Redis__AirportDataTtlMinutes: ${REDIS_AIRPORT_DATA_TTL_MINUTES:-10080}
       Redis__SearchSessionTtlMinutes: ${REDIS_SEARCH_SESSION_TTL_MINUTES:-30}
-      Search__MaxSearchCombinations: ${SEARCH_MAX_SEARCH_COMBINATIONS:-100}
+      Search__AnonymousMaxSearchCombinations: ${SEARCH_ANONYMOUS_MAX_SEARCH_COMBINATIONS:-15}
+      Search__UserMaxSearchCombinations: ${SEARCH_USER_MAX_SEARCH_COMBINATIONS:-100}
+      ConnectionStrings__Default: Host=aveon-postgres;Port=5432;Database=${POSTGRES_DB:-aveon};Username=${POSTGRES_USER:-aveon};Password=${POSTGRES_PASSWORD:-aveon_dev_password}
+    networks:
+      - aveon-network
+
+  aveon-postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aveon}
+      POSTGRES_USER: ${POSTGRES_USER:-aveon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aveon_dev_password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - aveon-postgres-data:/var/lib/postgresql/data
     networks:
       - aveon-network
 
@@ -36,6 +58,7 @@ services:
 
 volumes:
   aveon-redis-data:
+  aveon-postgres-data:
 
 networks:
   aveon-network:

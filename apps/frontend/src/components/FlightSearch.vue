@@ -4,6 +4,7 @@ import { useRoute, useRouter, type LocationQueryValue } from 'vue-router'
 import FlightSearchBar from './flight-search/FlightSearchBar.vue'
 import SearchFilters from './flight-search/SearchFilters.vue'
 import SearchResultCard from './flight-search/SearchResultCard.vue'
+import { useAuth } from '../features/auth/useAuth'
 import { fetchAirportSuggestions, getSearchSession, searchFlightsRequest } from '../features/flight-search/api'
 import {
   cabinOptions,
@@ -81,6 +82,13 @@ const selectedReturnLegId = ref<string | null>(null)
 const currentPage = ref(1)
 const isLoadingMore = ref(false)
 const loadMoreSentinel = ref<HTMLElement | null>(null)
+const authMode = ref<'login' | 'register'>('login')
+const authEmail = ref('')
+const authPassword = ref('')
+const authError = ref<string | null>(null)
+const authSubmitting = ref(false)
+
+const auth = useAuth()
 
 let originRequestId = 0
 let destinationRequestId = 0
@@ -1028,6 +1036,7 @@ const setupLoadMoreObserver = () => {
 }
 
 onMounted(() => {
+  void auth.refresh()
   applyUrlState()
   hasMounted = true
   void updateRouteState()
@@ -1189,10 +1198,79 @@ const loadNextPage = async () => {
     isLoadingMore.value = false
   }
 }
+
+const submitAuth = async () => {
+  authError.value = null
+  authSubmitting.value = true
+  try {
+    const credentials = {
+      email: authEmail.value.trim(),
+      password: authPassword.value,
+    }
+
+    if (authMode.value === 'register') {
+      await auth.signUp(credentials)
+    } else {
+      await auth.signIn(credentials)
+    }
+
+    authPassword.value = ''
+  } catch (ex) {
+    authError.value = ex instanceof Error ? ex.message : 'Authentication failed.'
+  } finally {
+    authSubmitting.value = false
+  }
+}
+
+const signOut = async () => {
+  authError.value = null
+  authSubmitting.value = true
+  try {
+    await auth.signOut()
+    authPassword.value = ''
+  } catch (ex) {
+    authError.value = ex instanceof Error ? ex.message : 'Logout failed.'
+  } finally {
+    authSubmitting.value = false
+  }
+}
 </script>
 
 <template>
   <main class="search-page">
+    <nav class="top-nav" aria-label="Main">
+      <div class="brand-mark">
+        <span>Aveon</span>
+      </div>
+
+      <div class="auth-nav" aria-label="Account">
+        <div v-if="auth.isAuthenticated.value" class="auth-account">
+          <span>{{ auth.user.value.email }}</span>
+          <button type="button" :disabled="authSubmitting" @click="signOut">
+            Logout
+          </button>
+        </div>
+
+        <form v-else class="auth-form" @submit.prevent="submitAuth">
+          <input v-model="authEmail" type="email" autocomplete="email" placeholder="Email" required />
+          <input
+            v-model="authPassword"
+            type="password"
+            :autocomplete="authMode === 'register' ? 'new-password' : 'current-password'"
+            placeholder="Password"
+            required
+          />
+          <button type="submit" :disabled="authSubmitting" @click="authMode = 'login'">
+            {{ authSubmitting && authMode === 'login' ? 'Working...' : 'Login' }}
+          </button>
+          <button type="submit" :disabled="authSubmitting" @click="authMode = 'register'">
+            {{ authSubmitting && authMode === 'register' ? 'Working...' : 'Register' }}
+          </button>
+        </form>
+      </div>
+    </nav>
+    <p v-if="authError" class="auth-error">{{ authError }}</p>
+
     <section class="hero-panel">
       <div class="hero-copy">
         <p class="eyebrow">Aveon</p>

@@ -5,7 +5,9 @@ namespace backend.Features.Search;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-public class SearchController(ISearchService searchService) : ControllerBase
+public class SearchController(
+    ISearchService searchService,
+    ISearchLimitResolver searchLimitResolver) : ControllerBase
 {
     [HttpPost]
     [ProducesResponseType<SearchSessionResponse>(StatusCodes.Status202Accepted)]
@@ -17,7 +19,8 @@ public class SearchController(ISearchService searchService) : ControllerBase
     {
         try
         {
-            var response = await searchService.StartSearchAsync(request, cancellationToken);
+            var searchLimit = searchLimitResolver.Resolve(User);
+            var response = await searchService.StartSearchAsync(request, searchLimit, cancellationToken);
             return Accepted(response);
         }
         catch (ArgumentException ex)

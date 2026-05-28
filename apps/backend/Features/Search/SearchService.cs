@@ -5,14 +5,12 @@ using backend.Infrastructure.Providers.FlightApi;
 using backend.Infrastructure.Providers.FlightApi.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace backend.Features.Search;
 
 public sealed class SearchService(
     IServiceScopeFactory serviceScopeFactory,
     ISearchSessionStore searchSessionStore,
-    IOptions<SearchOptions> searchOptions,
     ILogger<SearchService> logger) : ISearchService
 {
     private const int MaxConcurrentProviderCalls = 5;
@@ -21,14 +19,14 @@ public sealed class SearchService(
     private const string StatusCompleted = "completed";
     private const string StatusFailed = "failed";
     private static readonly SearchResultsQuery EmptyQuery = new();
-    private readonly int _maxSearchCombinations = Math.Max(searchOptions.Value.MaxSearchCombinations, 1);
 
     public async Task<SearchSessionResponse> StartSearchAsync(
         SearchRequest request,
+        SearchLimit searchLimit,
         CancellationToken cancellationToken)
     {
         var searchPlan = BuildSearchPlan(request);
-        Validate(request, searchPlan);
+        Validate(request, searchPlan, searchLimit);
         var searchId = Guid.NewGuid().ToString("N");
 
         var initialSession = new SearchSessionResponse(
@@ -451,7 +449,7 @@ public sealed class SearchService(
             pagination);
     }
 
-    private void Validate(SearchRequest request, SearchPlan searchPlan)
+    private static void Validate(SearchRequest request, SearchPlan searchPlan, SearchLimit searchLimit)
     {
         if (request.OriginAirports.Count == 0)
         {
@@ -478,9 +476,9 @@ public sealed class SearchService(
             throw new ArgumentException("Search must contain at least one valid origin, destination, and departure date combination.");
         }
 
-        if (searchPlan.TotalProviderCalls > _maxSearchCombinations)
+        if (searchLimit.MaxSearchCombinations is not null && searchPlan.TotalProviderCalls > searchLimit.MaxSearchCombinations.Value)
         {
-            throw new ArgumentException($"Search exceeds the limit of {_maxSearchCombinations} combinations.");
+            throw new ArgumentException(searchLimit.ExceededMessage ?? $"Search exceeds the limit of {searchLimit.MaxSearchCombinations.Value} combinations.");
         }
     }
 

@@ -10,6 +10,7 @@
 }
 
 .hero-panel,
+.top-nav,
 .search-bar-wrap,
 .progress-shell,
 .results-grid,
@@ -21,6 +22,95 @@
 .search-bar-wrap {
   position: relative;
   z-index: 40;
+}
+
+.top-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.brand-mark {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  color: #9c5a11;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.auth-nav {
+  min-width: 0;
+}
+
+.auth-form,
+.auth-account {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  gap: 6px;
+}
+
+.auth-form input {
+  width: 180px;
+  min-width: 0;
+  border: 1px solid rgba(29, 34, 40, 0.12);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #1d2228;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.auth-form button,
+.auth-account button {
+  border: 1px solid rgba(29, 34, 40, 0.12);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: #fff;
+  color: #4b5661;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.auth-form button[type='submit']:first-of-type {
+  border-color: rgba(31, 95, 191, 0.24);
+  background: #e9f1ff;
+  color: #1f5fbf;
+}
+
+.auth-form button:disabled,
+.auth-account button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.auth-account span {
+  max-width: 280px;
+  color: #4b5661;
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.auth-error {
+  width: min(1520px, 100%);
+  margin: -8px auto 10px;
+  padding: 7px 9px;
+  border: 1px solid rgba(165, 58, 42, 0.16);
+  border-radius: 8px;
+  background: #fff0ef;
+  color: #a53a2a;
+  font-size: 0.76rem;
+  font-weight: 700;
 }
 
 .hero-panel {
@@ -302,6 +392,25 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .top-nav {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .auth-nav,
+  .auth-form {
+    width: 100%;
+  }
+
+  .auth-form {
+    justify-content: start;
+    flex-wrap: wrap;
+  }
+
+  .auth-form input {
+    flex: 1 1 180px;
+  }
+
   .results-header {
     align-items: start;
     flex-direction: column;
@@ -335,6 +444,12 @@ h1 {
 
   .lead {
     font-size: 0.8rem;
+  }
+
+  .auth-form input,
+  .auth-form button {
+    width: 100%;
+    flex: 1 1 100%;
   }
 
   .progress-shell,
