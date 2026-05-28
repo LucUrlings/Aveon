@@ -6,6 +6,8 @@ import {
   formatPrice,
   formatProviderName,
   getAirlineSummary,
+  getFareDifferenceBadges,
+  getFareIdentityChips,
 } from './SearchResultCard.shared'
 
 defineProps<{
@@ -46,6 +48,27 @@ const emit = defineEmits<{
       <button class="copy-fare-button" type="button" :title="copyLabel" @click="emit('copyFare')">
         {{ copyLabel }}
       </button>
+    </div>
+
+    <div class="identity-chip-row" aria-label="Fare details">
+      <span
+        v-for="chip in getFareIdentityChips(result)"
+        :key="chip"
+        class="identity-chip"
+      >
+        {{ chip }}
+      </span>
+    </div>
+
+    <div v-if="getFareDifferenceBadges(result).length" class="difference-badge-row" aria-label="Fare notices">
+      <span
+        v-for="badge in getFareDifferenceBadges(result)"
+        :key="`${badge.tone}-${badge.label}`"
+        class="difference-badge"
+        :class="`tone-${badge.tone}`"
+      >
+        {{ badge.label }}
+      </span>
     </div>
 
     <div
@@ -124,13 +147,13 @@ const emit = defineEmits<{
         type="button"
         @click="emit('toggleExpanded', result.id)"
       >
-        {{ expanded ? 'Hide other fares' : `Show ${result.priceOptions.length - 1} more fares` }}
+        {{ expanded ? 'Hide seller options' : `Show ${result.priceOptions.length - 1} ${result.priceOptions.length - 1 === 1 ? 'seller' : 'sellers'} for same flights` }}
       </button>
     </div>
 
     <Transition name="fare-expand">
       <div v-if="result.priceOptions.length > 1 && expanded" class="other-fares">
-        <p class="other-fares-title">Other fare options</p>
+        <p class="other-fares-title">Sellers for the same flights</p>
         <ul class="other-fares-list">
           <li
             v-for="option in result.priceOptions.slice(1)"

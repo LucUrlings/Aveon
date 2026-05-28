@@ -107,6 +107,44 @@ const multiLegResult: SearchResult = {
   ],
 }
 
+const connectingOneWayResult: SearchResult = {
+  ...directResult,
+  id: 'connecting-1',
+  totalDurationMinutes: 270,
+  legs: [
+    {
+      id: 'connecting-leg-1',
+      originAirport: 'DUB',
+      destinationAirport: 'OTP',
+      departureLocalTime: '2026-05-15T08:00:00',
+      arrivalLocalTime: '2026-05-15T12:30:00',
+      durationMinutes: 270,
+      segments: [
+        {
+          marketingCarrierName: 'Aer Lingus',
+          marketingCarrierCode: 'EI',
+          flightNumber: '262',
+          originAirport: 'DUB',
+          destinationAirport: 'BHX',
+          departureLocalTime: '2026-05-15T08:00:00',
+          arrivalLocalTime: '2026-05-15T09:00:00',
+          durationMinutes: 60,
+        },
+        {
+          marketingCarrierName: 'Wizz Air Malta',
+          marketingCarrierCode: 'W4',
+          flightNumber: '3020',
+          originAirport: 'BHX',
+          destinationAirport: 'OTP',
+          departureLocalTime: '2026-05-15T10:30:00',
+          arrivalLocalTime: '2026-05-15T12:30:00',
+          durationMinutes: 120,
+        },
+      ],
+    },
+  ],
+}
+
 const actualReturnResult: SearchResult = {
   ...multiLegResult,
   id: 'return-1',
@@ -184,6 +222,25 @@ describe('SearchResultCard', () => {
     expect(wrapper.text()).toContain('KLM')
     expect(wrapper.text()).toContain('EUR')
     expect(wrapper.text()).toContain('View fare')
+
+    const chips = wrapper.findAll('.identity-chip').map((chip) => chip.text())
+    expect(chips).toEqual(['Fr 15 May', '09:45', 'Direct', '1h 35m'])
+    expect(wrapper.find('.difference-badge').exists()).toBe(false)
+  })
+
+  it('summarizes connecting one-way fares with the stop and layover', () => {
+    const wrapper = mount(SearchResultCard, {
+      props: {
+        result: connectingOneWayResult,
+        expanded: false,
+      },
+    })
+
+    const chips = wrapper.findAll('.identity-chip').map((chip) => chip.text())
+    expect(chips).toContain('via BHX, 1h 30m')
+    expect(chips).not.toContain('Aer Lingus, Wizz Air Malta')
+
+    expect(wrapper.find('.difference-badge').exists()).toBe(false)
   })
 
   it('renders an actual return fare using the round-trip layout', () => {
@@ -211,11 +268,13 @@ describe('SearchResultCard', () => {
     expect(wrapper.text()).toContain('Separate bookings')
     expect(wrapper.text()).toContain('Outbound')
     expect(wrapper.text()).toContain('Return')
+    expect(wrapper.find('.difference-badge.tone-sellers').text()).toBe('2 sellers')
 
     await wrapper.get('.expand-button').trigger('click')
     await wrapper.setProps({ expanded: true })
 
     expect(wrapper.emitted('toggleExpanded')).toEqual([['synthetic-return-1']])
+    expect(wrapper.text()).toContain('Sellers for the same flights')
     expect(wrapper.text()).toContain('Book outbound')
     expect(wrapper.text()).toContain('Book return')
     expect(wrapper.text()).toContain('EUR 80.00')
