@@ -48,7 +48,8 @@ describe('product shell', () => {
       global: { stubs: { RouterLink: routerLinkStub } },
     })
 
-    expect(wrapper.get('h1').text()).toContain('discover the flights')
+    expect(wrapper.get('h1').text()).toContain('one you weren’t going to search for')
+    expect(wrapper.text()).toContain('searches beyond the obvious route')
     expect(wrapper.get('a[href="https://github.com/LucUrlings/Aveon"]').attributes('rel')).toBe('noreferrer')
     expect(wrapper.get('a[href="https://lucurlings.nl"]').attributes('target')).toBe('_blank')
     expect(wrapper.get('.about-primary-action').attributes('href')).toBe('/')

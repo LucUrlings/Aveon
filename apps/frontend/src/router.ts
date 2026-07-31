@@ -1,5 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import FlightSearch from './components/FlightSearch.vue'
+import { applyPageMetadata, type PageMetadata } from './seo'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    seo?: Omit<PageMetadata, 'path'>
+  }
+}
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -8,18 +15,34 @@ export const router = createRouter({
       path: '/',
       name: 'search',
       component: FlightSearch,
+      meta: {
+        seo: {
+          title: 'Aveon · Flexible flight search across airports and dates',
+          description: 'Search flights across multiple nearby airports and flexible dates at once. Compare outbound flights, then discover compatible return options.',
+        },
+      },
     },
     {
       path: '/about',
       name: 'about',
       component: () => import('./pages/AboutPage.vue'),
-      meta: { title: 'About Aveon' },
+      meta: {
+        seo: {
+          title: 'About Aveon · A wider way to discover flights',
+          description: 'The best flight may be the one you were not going to search for. Learn how Aveon turns flexible airports and dates into journeys you can genuinely compare.',
+        },
+      },
     },
     {
       path: '/how-it-works',
       name: 'how-it-works',
       component: () => import('./pages/HowSearchWorksPage.vue'),
-      meta: { title: 'How search works' },
+      meta: {
+        seo: {
+          title: 'How Aveon flight search works',
+          description: 'See how Aveon searches multiple airports and dates progressively, groups fares, and builds compatible return options without overwhelming your browser.',
+        },
+      },
     },
     {
       path: '/:pathMatch(.*)*',
@@ -30,7 +53,5 @@ export const router = createRouter({
 })
 
 router.afterEach((to) => {
-  if (typeof to.meta.title === 'string') {
-    document.title = `${to.meta.title} · Aveon`
-  }
+  if (to.meta.seo) applyPageMetadata({ ...to.meta.seo, path: to.path })
 })

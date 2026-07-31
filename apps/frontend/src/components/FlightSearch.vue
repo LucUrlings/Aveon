@@ -312,7 +312,7 @@ const pageTitle = computed(() => {
     return `Aveon · ${response.value.pagination.totalResults} flights from ${routeSummary}`
   }
 
-  return 'Aveon'
+  return 'Aveon · Flexible flight search across airports and dates'
 })
 
 const searchCombinationCount = computed(() => {

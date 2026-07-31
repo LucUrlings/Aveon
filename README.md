@@ -213,6 +213,7 @@ Important env vars:
 
 - `FLIGHTAPI_API_KEY`
 - `AVEON_PORT`
+- `AVEON_PUBLIC_URL` — public origin injected when the deployed container starts; local Vite startup also uses it when supplied
 - `REDIS_FLIGHT_API_ONE_WAY_TTL_MINUTES`
 - `REDIS_AIRPORT_DATA_TTL_MINUTES`
 

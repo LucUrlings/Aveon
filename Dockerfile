@@ -32,5 +32,8 @@ ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
 COPY --from=backend-build /app/publish ./
+RUN mv /app/wwwroot/index.html /app/wwwroot/index.template.html
+COPY --chmod=755 apps/frontend/docker-entrypoint.sh /app/frontend-entrypoint.sh
 
-ENTRYPOINT ["dotnet", "backend.dll"]
+ENTRYPOINT ["/app/frontend-entrypoint.sh"]
+CMD ["dotnet", "backend.dll"]

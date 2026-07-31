@@ -8,11 +8,11 @@ const websiteUrl = 'https://lucurlings.nl'
     <section class="about-hero">
       <div class="about-hero-copy">
         <p class="about-eyebrow">About Aveon</p>
-        <h1>A clearer way to discover the flights that actually work for you.</h1>
+        <h1>The best flight may be the one you weren’t going to search for.</h1>
         <p>
-          Aveon searches across nearby airports and flexible dates, then turns a large set of raw fares
-          into a focused, comparable shortlist. It is built for discovery—not checkout—so you stay in
-          control and book directly with the provider.
+          It might leave from the airport an hour away, depart a day earlier, or pair with a return another
+          search engine never showed you. Aveon searches beyond the obvious route and turns that flexibility
+          into journeys you can genuinely compare.
         </p>
         <div class="about-actions">
           <RouterLink class="about-primary-action" to="/">Start searching</RouterLink>
