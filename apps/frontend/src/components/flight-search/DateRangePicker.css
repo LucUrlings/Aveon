@@ -154,7 +154,8 @@
   font-size: 0.8rem;
 }
 
-.calendar-nav {
+.calendar-nav,
+.calendar-close {
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 5px 9px;

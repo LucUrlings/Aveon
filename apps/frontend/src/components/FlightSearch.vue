@@ -594,7 +594,7 @@ const swapLocations = () => {
 </script>
 
 <template>
-  <main class="search-page">
+  <main id="main-content" class="search-page" tabindex="-1">
     <section class="hero-panel">
       <div class="hero-copy">
         <div class="hero-heading">
@@ -642,7 +642,7 @@ const swapLocations = () => {
       />
     </div>
 
-    <p v-if="error" class="error-message">{{ error }}</p>
+    <p v-if="error" class="error-message" role="alert">{{ error }}</p>
 
     <Transition name="progress-shell">
       <SearchProgress v-if="isPolling && searchSession" :session="searchSession" />

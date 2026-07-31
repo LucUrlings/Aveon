@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import DateRangePicker from '../../../src/components/flight-search/DateRangePicker.vue'
 
-const mountPicker = (overrides: Record<string, unknown> = {}) =>
+const mountPicker = (overrides: Record<string, unknown> = {}, attachToDocument = false) =>
   mount(DateRangePicker, {
     props: {
       maxRangeDays: 4,
@@ -11,6 +11,7 @@ const mountPicker = (overrides: Record<string, unknown> = {}) =>
       selectedDates: ['2026-05-15', '2026-05-16', '2026-05-17'],
       ...overrides,
     },
+    ...(attachToDocument ? { attachTo: document.body } : {}),
   })
 
 describe('DateRangePicker', () => {
@@ -29,7 +30,7 @@ describe('DateRangePicker', () => {
   })
 
   it('switches to specific dates mode', async () => {
-    const wrapper = mountPicker()
+    const wrapper = mountPicker({}, true)
 
     await wrapper.get('.date-range-trigger').trigger('click')
     await wrapper.get('.selection-mode-button:last-of-type').trigger('click')
@@ -38,9 +39,12 @@ describe('DateRangePicker', () => {
     expect(wrapper.text()).toContain('Up to 4 picked dates')
     expect(wrapper.get('.date-range-trigger').attributes('aria-expanded')).toBe('true')
     expect(wrapper.get('[role="dialog"]').exists()).toBe(true)
+    expect(wrapper.get('.date-range-trigger').attributes('aria-label')).toContain('Travel dates')
 
     await wrapper.get('.date-range-picker').trigger('keydown.esc')
     expect(wrapper.get('.date-range-trigger').attributes('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(wrapper.get('.date-range-trigger').element)
+    wrapper.unmount()
   })
 
   it('emits the full consecutive date list in range mode', async () => {

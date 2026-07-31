@@ -112,6 +112,9 @@ onBeforeUnmount(() => {
     @copy-fare="copyFare"
     @filter-leg="emit('filterLeg', $event)"
   />
+  <span class="sr-only" role="status" aria-live="polite">
+    {{ copyState === 'copied' ? 'Flight details copied to clipboard.' : copyState === 'failed' ? 'Could not copy flight details.' : '' }}
+  </span>
 </template>
 
 <style scoped src="./SearchResultCard.css"></style>

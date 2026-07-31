@@ -132,6 +132,8 @@ const emit = defineEmits<{
         v-if="result.priceOptions.length > 1"
         class="expand-button attached-expand"
         type="button"
+        :aria-expanded="expanded"
+        :aria-controls="`seller-options-${result.id}`"
         @click="emit('toggleExpanded', result.id)"
       >
         {{ expanded ? 'Hide seller options' : `Show ${result.priceOptions.length - 1} ${result.priceOptions.length - 1 === 1 ? 'seller' : 'sellers'} for same flights` }}
@@ -139,7 +141,7 @@ const emit = defineEmits<{
     </div>
 
     <Transition name="fare-expand">
-      <div v-if="result.priceOptions.length > 1 && expanded" class="other-fares">
+      <div v-if="result.priceOptions.length > 1 && expanded" :id="`seller-options-${result.id}`" class="other-fares">
         <p class="other-fares-title">Sellers for the same flights</p>
         <ul class="other-fares-list">
           <li

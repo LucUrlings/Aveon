@@ -16,7 +16,7 @@ const progressPercentage = computed(() => {
 </script>
 
 <template>
-  <section class="progress-shell">
+  <section class="progress-shell" aria-label="Flight search progress">
     <div class="progress-copy">
       <p class="eyebrow">Search Progress</p>
       <strong>
@@ -26,7 +26,15 @@ const progressPercentage = computed(() => {
         {{ session.failedCombinations }} failed
       </span>
     </div>
-    <div class="progress-bar">
+    <div
+      class="progress-bar"
+      role="progressbar"
+      aria-label="Completed search combinations"
+      aria-valuemin="0"
+      :aria-valuemax="session.totalCombinations"
+      :aria-valuenow="session.completedCombinations"
+      :aria-valuetext="`${session.completedCombinations} of ${session.totalCombinations} combinations complete`"
+    >
       <div class="progress-bar-fill" :style="{ width: `${progressPercentage}%` }" />
     </div>
   </section>

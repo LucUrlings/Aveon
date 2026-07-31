@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import DateRangePicker from './DateRangePicker.vue'
 import type { AirportOption } from '../../features/flight-search/types'
 
@@ -39,6 +40,39 @@ const emit = defineEmits<{
   addOriginAirport: [airport: AirportOption]
   addDestinationAirport: [airport: AirportOption]
 }>()
+
+const originActiveIndex = ref(-1)
+const destinationActiveIndex = ref(-1)
+
+watch(() => props.originSuggestions, () => { originActiveIndex.value = -1 })
+watch(() => props.destinationSuggestions, () => { destinationActiveIndex.value = -1 })
+
+const handleSuggestionKeydown = (
+  event: KeyboardEvent,
+  suggestions: AirportOption[],
+  activeIndex: number,
+  setActiveIndex: (value: number) => void,
+  addAirport: (airport: AirportOption) => void,
+  confirmInput: () => void,
+) => {
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    if (suggestions.length === 0) return
+    const offset = event.key === 'ArrowDown' ? 1 : -1
+    setActiveIndex((activeIndex + offset + suggestions.length) % suggestions.length)
+    return
+  }
+  if (event.key === 'Escape') {
+    setActiveIndex(-1)
+    return
+  }
+  if (event.key !== 'Enter') return
+
+  event.preventDefault()
+  const suggestion = suggestions[activeIndex]
+  if (suggestion) addAirport(suggestion)
+  else confirmInput()
+}
 </script>
 
 <template>
@@ -52,6 +86,8 @@ const emit = defineEmits<{
         v-if="responseExists"
         type="button"
         class="collapse-toggle"
+        aria-controls="flight-search-form"
+        :aria-expanded="!isCollapsed"
         @click="emit('toggleCollapse')"
       >
         {{ isCollapsed ? 'Edit search' : 'Collapse' }}
@@ -59,7 +95,7 @@ const emit = defineEmits<{
     </div>
 
     <Transition name="search-pane">
-      <form v-if="!isCollapsed" class="search-form" @submit.prevent="emit('submit')">
+      <form v-if="!isCollapsed" id="flight-search-form" class="search-form" @submit.prevent="emit('submit')">
         <div class="search-layout">
           <div class="airport-grid">
             <div class="field">
@@ -79,19 +115,25 @@ const emit = defineEmits<{
                 </div>
                 <input
                   v-model="originInput"
+                  role="combobox"
                   aria-label="Add an origin airport or city"
                   aria-autocomplete="list"
                   :aria-expanded="originSuggestions.length > 0"
                   aria-controls="origin-suggestions"
+                  :aria-activedescendant="originActiveIndex >= 0 ? `origin-suggestion-${originSuggestions[originActiveIndex]?.code}` : undefined"
                   placeholder="Add airport or city"
-                  @keydown.enter.prevent="emit('confirmOriginInput')"
+                  @keydown="handleSuggestionKeydown($event, originSuggestions, originActiveIndex, (value) => originActiveIndex = value, (airport) => emit('addOriginAirport', airport), () => emit('confirmOriginInput'))"
                 />
                 <ul v-if="originSuggestions.length" id="origin-suggestions" class="suggestions-list" role="listbox" aria-label="Origin airport suggestions">
-                  <li v-for="airport in originSuggestions" :key="airport.code">
+                  <li v-for="airport in originSuggestions" :key="airport.code" role="none">
                     <button
                       type="button"
                       class="suggestion-button"
                       role="option"
+                      :id="`origin-suggestion-${airport.code}`"
+                      tabindex="-1"
+                      :aria-selected="originActiveIndex === originSuggestions.indexOf(airport)"
+                      @mouseenter="originActiveIndex = originSuggestions.indexOf(airport)"
                       @click="emit('addOriginAirport', airport)"
                     >
                       {{ airport.displayLabel }}
@@ -151,19 +193,25 @@ const emit = defineEmits<{
                 </div>
                 <input
                   v-model="destinationInput"
+                  role="combobox"
                   aria-label="Add a destination airport or city"
                   aria-autocomplete="list"
                   :aria-expanded="destinationSuggestions.length > 0"
                   aria-controls="destination-suggestions"
+                  :aria-activedescendant="destinationActiveIndex >= 0 ? `destination-suggestion-${destinationSuggestions[destinationActiveIndex]?.code}` : undefined"
                   placeholder="Add airport or city"
-                  @keydown.enter.prevent="emit('confirmDestinationInput')"
+                  @keydown="handleSuggestionKeydown($event, destinationSuggestions, destinationActiveIndex, (value) => destinationActiveIndex = value, (airport) => emit('addDestinationAirport', airport), () => emit('confirmDestinationInput'))"
                 />
                 <ul v-if="destinationSuggestions.length" id="destination-suggestions" class="suggestions-list" role="listbox" aria-label="Destination airport suggestions">
-                  <li v-for="airport in destinationSuggestions" :key="airport.code">
+                  <li v-for="airport in destinationSuggestions" :key="airport.code" role="none">
                     <button
                       type="button"
                       class="suggestion-button"
                       role="option"
+                      :id="`destination-suggestion-${airport.code}`"
+                      tabindex="-1"
+                      :aria-selected="destinationActiveIndex === destinationSuggestions.indexOf(airport)"
+                      @mouseenter="destinationActiveIndex = destinationSuggestions.indexOf(airport)"
                       @click="emit('addDestinationAirport', airport)"
                     >
                       {{ airport.displayLabel }}
@@ -183,7 +231,7 @@ const emit = defineEmits<{
               </select>
             </label>
 
-            <label class="field field-wide">
+            <div class="field field-wide">
               <span>Dates</span>
               <DateRangePicker
                 v-model:start-date="departureDateFrom"
@@ -192,9 +240,9 @@ const emit = defineEmits<{
                 :max-range-days="maxDepartureRangeDays"
                 heading="Select departure dates"
               />
-            </label>
+            </div>
 
-            <label v-if="tripType === 'return' && returnDateFrom && returnDateTo" class="field field-wide">
+            <div v-if="tripType === 'return' && returnDateFrom && returnDateTo" class="field field-wide">
               <span>Return dates</span>
               <DateRangePicker
                 v-model:start-date="returnDateFrom"
@@ -203,7 +251,7 @@ const emit = defineEmits<{
                 :max-range-days="maxDepartureRangeDays"
                 heading="Select return dates"
               />
-            </label>
+            </div>
 
             <label class="field field-compact">
               <span>Adults</span>

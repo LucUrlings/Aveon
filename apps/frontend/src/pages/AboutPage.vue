@@ -4,7 +4,7 @@ const websiteUrl = 'https://lucurlings.nl'
 </script>
 
 <template>
-  <main class="about-page">
+  <main id="main-content" class="about-page" tabindex="-1">
     <section class="about-hero">
       <div class="about-hero-copy">
         <p class="about-eyebrow">About Aveon</p>

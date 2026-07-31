@@ -77,11 +77,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="results-shell">
+  <section class="results-shell" aria-labelledby="search-results-title">
     <div class="results-header">
       <div>
         <p class="eyebrow">Results</p>
-        <h2>
+        <h2 id="search-results-title" aria-live="polite" aria-atomic="true">
           <template v-if="tripType === 'return' && !selectedOutboundLegId">
             {{ response.pagination.totalResults }} outbound flights to choose from
           </template>
@@ -136,7 +136,7 @@ onBeforeUnmount(() => {
       />
     </TransitionGroup>
 
-    <div v-if="selectedOutboundLegId && results.length === 0" class="return-options-status">
+    <div v-if="selectedOutboundLegId && results.length === 0" class="return-options-status" role="status" aria-live="polite">
       <strong>{{ isPolling ? 'Finding return options…' : 'No compatible return options found' }}</strong>
       <span v-if="isPolling">Recommendations will appear here as providers respond.</span>
       <span v-else>Try another outbound flight or broaden the search filters.</span>
@@ -153,7 +153,7 @@ onBeforeUnmount(() => {
       class="load-more-sentinel"
       aria-hidden="true"
     />
-    <div v-if="isLoadingMore" class="load-more-status">Loading more fares…</div>
+    <div v-if="isLoadingMore" class="load-more-status" role="status">Loading more fares…</div>
     <button
       v-else-if="hasMoreResults"
       class="load-more-button"

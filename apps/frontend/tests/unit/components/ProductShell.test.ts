@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import AboutPage from '../../../src/pages/AboutPage.vue'
 import AppNavbar from '../../../src/components/AppNavbar.vue'
 import HowSearchWorksPage from '../../../src/pages/HowSearchWorksPage.vue'
+import App from '../../../src/App.vue'
 
 const authMocks = vi.hoisted(() => ({
   refresh: vi.fn().mockResolvedValue(undefined),
@@ -28,6 +29,21 @@ const routerLinkStub = {
 }
 
 describe('product shell', () => {
+  it('provides a keyboard skip link to the routed main content', () => {
+    const wrapper = mount(App, {
+      global: {
+        stubs: {
+          AppNavbar: true,
+          RouterView: { template: '<main id="main-content" tabindex="-1">Page</main>' },
+          RouterLink: routerLinkStub,
+        },
+      },
+    })
+
+    expect(wrapper.get('.skip-link').attributes('href')).toBe('#main-content')
+    expect(wrapper.get('#main-content').attributes('tabindex')).toBe('-1')
+  })
+
   it('offers useful product navigation and keeps authentication available', async () => {
     const wrapper = mount(AppNavbar, {
       global: { stubs: { RouterLink: routerLinkStub } },

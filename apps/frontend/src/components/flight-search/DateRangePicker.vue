@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 
 const props = defineProps<{
   maxRangeDays: number
@@ -15,6 +15,8 @@ type SelectionMode = 'range' | 'specific'
 
 const isOpen = ref(false)
 const pickerRoot = ref<HTMLElement | null>(null)
+const trigger = ref<HTMLButtonElement | null>(null)
+const popover = ref<HTMLElement | null>(null)
 const displayMonth = ref('')
 const anchorDate = ref<string | null>(null)
 const selectionMode = ref<SelectionMode>('range')
@@ -319,6 +321,15 @@ watch(
   { deep: true },
 )
 
+watch(isOpen, async (open, wasOpen) => {
+  await nextTick()
+  if (open) {
+    popover.value?.querySelector<HTMLElement>('button:not(:disabled), select:not(:disabled)')?.focus()
+  } else if (wasOpen) {
+    trigger.value?.focus()
+  }
+})
+
 onMounted(() => {
   document.addEventListener('mousedown', handleClickOutside)
 })
@@ -331,11 +342,13 @@ onBeforeUnmount(() => {
 <template>
   <div ref="pickerRoot" class="date-range-picker" @keydown.esc="closePicker">
     <button
+      ref="trigger"
       type="button"
       class="date-range-trigger"
       aria-haspopup="dialog"
       :aria-expanded="isOpen"
       :aria-controls="popoverId"
+      :aria-label="`${heading ?? 'Travel dates'}: ${formattedRange}`"
       @click="togglePicker"
     >
       <span class="date-range-trigger-label">{{ formattedRange }}</span>
@@ -345,7 +358,7 @@ onBeforeUnmount(() => {
     </button>
 
     <Transition name="date-range-popover">
-      <div v-if="isOpen" :id="popoverId" class="date-range-popover" role="dialog" :aria-label="heading ?? 'Select travel dates'">
+      <div v-if="isOpen" :id="popoverId" ref="popover" class="date-range-popover" role="dialog" :aria-label="heading ?? 'Select travel dates'">
         <div class="date-range-popover-header">
           <div class="date-range-popover-copy">
             <p>{{ heading ?? 'Select travel dates' }}</p>
@@ -354,6 +367,7 @@ onBeforeUnmount(() => {
             </span>
           </div>
           <div class="date-range-popover-controls">
+            <button type="button" class="calendar-close" aria-label="Close date picker" @click="closePicker">Close</button>
             <div class="selection-mode-toggle">
               <button
                 type="button"

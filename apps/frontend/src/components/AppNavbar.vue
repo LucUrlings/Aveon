@@ -76,7 +76,7 @@ const signOut = async () => {
             </button>
           </template>
 
-          <form v-else @submit.prevent="submitAuth">
+          <form v-else :aria-busy="authSubmitting" @submit.prevent="submitAuth">
             <div>
               <p class="account-kicker">Your Aveon account</p>
               <strong>{{ authMode === 'login' ? 'Welcome back' : 'Create an account' }}</strong>

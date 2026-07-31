@@ -95,14 +95,14 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 </script>
 
 <template>
-  <aside class="filters-panel">
+  <aside class="filters-panel" aria-labelledby="search-filters-title">
     <div class="filters-card">
       <p class="eyebrow">Filters</p>
-      <h3>Refine results</h3>
+      <h3 id="search-filters-title">Refine results</h3>
 
       <section class="filter-section" :class="{ open: expandedSections.stops }">
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.stops" aria-controls="filter-stops" @click="toggleSection('stops')">Stops</button>
-        <div id="filter-stops" class="filter-section-body" :class="{ open: expandedSections.stops }">
+        <div v-show="expandedSections.stops" id="filter-stops" class="filter-section-body" :class="{ open: expandedSections.stops }">
           <div class="filter-section-inner stop-filter-group">
             <label class="filter-toggle">
               <input v-model="includeDirectFlights" type="checkbox" />
@@ -122,7 +122,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 
       <section class="filter-section" :class="{ open: expandedSections.duration }">
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.duration" aria-controls="filter-duration" @click="toggleSection('duration')">Max duration</button>
-        <div id="filter-duration" class="filter-section-body" :class="{ open: expandedSections.duration }">
+        <div v-show="expandedSections.duration" id="filter-duration" class="filter-section-body" :class="{ open: expandedSections.duration }">
           <div class="filter-section-inner time-filter-group">
             <div class="time-filter-header">
               <span class="filter-label">Max duration</span>
@@ -152,7 +152,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.departure" aria-controls="filter-departure" @click="toggleSection('departure')">
           {{ props.tripType === 'return' ? 'Outbound departure time' : 'Departure time' }}
         </button>
-        <div id="filter-departure" class="filter-section-body" :class="{ open: expandedSections.departure }">
+        <div v-show="expandedSections.departure" id="filter-departure" class="filter-section-body" :class="{ open: expandedSections.departure }">
           <div class="filter-section-inner time-filter-group">
             <div class="time-filter-header">
               <span class="filter-label">{{ props.tripType === 'return' ? 'Outbound departure time' : 'Departure time' }}</span>
@@ -188,7 +188,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.arrival" aria-controls="filter-arrival" @click="toggleSection('arrival')">
           {{ props.tripType === 'return' ? 'Outbound arrival time' : 'Arrival time' }}
         </button>
-        <div id="filter-arrival" class="filter-section-body" :class="{ open: expandedSections.arrival }">
+        <div v-show="expandedSections.arrival" id="filter-arrival" class="filter-section-body" :class="{ open: expandedSections.arrival }">
           <div class="filter-section-inner time-filter-group">
             <div class="time-filter-header">
               <span class="filter-label">{{ props.tripType === 'return' ? 'Outbound arrival time' : 'Arrival time' }}</span>
@@ -226,7 +226,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
         :class="{ open: expandedSections.returnDeparture }"
       >
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.returnDeparture" aria-controls="filter-return-departure" @click="toggleSection('returnDeparture')">Return departure time</button>
-        <div id="filter-return-departure" class="filter-section-body" :class="{ open: expandedSections.returnDeparture }">
+        <div v-show="expandedSections.returnDeparture" id="filter-return-departure" class="filter-section-body" :class="{ open: expandedSections.returnDeparture }">
           <div class="filter-section-inner time-filter-group">
             <div class="time-filter-header">
               <span class="filter-label">Return departure time</span>
@@ -264,7 +264,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
         :class="{ open: expandedSections.returnArrival }"
       >
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.returnArrival" aria-controls="filter-return-arrival" @click="toggleSection('returnArrival')">Return arrival time</button>
-        <div id="filter-return-arrival" class="filter-section-body" :class="{ open: expandedSections.returnArrival }">
+        <div v-show="expandedSections.returnArrival" id="filter-return-arrival" class="filter-section-body" :class="{ open: expandedSections.returnArrival }">
           <div class="filter-section-inner time-filter-group">
             <div class="time-filter-header">
               <span class="filter-label">Return arrival time</span>
@@ -298,7 +298,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 
       <section class="filter-section" :class="{ open: expandedSections.departureAirports }">
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.departureAirports" aria-controls="filter-departure-airports" @click="toggleSection('departureAirports')">Departure airport</button>
-        <div id="filter-departure-airports" class="filter-section-body" :class="{ open: expandedSections.departureAirports }">
+        <div v-show="expandedSections.departureAirports" id="filter-departure-airports" class="filter-section-body" :class="{ open: expandedSections.departureAirports }">
           <div class="filter-section-inner provider-filter-group">
             <template v-if="departureAirportFilters.length">
               <label
@@ -317,7 +317,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 
       <section class="filter-section" :class="{ open: expandedSections.arrivalAirports }">
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.arrivalAirports" aria-controls="filter-arrival-airports" @click="toggleSection('arrivalAirports')">Arrival airport</button>
-        <div id="filter-arrival-airports" class="filter-section-body" :class="{ open: expandedSections.arrivalAirports }">
+        <div v-show="expandedSections.arrivalAirports" id="filter-arrival-airports" class="filter-section-body" :class="{ open: expandedSections.arrivalAirports }">
           <div class="filter-section-inner provider-filter-group">
             <template v-if="arrivalAirportFilters.length">
               <label
@@ -336,7 +336,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 
       <section class="filter-section" :class="{ open: expandedSections.sources }">
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.sources" aria-controls="filter-sources" @click="toggleSection('sources')">Booking sources</button>
-        <div id="filter-sources" class="filter-section-body" :class="{ open: expandedSections.sources }">
+        <div v-show="expandedSections.sources" id="filter-sources" class="filter-section-body" :class="{ open: expandedSections.sources }">
           <div class="filter-section-inner provider-filter-group">
             <template v-if="providerFilters.length">
               <label
@@ -355,7 +355,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
 
       <section class="filter-section" :class="{ open: expandedSections.airlines }">
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.airlines" aria-controls="filter-airlines" @click="toggleSection('airlines')">Airlines</button>
-        <div id="filter-airlines" class="filter-section-body" :class="{ open: expandedSections.airlines }">
+        <div v-show="expandedSections.airlines" id="filter-airlines" class="filter-section-body" :class="{ open: expandedSections.airlines }">
           <div class="filter-section-inner provider-filter-group">
             <template v-if="airlineFilters.length">
               <label

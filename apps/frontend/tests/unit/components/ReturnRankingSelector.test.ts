@@ -50,5 +50,10 @@ describe('ReturnRankingSelector', () => {
 
     await wrapper.findAll('.return-ranking-options button')[1].trigger('click')
     expect(wrapper.emitted('select')).toEqual([['cheapest']])
+
+    await wrapper.findAll('.return-ranking-options button')[0].trigger('keydown', { key: 'ArrowRight' })
+    expect(wrapper.emitted('select')?.at(-1)).toEqual(['cheapest'])
+    expect(wrapper.findAll('[role="radio"]')[0].attributes('tabindex')).toBe('0')
+    expect(wrapper.findAll('[role="radio"]')[1].attributes('tabindex')).toBe('-1')
   })
 })

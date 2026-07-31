@@ -1,5 +1,5 @@
 <template>
-  <main class="guide-page">
+  <main id="main-content" class="guide-page" tabindex="-1">
     <section class="guide-hero">
       <div>
         <p class="guide-eyebrow">Inside the search</p>

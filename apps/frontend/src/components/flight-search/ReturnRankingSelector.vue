@@ -24,6 +24,25 @@ const leadingResults = computed(() => Object.fromEntries(
 ) as Record<ReturnRanking, SearchResult | null>)
 
 const returnDuration = (result: SearchResult) => result.legs[result.legs.length - 1]?.durationMinutes ?? result.totalDurationMinutes
+
+const moveSelection = (event: KeyboardEvent, currentIndex: number) => {
+  const keyOffsets: Record<string, number> = {
+    ArrowRight: 1,
+    ArrowDown: 1,
+    ArrowLeft: -1,
+    ArrowUp: -1,
+  }
+  let nextIndex = currentIndex
+  if (event.key === 'Home') nextIndex = 0
+  else if (event.key === 'End') nextIndex = options.length - 1
+  else if (event.key in keyOffsets) nextIndex = (currentIndex + keyOffsets[event.key] + options.length) % options.length
+  else return
+
+  event.preventDefault()
+  emit('select', options[nextIndex].value)
+  const group = (event.currentTarget as HTMLElement).parentElement
+  requestAnimationFrame(() => group?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[nextIndex]?.focus())
+}
 </script>
 
 <template>
@@ -37,13 +56,15 @@ const returnDuration = (result: SearchResult) => result.legs[result.legs.length 
 
     <div class="return-ranking-options" role="radiogroup" aria-labelledby="return-ranking-title">
       <button
-        v-for="option in options"
+        v-for="(option, optionIndex) in options"
         :key="option.value"
         type="button"
         :class="{ active: selectedRanking === option.value }"
         role="radio"
         :aria-checked="selectedRanking === option.value"
+        :tabindex="selectedRanking === option.value ? 0 : -1"
         @click="emit('select', option.value)"
+        @keydown="moveSelection($event, optionIndex)"
       >
         <span class="return-ranking-label">
           <strong>{{ option.label }}</strong>

@@ -95,6 +95,8 @@ const primaryLinks = computed(() => {
       <button
         v-if="result.priceOptions.length > 1"
         type="button"
+        :aria-expanded="expanded"
+        :aria-controls="`seller-options-${result.id}`"
         @click="emit('toggleExpanded', result.id)"
       >
         {{ expanded ? 'Hide sellers' : `${result.priceOptions.length - 1} more seller${result.priceOptions.length === 2 ? '' : 's'}` }}
@@ -102,7 +104,7 @@ const primaryLinks = computed(() => {
     </div>
 
     <Transition name="fare-expand">
-      <ul v-if="result.priceOptions.length > 1 && expanded" class="compact-other-fares">
+      <ul v-if="result.priceOptions.length > 1 && expanded" :id="`seller-options-${result.id}`" class="compact-other-fares">
         <li v-for="option in result.priceOptions.slice(1)" :key="option.id">
           <span>{{ formatProviderName(option.provider) }}</span>
           <strong>{{ formatPrice(option.totalPrice.amount, option.totalPrice.currency) }}</strong>

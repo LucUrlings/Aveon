@@ -4,6 +4,7 @@ import AppNavbar from './components/AppNavbar.vue'
 
 <template>
   <div class="app-shell">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <AppNavbar />
     <RouterView />
 
@@ -27,6 +28,8 @@ import AppNavbar from './components/AppNavbar.vue'
 </template>
 
 <style scoped>
+.skip-link { position: fixed; z-index: 1000; top: 8px; left: 8px; transform: translateY(-150%); border-radius: 8px; background: var(--ink-strong); color: #fff; padding: 10px 14px; font-weight: 750; text-decoration: none; }
+.skip-link:focus { transform: translateY(0); }
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 .app-footer { margin-top: auto; border-top: 1px solid var(--border); background: rgba(255, 255, 255, 0.78); }
 .app-footer-inner { width: min(1480px, 100%); margin: 0 auto; padding: 24px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px 30px; color: var(--muted); font-size: 0.82rem; }
