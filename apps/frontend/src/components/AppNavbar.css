@@ -1,0 +1,58 @@
+.site-header {
+  position: sticky; top: 0; z-index: 50;
+  border-bottom: 1px solid rgba(203, 213, 225, 0.78);
+  background: rgba(248, 250, 255, 0.86);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(18px) saturate(160%);
+}
+.navbar {
+  width: min(1480px, 100%); min-height: 66px; margin: 0 auto; padding: 10px 24px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 24px;
+}
+.navbar-brand { min-width: 0; display: flex; align-items: center; gap: 10px; color: var(--ink-strong); text-decoration: none; }
+.navbar-logo {
+  flex: 0 0 auto; display: grid; width: 38px; height: 38px; place-items: center; border-radius: 12px;
+  background: linear-gradient(135deg, var(--brand) 0%, #6366f1 60%, var(--accent) 125%); color: #fff;
+  box-shadow: 0 7px 18px rgba(79, 70, 229, 0.24);
+}
+.navbar-logo svg { width: 20px; height: 20px; fill: currentColor; }
+.navbar-wordmark { font-size: 1.04rem; font-weight: 850; letter-spacing: -0.025em; }
+.navbar-product { overflow: hidden; border-left: 1px solid var(--border); padding-left: 10px; color: var(--muted); font-size: 0.72rem; font-weight: 650; white-space: nowrap; text-overflow: ellipsis; }
+.navbar-links { display: flex; align-items: center; gap: 5px; padding: 4px; border: 1px solid rgba(203, 213, 225, 0.7); border-radius: 999px; background: rgba(255, 255, 255, 0.72); }
+.navbar-links a { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 7px 13px; color: var(--muted); font-size: 0.8rem; font-weight: 700; text-decoration: none; transition: color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease; }
+.navbar-links a:hover { color: var(--ink-strong); }
+.navbar-links a.active { background: var(--surface); color: var(--brand-strong); box-shadow: var(--shadow-sm); }
+.account-menu { position: relative; justify-self: end; }
+.account-menu summary { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px 5px 5px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); font-size: 0.78rem; font-weight: 750; cursor: pointer; list-style: none; }
+.account-menu summary::-webkit-details-marker { display: none; }
+.account-avatar { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 999px; background: var(--brand-soft); color: var(--brand-strong); font-size: 0.76rem; transition: transform 0.2s ease, background-color 0.2s ease; }
+.account-menu[open] .account-avatar { background: rgba(79, 70, 229, 0.16); transform: rotate(90deg) scale(1.04); }
+.account-popover { position: absolute; top: calc(100% + 10px); right: 0; width: min(320px, calc(100vw - 24px)); padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-lg); transform-origin: top right; }
+.account-menu[open] .account-popover { animation: account-popover-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.account-popover form, .account-popover form > div { display: grid; gap: 4px; }
+.account-popover form { gap: 13px; }
+.account-popover strong { color: var(--ink-strong); overflow-wrap: anywhere; }
+.account-kicker { margin: 0; color: var(--muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.account-popover label { display: grid; gap: 5px; color: var(--muted); font-size: 0.74rem; font-weight: 700; }
+.account-popover input { width: 100%; min-width: 0; border: 1px solid var(--border-strong); border-radius: 10px; padding: 9px 10px; color: var(--ink); background: var(--surface); }
+.account-primary-button, .account-secondary-button, .account-mode-button { width: 100%; border-radius: 10px; padding: 9px 11px; font: inherit; font-size: 0.78rem; font-weight: 750; cursor: pointer; }
+.account-primary-button { border: none; background: var(--brand); color: #fff; }
+.account-secondary-button { margin-top: 14px; border: 1px solid var(--border); background: var(--surface-subtle); color: var(--ink); }
+.account-mode-button { border: none; padding: 2px; background: transparent; color: var(--brand-strong); }
+.account-primary-button:disabled, .account-secondary-button:disabled { opacity: 0.6; cursor: wait; }
+.account-error { margin: 0; padding: 8px; border-radius: 8px; background: var(--danger-soft); color: var(--danger); font-size: 0.74rem; font-weight: 650; }
+@keyframes account-popover-in {
+  from { opacity: 0; transform: translateY(-7px) scale(0.975); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .account-avatar { transition: none; }
+  .account-menu[open] .account-popover { animation: none; }
+}
+@media (max-width: 760px) {
+  .navbar { grid-template-columns: minmax(0, 1fr) auto; gap: 9px 14px; padding: 9px 14px; }
+  .navbar-links { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
+  .navbar-links a { justify-content: center; padding-left: 7px; padding-right: 7px; font-size: 0.74rem; text-align: center; }
+  .navbar-product { display: none; }
+}
+@media (max-width: 420px) { .navbar-links a { padding-left: 3px; padding-right: 3px; font-size: 0.7rem; } }

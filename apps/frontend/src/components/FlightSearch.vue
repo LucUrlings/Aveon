@@ -4,12 +4,13 @@ import { useRoute, useRouter, type LocationQueryValue } from 'vue-router'
 import FlightSearchBar from './flight-search/FlightSearchBar.vue'
 import SearchFilters from './flight-search/SearchFilters.vue'
 import SearchResultCard from './flight-search/SearchResultCard.vue'
-import { useAuth } from '../features/auth/useAuth'
+import SelectedOutboundSummary from './flight-search/SelectedOutboundSummary.vue'
 import { fetchAirportSuggestions, getSearchSession, searchFlightsRequest } from '../features/flight-search/api'
 import {
   cabinOptions,
   type AirportOption,
   type SearchRequest,
+  type SearchResult,
   type SearchResultsQuery,
   type SearchResponse,
   type SearchSessionResponse,
@@ -78,18 +79,11 @@ const arrivalTimeRange = ref<[number, number]>([0, 1439])
 const returnDepartureTimeRange = ref<[number, number]>([0, 1439])
 const returnArrivalTimeRange = ref<[number, number]>([0, 1439])
 const selectedOutboundLegId = ref<string | null>(null)
+const selectedOutboundResult = ref<SearchResult | null>(null)
 const selectedReturnLegId = ref<string | null>(null)
 const currentPage = ref(1)
 const isLoadingMore = ref(false)
 const loadMoreSentinel = ref<HTMLElement | null>(null)
-const authMode = ref<'login' | 'register'>('login')
-const authEmail = ref('')
-const authPassword = ref('')
-const authError = ref<string | null>(null)
-const authSubmitting = ref(false)
-
-const auth = useAuth()
-
 let originRequestId = 0
 let destinationRequestId = 0
 let pollingTimer: number | null = null
@@ -99,6 +93,8 @@ let hasMounted = false
 let hasHydratedFiltersFromUrl = false
 let isSyncingRoute = false
 let lastExecutedSearchKey: string | null = null
+let activeSearchGeneration = 0
+let latestSessionRequestId = 0
 
 const route = useRoute()
 const router = useRouter()
@@ -452,6 +448,31 @@ const availableMaxDurationMinutes = computed(() => {
 })
 
 const filteredResults = computed(() => loadedResults.value)
+const selectedOutboundSummaryResult = computed<SearchResult | null>(() => {
+  if (!selectedOutboundLegId.value) {
+    return null
+  }
+
+  if (selectedOutboundResult.value?.legs[0]?.id === selectedOutboundLegId.value) {
+    return selectedOutboundResult.value
+  }
+
+  const matchingResult = filteredResults.value.find(
+    (result) => result.legs[0]?.id === selectedOutboundLegId.value,
+  )
+  const outboundLeg = matchingResult?.legs[0]
+  if (!matchingResult || !outboundLeg) {
+    return null
+  }
+
+  return {
+    ...matchingResult,
+    isRoundTrip: false,
+    legs: [outboundLeg],
+    totalDurationMinutes: outboundLeg.durationMinutes,
+    priceOptions: [],
+  }
+})
 const hasSelectedLegFilters = computed(() =>
   Boolean(selectedOutboundLegId.value || selectedReturnLegId.value),
 )
@@ -493,6 +514,14 @@ const loadedStopCounts = computed(() => {
 const searchSummary = computed(() => {
   if (!response.value) {
     return 'Search across multiple airports and compare grouped fares.'
+  }
+
+  if (tripType.value === 'return' && !selectedOutboundLegId.value) {
+    return `${response.value.pagination.totalResults} outbound flights to choose from`
+  }
+
+  if (tripType.value === 'return') {
+    return `${response.value.pagination.totalResults} return options for your outbound`
   }
 
   return `${response.value.pagination.totalResults} flights after filters`
@@ -542,7 +571,8 @@ const pageTitle = computed(() => {
 const searchCombinationCount = computed(() => {
   const origins = uniqueAirportCodes(originAirports.value)
   const destinations = uniqueAirportCodes(destinationAirports.value)
-  const departureDateCount = selectedDepartureDates.value.length
+  const departureDates = [...new Set(selectedDepartureDates.value)]
+  const departureDateCount = departureDates.length
 
   if (origins.length === 0 || destinations.length === 0 || departureDateCount <= 0) {
     return 0
@@ -552,11 +582,20 @@ const searchCombinationCount = computed(() => {
     count + destinations.filter((destination) => destination !== origin).length
   ), 0)
 
-  const returnDateCount = tripType.value === 'return'
-    ? buildReturnDates().length
-    : 1
+  if (tripType.value !== 'return') {
+    return routeCombinationCount * departureDateCount
+  }
 
-  return routeCombinationCount * departureDateCount * returnDateCount
+  const returnDates = buildReturnDates()
+  const validRoundTripPairCount = departureDates.reduce((count, departureDate) => (
+    count + returnDates.filter((returnDate) => returnDate >= departureDate).length
+  ), 0)
+
+  return routeCombinationCount * (
+    departureDateCount +
+    returnDates.length +
+    validRoundTripPairCount
+  )
 })
 
 const addDays = (dateString: string, days: number) => {
@@ -712,9 +751,18 @@ const buildSearchResultsQuery = (): SearchResultsQuery => {
     pageSize: DEFAULT_PAGE_SIZE,
   }
 
-  const explicitProviders = getExplicitSelection(selectedProviders.value, providerFilters.value)
-  if (explicitProviders.length > 0) {
-    query.providers = explicitProviders
+  // Provider names and total duration change when independently bookable
+  // outbound/inbound fares are combined. Reusing those outbound-stage filters
+  // would hide valid recommendations immediately after selecting a leg.
+  if (!selectedOutboundLegId.value) {
+    const explicitProviders = getExplicitSelection(selectedProviders.value, providerFilters.value)
+    if (explicitProviders.length > 0) {
+      query.providers = explicitProviders
+    }
+
+    if (response.value && maxDurationMinutes.value > 0 && maxDurationMinutes.value < availableMaxDurationMinutes.value) {
+      query.maxDuration = maxDurationMinutes.value
+    }
   }
 
   const explicitAirlines = getExplicitSelection(selectedAirlines.value, airlineFilters.value)
@@ -730,10 +778,6 @@ const buildSearchResultsQuery = (): SearchResultsQuery => {
   const explicitArrivalAirports = getExplicitSelection(selectedArrivalAirports.value, arrivalAirportFilters.value)
   if (explicitArrivalAirports.length > 0) {
     query.arrivalAirports = explicitArrivalAirports
-  }
-
-  if (response.value && maxDurationMinutes.value > 0 && maxDurationMinutes.value < availableMaxDurationMinutes.value) {
-    query.maxDuration = maxDurationMinutes.value
   }
 
   if (departureTimeRange.value[0] !== 0 || departureTimeRange.value[1] !== 1439) {
@@ -797,6 +841,13 @@ watch(departureDateTo, (value) => {
   if (departureDateFrom.value < minAllowedStart) {
     departureDateFrom.value = minAllowedStart
   }
+
+  if (tripType.value === 'return' && (!returnDateFrom.value || returnDateFrom.value < value)) {
+    returnDateFrom.value = value
+    if (!returnDateTo.value || returnDateTo.value < value) {
+      returnDateTo.value = value
+    }
+  }
 })
 
 watch(tripType, (value) => {
@@ -807,12 +858,13 @@ watch(tripType, (value) => {
     returnDepartureTimeRange.value = [0, 1439]
     returnArrivalTimeRange.value = [0, 1439]
     selectedOutboundLegId.value = null
+    selectedOutboundResult.value = null
     selectedReturnLegId.value = null
     return
   }
 
   if (!returnDateFrom.value) {
-    returnDateFrom.value = departureDateFrom.value
+    returnDateFrom.value = departureDateTo.value
   }
 
   if (!returnDateTo.value) {
@@ -827,8 +879,8 @@ watch(returnDateFrom, (value) => {
     return
   }
 
-  if (value < departureDateFrom.value) {
-    returnDateFrom.value = departureDateFrom.value
+  if (value < departureDateTo.value) {
+    returnDateFrom.value = departureDateTo.value
     return
   }
 
@@ -931,14 +983,21 @@ watch(
 
 const loadSearchSession = async (
   searchId: string,
-  options: { page?: number; append?: boolean } = {},
+  options: { page?: number; append?: boolean; generation?: number } = {},
 ) => {
   const page = options.page ?? currentPage.value
   const append = options.append ?? false
+  const generation = options.generation ?? activeSearchGeneration
+  const requestId = ++latestSessionRequestId
   const session = await getSearchSession(searchId, {
     ...buildSearchResultsQuery(),
     page,
   })
+
+  if (generation !== activeSearchGeneration || requestId !== latestSessionRequestId) {
+    return null
+  }
+
   searchSession.value = session
   loadedResults.value = append
     ? [...loadedResults.value, ...session.response.results]
@@ -962,9 +1021,23 @@ const scheduleSearchSessionRefresh = () => {
     window.clearTimeout(filterRefreshTimer)
   }
 
-  filterRefreshTimer = window.setTimeout(() => {
+  const searchId = searchSession.value.searchId
+  const generation = activeSearchGeneration
+  filterRefreshTimer = window.setTimeout(async () => {
     filterRefreshTimer = null
-    void loadSearchSession(searchSession.value!.searchId, { page: 1, append: false })
+    try {
+      const session = await loadSearchSession(searchId, { page: 1, append: false, generation })
+      if (session?.status === 'running' && generation === activeSearchGeneration) {
+        stopPolling()
+        pollingTimer = window.setTimeout(() => {
+          void pollSearchSession(searchId, generation)
+        }, 1000)
+      }
+    } catch (err) {
+      if (generation === activeSearchGeneration) {
+        error.value = err instanceof Error ? err.message : 'Unknown error'
+      }
+    }
   }, 200)
 }
 
@@ -1036,7 +1109,6 @@ const setupLoadMoreObserver = () => {
 }
 
 onMounted(() => {
-  void auth.refresh()
   applyUrlState()
   hasMounted = true
   void updateRouteState()
@@ -1055,6 +1127,8 @@ watch(hasMoreResults, () => {
 })
 
 onBeforeUnmount(() => {
+  activeSearchGeneration += 1
+  latestSessionRequestId += 1
   stopPolling()
   if (filterRefreshTimer !== null) {
     window.clearTimeout(filterRefreshTimer)
@@ -1069,26 +1143,51 @@ const stopPolling = () => {
   }
 }
 
-const pollSearchSession = async (searchId: string) => {
+const pollSearchSession = async (searchId: string, generation: number) => {
   try {
-    const session = await loadSearchSession(searchId, { page: 1, append: false })
+    const session = await loadSearchSession(searchId, { page: 1, append: false, generation })
+
+    if (!session || generation !== activeSearchGeneration) {
+      return
+    }
 
     if (session.status === 'running') {
       pollingTimer = window.setTimeout(() => {
-        void pollSearchSession(searchId)
+        void pollSearchSession(searchId, generation)
       }, 1000)
       return
     }
 
     stopPolling()
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Unknown error'
-    stopPolling()
+    if (generation === activeSearchGeneration) {
+      error.value = err instanceof Error ? err.message : 'Unknown error'
+      stopPolling()
+    }
   }
 }
 
 const searchFlights = async () => {
+  const latestDepartureDate = [...selectedDepartureDates.value]
+    .sort((left, right) => left.localeCompare(right))
+    .at(-1)
+
+  if (
+    tripType.value === 'return' &&
+    (!returnDateFrom.value || !returnDateTo.value ||
+      (latestDepartureDate !== undefined && returnDateFrom.value < latestDepartureDate))
+  ) {
+    error.value = 'The return date range must start on or after the latest outbound date.'
+    return
+  }
+
+  const generation = ++activeSearchGeneration
+  latestSessionRequestId += 1
   stopPolling()
+  if (filterRefreshTimer !== null) {
+    window.clearTimeout(filterRefreshTimer)
+    filterRefreshTimer = null
+  }
   loading.value = true
   error.value = null
   response.value = null
@@ -1096,6 +1195,7 @@ const searchFlights = async () => {
   loadedResults.value = []
   expandedResultIds.value = []
   selectedOutboundLegId.value = null
+  selectedOutboundResult.value = null
   selectedReturnLegId.value = null
 
   try {
@@ -1112,6 +1212,11 @@ const searchFlights = async () => {
     }
 
     const session = await searchFlightsRequest(request)
+
+    if (generation !== activeSearchGeneration) {
+      return
+    }
+
     searchSession.value = session
     loadedResults.value = [...session.response.results]
     response.value = {
@@ -1123,14 +1228,16 @@ const searchFlights = async () => {
     loading.value = false
 
     if (session.status === 'running') {
-      await pollSearchSession(session.searchId)
+      await pollSearchSession(session.searchId, generation)
     } else {
-      await loadSearchSession(session.searchId, { page: 1, append: false })
+      await loadSearchSession(session.searchId, { page: 1, append: false, generation })
     }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Unknown error'
+    if (generation === activeSearchGeneration) {
+      error.value = err instanceof Error ? err.message : 'Unknown error'
+    }
   } finally {
-    if (!isPolling.value) {
+    if (generation === activeSearchGeneration && !isPolling.value) {
       loading.value = false
     }
   }
@@ -1149,7 +1256,11 @@ const isExpanded = (resultId: string) => expandedResultIds.value.includes(result
 
 const toggleLegFilter = ({ legId, legIndex }: { legId: string; legIndex: number }) => {
   if (legIndex === 0) {
-    selectedOutboundLegId.value = selectedOutboundLegId.value === legId ? null : legId
+    const isClearingSelection = selectedOutboundLegId.value === legId
+    selectedOutboundLegId.value = isClearingSelection ? null : legId
+    selectedOutboundResult.value = isClearingSelection
+      ? null
+      : loadedResults.value.find((result) => result.legs[0]?.id === legId) ?? null
     return
   }
 
@@ -1158,6 +1269,7 @@ const toggleLegFilter = ({ legId, legIndex }: { legId: string; legIndex: number 
 
 const clearLegFilters = () => {
   selectedOutboundLegId.value = null
+  selectedOutboundResult.value = null
   selectedReturnLegId.value = null
 }
 
@@ -1199,78 +1311,10 @@ const loadNextPage = async () => {
   }
 }
 
-const submitAuth = async () => {
-  authError.value = null
-  authSubmitting.value = true
-  try {
-    const credentials = {
-      email: authEmail.value.trim(),
-      password: authPassword.value,
-    }
-
-    if (authMode.value === 'register') {
-      await auth.signUp(credentials)
-    } else {
-      await auth.signIn(credentials)
-    }
-
-    authPassword.value = ''
-  } catch (ex) {
-    authError.value = ex instanceof Error ? ex.message : 'Authentication failed.'
-  } finally {
-    authSubmitting.value = false
-  }
-}
-
-const signOut = async () => {
-  authError.value = null
-  authSubmitting.value = true
-  try {
-    await auth.signOut()
-    authPassword.value = ''
-  } catch (ex) {
-    authError.value = ex instanceof Error ? ex.message : 'Logout failed.'
-  } finally {
-    authSubmitting.value = false
-  }
-}
 </script>
 
 <template>
   <main class="search-page">
-    <nav class="top-nav" aria-label="Main">
-      <div class="brand-mark">
-        <span>Aveon</span>
-      </div>
-
-      <div class="auth-nav" aria-label="Account">
-        <div v-if="auth.isAuthenticated.value" class="auth-account">
-          <span>{{ auth.user.value.email }}</span>
-          <button type="button" :disabled="authSubmitting" @click="signOut">
-            Logout
-          </button>
-        </div>
-
-        <form v-else class="auth-form" @submit.prevent="submitAuth">
-          <input v-model="authEmail" type="email" autocomplete="email" placeholder="Email" required />
-          <input
-            v-model="authPassword"
-            type="password"
-            :autocomplete="authMode === 'register' ? 'new-password' : 'current-password'"
-            placeholder="Password"
-            required
-          />
-          <button type="submit" :disabled="authSubmitting" @click="authMode = 'login'">
-            {{ authSubmitting && authMode === 'login' ? 'Working...' : 'Login' }}
-          </button>
-          <button type="submit" :disabled="authSubmitting" @click="authMode = 'register'">
-            {{ authSubmitting && authMode === 'register' ? 'Working...' : 'Register' }}
-          </button>
-        </form>
-      </div>
-    </nav>
-    <p v-if="authError" class="auth-error">{{ authError }}</p>
-
     <section class="hero-panel">
       <div class="hero-copy">
         <p class="eyebrow">Aveon</p>
@@ -1368,7 +1412,9 @@ const signOut = async () => {
               <p class="eyebrow">Results</p>
               <h2>{{ searchSummary }}</h2>
               <div v-if="hasSelectedLegFilters" class="results-active-filters">
-                <span class="active-filter-chip">Leg combinations filtered</span>
+                <span class="active-filter-chip">
+                  {{ selectedOutboundLegId ? 'Outbound selected' : 'Return selected' }}
+                </span>
                 <button class="clear-active-filter" type="button" @click="clearLegFilters">
                   Clear
                 </button>
@@ -1388,6 +1434,12 @@ const signOut = async () => {
             </div>
           </div>
 
+          <SelectedOutboundSummary
+            v-if="selectedOutboundSummaryResult"
+            :result="selectedOutboundSummaryResult"
+            @clear="clearLegFilters"
+          />
+
           <TransitionGroup name="result-list" tag="div" class="results-list">
             <SearchResultCard
               v-for="result in filteredResults"
@@ -1396,10 +1448,21 @@ const signOut = async () => {
               :expanded="isExpanded(result.id)"
               :selected-outbound-leg-id="selectedOutboundLegId"
               :selected-return-leg-id="selectedReturnLegId"
+              :allow-outbound-selection="tripType === 'return'"
+              :compact-return="Boolean(selectedOutboundLegId)"
               @toggle-expanded="toggleExpanded"
               @filter-leg="toggleLegFilter"
             />
           </TransitionGroup>
+
+          <div
+            v-if="selectedOutboundLegId && filteredResults.length === 0"
+            class="return-options-status"
+          >
+            <strong>{{ isPolling ? 'Finding return options…' : 'No compatible return options found' }}</strong>
+            <span v-if="isPolling">Recommendations will appear here as providers respond.</span>
+            <span v-else>Try another outbound flight or broaden the search filters.</span>
+          </div>
 
           <div v-if="response.pagination.totalPages > 1" class="pagination-bar">
             <span class="pagination-summary">{{ paginationSummary }}</span>

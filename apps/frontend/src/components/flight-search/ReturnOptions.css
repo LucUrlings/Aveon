@@ -1,0 +1,238 @@
+.selected-outbound {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 18px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid rgba(79, 70, 229, 0.18);
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f4f5ff 0%, #effbfc 100%);
+  box-shadow: var(--shadow-sm);
+}
+
+.selected-outbound-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+}
+
+.selected-outbound-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.selected-outbound-label {
+  color: var(--brand);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.selected-outbound-heading button,
+.compact-return-actions button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: var(--surface);
+  color: var(--brand-strong);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+}
+
+.selected-outbound-heading button:hover,
+.compact-return-actions button:hover {
+  border-color: rgba(79, 70, 229, 0.3);
+  background: var(--brand-soft);
+  transform: translateY(-1px);
+}
+
+.selected-outbound-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.selected-outbound-route {
+  color: var(--ink-strong);
+  font-size: 1rem;
+}
+
+.selected-outbound-fare {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: end;
+}
+
+.selected-outbound-fare a,
+.compact-return-links a,
+.compact-other-fares a {
+  color: var(--brand);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.compact-return-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.compact-return-card:hover {
+  border-color: rgba(79, 70, 229, 0.2);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.compact-return-flight {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.compact-return-title,
+.compact-return-timing,
+.compact-return-meta,
+.compact-return-links,
+.compact-return-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  align-items: center;
+}
+
+.compact-return-title > strong {
+  font-size: 0.9rem;
+}
+
+.compact-booking-badge {
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.compact-booking-badge.synthetic {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.compact-return-timing,
+.compact-return-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.compact-return-timing strong {
+  color: var(--ink-strong);
+}
+
+.compact-return-price {
+  display: grid;
+  gap: 3px;
+  min-width: 130px;
+  justify-items: end;
+}
+
+.compact-return-price > span {
+  color: var(--muted-soft);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.compact-return-price > strong {
+  font-size: 1rem;
+}
+
+.compact-return-links {
+  justify-content: end;
+}
+
+.compact-return-links a {
+  display: grid;
+  justify-items: end;
+}
+
+.compact-return-links small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.compact-return-actions {
+  justify-content: end;
+  max-width: 190px;
+}
+
+.compact-return-actions button.active {
+  border-color: rgba(79, 70, 229, 0.3);
+  background: var(--brand-soft);
+}
+
+.compact-other-fares {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  list-style: none;
+}
+
+.compact-other-fares li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+.fare-expand-enter-active,
+.fare-expand-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.fare-expand-enter-from,
+.fare-expand-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (max-width: 720px) {
+  .selected-outbound,
+  .compact-return-card {
+    grid-template-columns: 1fr;
+  }
+
+  .selected-outbound-heading,
+  .compact-other-fares {
+    grid-column: 1;
+  }
+
+  .selected-outbound-fare,
+  .compact-return-price,
+  .compact-return-links,
+  .compact-return-actions {
+    justify-content: start;
+    justify-items: start;
+  }
+}

@@ -97,6 +97,54 @@ public sealed class SearchServiceTests
     }
 
     [Fact]
+    public async Task StartSearchAsync_RejectsHugeReturnRange_BeforeMaterializingIt()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var provider = new RecordingFlightSearchProvider();
+        var service = CreateSearchService(store, provider);
+        var request = new SearchRequest(
+            OriginAirports: ["DUB"],
+            DestinationAirports: ["AMS"],
+            SelectedDates: [DateOnly.MinValue],
+            ReturnDateFrom: DateOnly.MinValue,
+            ReturnDateTo: DateOnly.MaxValue,
+            Adults: 1,
+            CabinClass: "economy");
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None));
+
+        Assert.Equal("Search exceeds the limit of 100 combinations.", error.Message);
+        Assert.Empty(provider.Requests);
+        Assert.Empty(provider.RoundTripRequests);
+    }
+
+    [Fact]
+    public async Task StartSearchAsync_RejectsReturnRangeBeforeLatestOutboundDate()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var provider = new RecordingFlightSearchProvider();
+        var service = CreateSearchService(store, provider);
+        var request = new SearchRequest(
+            ["DUB"],
+            ["AMS"],
+            [new DateOnly(2026, 8, 7), new DateOnly(2026, 8, 8), new DateOnly(2026, 8, 9)],
+            new DateOnly(2026, 8, 7),
+            new DateOnly(2026, 8, 7),
+            1,
+            "economy");
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None));
+
+        Assert.Equal(
+            "The return date range must start on or after the latest outbound date.",
+            error.Message);
+        Assert.Empty(provider.Requests);
+        Assert.Empty(provider.RoundTripRequests);
+    }
+
+    [Fact]
     public async Task StartSearchAsync_UsesProvidedSearchCombinationLimit()
     {
         var store = new FlakySearchSessionStore(failingCalls: []);
@@ -161,6 +209,23 @@ public sealed class SearchServiceTests
 
         Assert.Equal("completed", finalSession.Status);
         Assert.Equal(18, provider.Requests.Count);
+    }
+
+    [Fact]
+    public async Task StartSearchAsync_CapsStoredFareOptionsFromLargeProviderResponses()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var service = CreateSearchService(store, new LargeResultFlightSearchProvider(2001));
+
+        var initialSession = await service.StartSearchAsync(
+            CreateRequest(),
+            new SearchLimit(100, null),
+            CancellationToken.None);
+        var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
+
+        Assert.Equal("completed", finalSession.Status);
+        Assert.Equal(2000, finalSession.Response.Results.Count);
+        Assert.Equal(2000, finalSession.Response.Metadata.ProviderResultCount);
     }
 
     [Fact]
@@ -260,6 +325,60 @@ public sealed class SearchServiceTests
     }
 
     [Fact]
+    public async Task StartSearchAsync_NormalizesDuplicateProviderEntitiesWithoutFailingCombination()
+    {
+        var request = new SearchRequest(
+            ["DUB"],
+            ["CGN"],
+            [new DateOnly(2026, 8, 7)],
+            new DateOnly(2026, 8, 12),
+            new DateOnly(2026, 8, 12),
+            1,
+            "economy");
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var service = CreateSearchService(store, new DuplicateEntityFlightSearchProvider());
+
+        var initialSession = await service.StartSearchAsync(
+            request,
+            new SearchLimit(100, null),
+            CancellationToken.None);
+        var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
+
+        Assert.Equal("completed", finalSession.Status);
+        Assert.Equal(0, finalSession.FailedCombinations);
+        Assert.NotNull(finalSession.StagedResults);
+        Assert.Single(finalSession.StagedResults!.RoundTripResults);
+    }
+
+    [Fact]
+    public async Task StartSearchAsync_PrefetchesReturnsWhileOutboundPhaseIsStillRunning()
+    {
+        var request = new SearchRequest(
+            ["DUB"],
+            ["AMS"],
+            [new DateOnly(2026, 5, 15)],
+            new DateOnly(2026, 5, 16),
+            new DateOnly(2026, 5, 16),
+            1,
+            "economy");
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var provider = new PhasedFlightSearchProvider();
+        var service = CreateSearchService(store, provider);
+
+        var initialSession = await service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None);
+        await provider.OutboundStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        await provider.ReturnPhaseStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.True(provider.ReturnCalls > 0);
+
+        provider.ReleaseOutbound.TrySetResult();
+        var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
+
+        Assert.Equal(2, provider.ReturnCalls);
+        Assert.Equal("completed", finalSession.Status);
+    }
+
+    [Fact]
     public async Task StartSearchAsync_MergesSyntheticAndActualRoundTripFares_AndKeepsSyntheticBookingLinks()
     {
         var request = new SearchRequest(
@@ -279,19 +398,32 @@ public sealed class SearchServiceTests
         Assert.Equal("completed", finalSession.Status);
         Assert.Equal(3, finalSession.TotalCombinations);
         Assert.Equal(2, finalSession.Response.Results.Count);
-        Assert.All(finalSession.Response.Results, result => Assert.True(result.IsRoundTrip));
+        Assert.All(finalSession.Response.Results, result => Assert.False(result.IsRoundTrip));
+        Assert.NotNull(finalSession.StagedResults);
+        Assert.Equal(2, finalSession.StagedResults!.OutboundResults.Count);
+        Assert.Equal(2, finalSession.StagedResults.InboundResults.Count);
+        Assert.Single(finalSession.StagedResults.RoundTripResults);
 
-        var cheapestResult = finalSession.Response.Results[0];
-        Assert.Equal(170m, cheapestResult.PriceOptions[0].TotalPrice.Amount);
-        Assert.Single(cheapestResult.PriceOptions[0].BookingLinks);
+        var selectedOutboundLegId = finalSession.Response.Results[0].Legs[0].Id;
+        var selectedSession = await service.GetSearchAsync(
+            initialSession.SearchId,
+            new SearchResultsQuery { OutboundLegId = selectedOutboundLegId },
+            CancellationToken.None);
 
-        var syntheticResult = Assert.Single(finalSession.Response.Results,
+        Assert.NotNull(selectedSession);
+        Assert.Null(selectedSession!.StagedResults);
+        Assert.Equal(2, selectedSession.Response.Results.Count);
+        var actualResult = Assert.Single(selectedSession.Response.Results,
+            result => !result.PriceOptions[0].Provider.Contains("Combined one-way", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(170m, actualResult.PriceOptions[0].TotalPrice.Amount);
+
+        var syntheticResult = Assert.Single(selectedSession.Response.Results,
             result => result.PriceOptions[0].Provider.Contains("Combined one-way", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal(190m, syntheticResult.PriceOptions[0].TotalPrice.Amount);
+        Assert.Equal(180m, syntheticResult.PriceOptions[0].TotalPrice.Amount);
         Assert.Equal(2, syntheticResult.PriceOptions[0].BookingLinks.Count);
         Assert.Equal("Book outbound", syntheticResult.PriceOptions[0].BookingLinks[0].Label);
         Assert.Equal("Book return", syntheticResult.PriceOptions[0].BookingLinks[1].Label);
-        Assert.Equal(110m, syntheticResult.PriceOptions[0].BookingLinks[0].Price?.Amount);
+        Assert.Equal(100m, syntheticResult.PriceOptions[0].BookingLinks[0].Price?.Amount);
         Assert.Equal(80m, syntheticResult.PriceOptions[0].BookingLinks[1].Price?.Amount);
     }
 
@@ -313,8 +445,14 @@ public sealed class SearchServiceTests
         var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
 
         Assert.Equal("completed", finalSession.Status);
+        var selectedSession = await service.GetSearchAsync(
+            initialSession.SearchId,
+            new SearchResultsQuery { OutboundLegId = finalSession.Response.Results[0].Legs[0].Id },
+            CancellationToken.None);
+
+        Assert.NotNull(selectedSession);
         Assert.DoesNotContain(
-            finalSession.Response.Results.SelectMany(result => result.PriceOptions),
+            selectedSession!.Response.Results.SelectMany(result => result.PriceOptions),
             option => option.Provider.Contains("Combined one-way", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -337,10 +475,16 @@ public sealed class SearchServiceTests
 
         Assert.Equal("completed", finalSession.Status);
         Assert.Equal(6, finalSession.TotalCombinations);
-        Assert.Equal(4, finalSession.Response.Results.Count);
-        Assert.All(finalSession.Response.Results, result => Assert.True(result.IsRoundTrip));
+        Assert.Equal(2, finalSession.Response.Results.Count);
+        Assert.All(finalSession.Response.Results, result => Assert.False(result.IsRoundTrip));
 
-        var routePairs = finalSession.Response.Results
+        var selectedSession = await service.GetSearchAsync(
+            initialSession.SearchId,
+            new SearchResultsQuery { OutboundLegId = finalSession.Response.Results[0].Legs[0].Id },
+            CancellationToken.None);
+
+        Assert.NotNull(selectedSession);
+        var routePairs = selectedSession!.Response.Results
             .Select(result =>
             {
                 var outbound = result.Legs[0];
@@ -353,9 +497,7 @@ public sealed class SearchServiceTests
         Assert.Equal(
             [
                 "DUB-AMS|AMS-DUB",
-                "DUB-AMS|DUS-DUB",
-                "DUB-DUS|AMS-DUB",
-                "DUB-DUS|DUS-DUB"
+                "DUB-AMS|DUS-DUB"
             ],
             routePairs);
     }
@@ -443,6 +585,28 @@ public sealed class SearchServiceTests
         Assert.Equal(660, session.Response.Filters.ArrivalTimeMinutes.Max);
         Assert.Equal(1140, session.Response.Filters.ReturnDepartureTimeMinutes.Min);
         Assert.Equal(1320, session.Response.Filters.ReturnArrivalTimeMinutes.Max);
+    }
+
+    [Fact]
+    public async Task GetSearchAsync_UsesOutboundDestinationForRoundTripArrivalFilter()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        await store.SetAsync(CreateStoredRoundTripSession(), CancellationToken.None);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
+
+        var response = await service.GetSearchAsync(
+            "search-roundtrip",
+            new SearchResultsQuery { ArrivalAirports = "AMS" },
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Equal(2, response!.Response.Results.Count);
+        Assert.Contains(
+            response.Response.Filters.ArrivalAirports,
+            option => option.Value == "AMS" && option.Count == 2);
+        Assert.DoesNotContain(
+            response.Response.Filters.ArrivalAirports,
+            option => option.Value == "DUB");
     }
 
     [Fact]
@@ -811,6 +975,167 @@ public sealed class SearchServiceTests
             Task.FromResult(new FlightApiOneWayResponse());
     }
 
+    private sealed class DuplicateEntityFlightSearchProvider : IFlightSearchProvider
+    {
+        public Task<FlightApiOneWayResponse> SearchOneWayAsync(
+            ProviderSearchRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new FlightApiOneWayResponse());
+
+        public Task<FlightApiOneWayResponse> SearchRoundTripAsync(
+            ProviderRoundTripSearchRequest request,
+            CancellationToken cancellationToken)
+        {
+            var outboundDeparture = new DateTime(2026, 8, 7, 19, 35, 0);
+            var outboundArrival = new DateTime(2026, 8, 7, 22, 30, 0);
+            var inboundDeparture = new DateTime(2026, 8, 12, 8, 0, 0);
+            var inboundArrival = new DateTime(2026, 8, 12, 10, 0, 0);
+            var outboundLeg = new FlightApiLeg
+            {
+                Id = "duplicate-outbound-leg",
+                OriginPlaceId = 1,
+                DestinationPlaceId = 2,
+                Departure = outboundDeparture,
+                Arrival = outboundArrival,
+                SegmentIds = ["duplicate-outbound-segment"],
+                Duration = 175
+            };
+            var inboundLeg = new FlightApiLeg
+            {
+                Id = "duplicate-inbound-leg",
+                OriginPlaceId = 2,
+                DestinationPlaceId = 1,
+                Departure = inboundDeparture,
+                Arrival = inboundArrival,
+                SegmentIds = ["duplicate-inbound-segment"],
+                Duration = 120
+            };
+            var outboundSegment = new FlightApiSegment
+            {
+                Id = "duplicate-outbound-segment",
+                OriginPlaceId = 1,
+                DestinationPlaceId = 2,
+                Departure = outboundDeparture,
+                Arrival = outboundArrival,
+                Duration = 175,
+                MarketingCarrierId = 1,
+                MarketingFlightNumber = "20"
+            };
+            var inboundSegment = new FlightApiSegment
+            {
+                Id = "duplicate-inbound-segment",
+                OriginPlaceId = 2,
+                DestinationPlaceId = 1,
+                Departure = inboundDeparture,
+                Arrival = inboundArrival,
+                Duration = 120,
+                MarketingCarrierId = 1,
+                MarketingFlightNumber = "21"
+            };
+            var origin = new FlightApiPlace { Id = 1, Iata = "DUB" };
+            var destination = new FlightApiPlace { Id = 2, Iata = "CGN" };
+            var carrier = new FlightApiCarrier { Id = 1, Name = "Test Air", DisplayCode = "TA" };
+
+            return Task.FromResult(new FlightApiOneWayResponse
+            {
+                Itineraries =
+                [
+                    new FlightApiItinerary
+                    {
+                        Id = "duplicate-itinerary",
+                        LegIds = [outboundLeg.Id, inboundLeg.Id],
+                        DeepLink = "https://example.com/duplicate-itinerary",
+                        PricingOptions =
+                        [
+                            new FlightApiPricingOption
+                            {
+                                Id = "duplicate-price",
+                                Price = new FlightApiPrice { Amount = 200m }
+                            }
+                        ]
+                    }
+                ],
+                Legs = [outboundLeg, outboundLeg, inboundLeg, inboundLeg],
+                Segments = [outboundSegment, outboundSegment, inboundSegment, inboundSegment],
+                Places = [origin, origin, destination, destination],
+                Carriers = [carrier, carrier]
+            });
+        }
+    }
+
+    private sealed class LargeResultFlightSearchProvider(int resultCount) : IFlightSearchProvider
+    {
+        public Task<FlightApiOneWayResponse> SearchOneWayAsync(
+            ProviderSearchRequest request,
+            CancellationToken cancellationToken)
+        {
+            var itineraries = new List<FlightApiItinerary>(resultCount);
+            var legs = new List<FlightApiLeg>(resultCount);
+            var segments = new List<FlightApiSegment>(resultCount);
+
+            for (var index = 0; index < resultCount; index += 1)
+            {
+                var id = $"large-{index}";
+                var departure = new DateTime(2026, 5, 15, 6, 0, 0).AddMinutes(index);
+                var arrival = departure.AddMinutes(90);
+                itineraries.Add(new FlightApiItinerary
+                {
+                    Id = id,
+                    LegIds = [$"{id}-leg"],
+                    DeepLink = $"https://example.com/{id}",
+                    PricingOptions =
+                    [
+                        new FlightApiPricingOption
+                        {
+                            Id = $"{id}-price",
+                            Price = new FlightApiPrice { Amount = 100m + index },
+                            Items = []
+                        }
+                    ]
+                });
+                legs.Add(new FlightApiLeg
+                {
+                    Id = $"{id}-leg",
+                    OriginPlaceId = 1,
+                    DestinationPlaceId = 2,
+                    Departure = departure,
+                    Arrival = arrival,
+                    Duration = 90,
+                    SegmentIds = [$"{id}-segment"]
+                });
+                segments.Add(new FlightApiSegment
+                {
+                    Id = $"{id}-segment",
+                    OriginPlaceId = 1,
+                    DestinationPlaceId = 2,
+                    Departure = departure,
+                    Arrival = arrival,
+                    Duration = 90,
+                    MarketingCarrierId = 1,
+                    MarketingFlightNumber = index.ToString()
+                });
+            }
+
+            return Task.FromResult(new FlightApiOneWayResponse
+            {
+                Itineraries = itineraries,
+                Legs = legs,
+                Segments = segments,
+                Places =
+                [
+                    new FlightApiPlace { Id = 1, Iata = "DUB" },
+                    new FlightApiPlace { Id = 2, Iata = "AMS" }
+                ],
+                Carriers = [new FlightApiCarrier { Id = 1, Name = "Test Airline", DisplayCode = "TA" }]
+            });
+        }
+
+        public Task<FlightApiOneWayResponse> SearchRoundTripAsync(
+            ProviderRoundTripSearchRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new FlightApiOneWayResponse());
+    }
+
     private sealed class RecordingFlightSearchProvider : IFlightSearchProvider
     {
         private readonly Lock _lock = new();
@@ -875,6 +1200,47 @@ public sealed class SearchServiceTests
             ProviderRoundTripSearchRequest request,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Provider failure");
+    }
+
+    private sealed class PhasedFlightSearchProvider : IFlightSearchProvider
+    {
+        private int _returnCalls;
+
+        public TaskCompletionSource OutboundStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseOutbound { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReturnPhaseStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int ReturnCalls => Volatile.Read(ref _returnCalls);
+
+        public async Task<FlightApiOneWayResponse> SearchOneWayAsync(
+            ProviderSearchRequest request,
+            CancellationToken cancellationToken)
+        {
+            if (request.OriginAirport == "DUB")
+            {
+                OutboundStarted.TrySetResult();
+                await ReleaseOutbound.Task;
+                return new FlightApiOneWayResponse();
+            }
+
+            Interlocked.Increment(ref _returnCalls);
+            ReturnPhaseStarted.TrySetResult();
+            return new FlightApiOneWayResponse();
+        }
+
+        public Task<FlightApiOneWayResponse> SearchRoundTripAsync(
+            ProviderRoundTripSearchRequest request,
+            CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _returnCalls);
+            ReturnPhaseStarted.TrySetResult();
+            return Task.FromResult(new FlightApiOneWayResponse());
+        }
     }
 
     private sealed class TimedFlightSearchProvider : IFlightSearchProvider

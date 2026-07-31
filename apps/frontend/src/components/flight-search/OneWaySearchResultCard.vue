@@ -16,11 +16,13 @@ defineProps<{
   copyLabel: string
   selectedOutboundLegId?: string | null
   selectedReturnLegId?: string | null
+  showOutboundSelection?: boolean
 }>()
 
 const emit = defineEmits<{
   toggleExpanded: [resultId: string]
   copyFare: []
+  filterLeg: [payload: { legId: string; legIndex: number }]
 }>()
 </script>
 
@@ -68,7 +70,17 @@ const emit = defineEmits<{
       >
         <div class="leg-summary">
           <p class="leg-route">{{ leg.originAirport }} → {{ leg.destinationAirport }}</p>
-          <span class="leg-actions" aria-hidden="true"></span>
+          <span class="leg-actions">
+            <button
+              v-if="showOutboundSelection"
+              class="leg-filter-button"
+              :class="{ active: selectedOutboundLegId === leg.id }"
+              type="button"
+              @click="emit('filterLeg', { legId: leg.id, legIndex: 0 })"
+            >
+              {{ selectedOutboundLegId === leg.id ? 'Selected outbound' : 'Choose outbound' }}
+            </button>
+          </span>
           <span class="leg-times">{{ formatDateTime(leg.departureLocalTime) }} to {{ formatDateTime(leg.arrivalLocalTime) }}</span>
           <strong>{{ formatDuration(leg.durationMinutes) }}</strong>
         </div>

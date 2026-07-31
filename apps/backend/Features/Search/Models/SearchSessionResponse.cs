@@ -1,5 +1,7 @@
 namespace backend.Features.Search.Models;
 
+using System.Text.Json.Serialization;
+
 public record SearchSessionResponse(
     string SearchId,
     string Status,
@@ -7,5 +9,7 @@ public record SearchSessionResponse(
     int CompletedCombinations,
     int FailedCombinations,
     SearchResponse Response,
-    string? ErrorMessage
+    string? ErrorMessage,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    SearchStagedResults? StagedResults = null
 );

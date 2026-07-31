@@ -10,6 +10,7 @@ public sealed class RedisSearchSessionStore(
     IConnectionMultiplexer connectionMultiplexer,
     IOptions<RedisOptions> options) : ISearchSessionStore
 {
+    private const string CacheSchemaVersion = "v2";
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IDatabase _database = connectionMultiplexer.GetDatabase();
@@ -35,5 +36,5 @@ public sealed class RedisSearchSessionStore(
         await _database.StringSetAsync(BuildKey(session.SearchId), payload, _ttl);
     }
 
-    private static string BuildKey(string searchId) => $"search-session:{searchId}";
+    private static string BuildKey(string searchId) => $"search-session:{CacheSchemaVersion}:{searchId}";
 }

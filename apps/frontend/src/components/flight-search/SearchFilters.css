@@ -1,6 +1,6 @@
 .filters-panel {
   position: sticky;
-  top: 20px;
+  top: 22px;
   max-height: calc(100vh - 40px);
   min-height: 0;
 }
@@ -8,12 +8,14 @@
 .filters-card {
   max-height: calc(100vh - 40px);
   overflow-y: auto;
-  border: 1px solid rgba(29, 34, 40, 0.08);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 24px 60px rgba(41, 49, 61, 0.08);
-  backdrop-filter: blur(18px);
-  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(20px);
+  padding: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .filters-card,
@@ -29,14 +31,14 @@
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #9c5a11;
+  color: var(--brand);
 }
 
 h3 {
   margin: 0 0 8px;
-  color: #1d2228;
-  font-size: 0.96rem;
-  font-weight: 600;
+  color: var(--ink-strong);
+  font-size: 1rem;
+  font-weight: 730;
 }
 
 .filter-row {
@@ -50,7 +52,15 @@ h3 {
   align-items: center;
   gap: 8px;
   margin-top: 6px;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
+  color: var(--ink);
+}
+
+.filter-toggle input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--brand);
 }
 
 .filter-toggle span {
@@ -64,13 +74,13 @@ h3 {
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #5b6570;
+  color: var(--muted);
 }
 
 .filter-section {
-  margin-top: 12px;
-  border-top: 1px solid rgba(29, 34, 40, 0.08);
-  padding-top: 8px;
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 11px;
 }
 
 .filter-section-summary {
@@ -86,12 +96,19 @@ h3 {
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #47515b;
+  color: var(--ink);
   text-align: left;
 }
 
 .filter-section-summary::after {
   content: '+';
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--muted);
   font-size: 0.9rem;
   line-height: 1;
 }
@@ -128,7 +145,7 @@ h3 {
 .filter-placeholder {
   margin: 0;
   padding-top: 4px;
-  color: #7a858f;
+  color: var(--muted-soft);
   font-size: 0.82rem;
 }
 
@@ -151,7 +168,7 @@ h3 {
 
 .time-filter-header strong {
   font-size: 0.78rem;
-  color: #33404d;
+  color: var(--ink);
   white-space: nowrap;
 }
 
@@ -179,21 +196,21 @@ h3 {
 .range-slider-track {
   left: 0;
   right: 0;
-  background: #e5ebf2;
+  background: #e8ecf3;
 }
 
 .single-range-slider .range-slider-track {
   left: 0;
   right: 0;
-  background: #e5ebf2;
+  background: #e8ecf3;
 }
 
 .range-slider-selected {
-  background: linear-gradient(135deg, #1f5fbf 0%, #2c7be5 100%);
+  background: linear-gradient(90deg, var(--brand) 0%, var(--accent) 100%);
 }
 
 .single-range-slider .range-slider-selected {
-  background: linear-gradient(135deg, #1f5fbf 0%, #2c7be5 100%);
+  background: linear-gradient(90deg, var(--brand) 0%, var(--accent) 100%);
 }
 
 .range-slider input[type='range'] {
@@ -242,8 +259,8 @@ h3 {
   margin-top: -4px;
   border: 2px solid #fff;
   border-radius: 999px;
-  background: #1f5fbf;
-  box-shadow: 0 2px 8px rgba(31, 95, 191, 0.25);
+  background: var(--brand);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.28);
   pointer-events: auto;
   cursor: pointer;
 }
@@ -255,8 +272,8 @@ h3 {
   margin-top: -4px;
   border: 2px solid #fff;
   border-radius: 999px;
-  background: #1f5fbf;
-  box-shadow: 0 2px 8px rgba(31, 95, 191, 0.25);
+  background: var(--brand);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.28);
   cursor: pointer;
 }
 
@@ -265,8 +282,8 @@ h3 {
   height: 14px;
   border: 2px solid #fff;
   border-radius: 999px;
-  background: #1f5fbf;
-  box-shadow: 0 2px 8px rgba(31, 95, 191, 0.25);
+  background: var(--brand);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.28);
   pointer-events: auto;
   cursor: pointer;
 }
@@ -276,8 +293,8 @@ h3 {
   height: 14px;
   border: 2px solid #fff;
   border-radius: 999px;
-  background: #1f5fbf;
-  box-shadow: 0 2px 8px rgba(31, 95, 191, 0.25);
+  background: var(--brand);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.28);
   cursor: pointer;
 }
 

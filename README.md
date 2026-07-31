@@ -85,7 +85,7 @@ Prerequisites:
 - .NET 10 SDK
 - Node.js 22+
 - `pnpm`
-- Redis
+- Docker (for the development PostgreSQL and Redis services)
 
 ### 1. Install frontend dependencies
 
@@ -102,17 +102,19 @@ cd apps/backend
 dotnet user-secrets set "FlightApi:ApiKey" "your-key"
 ```
 
-### 3. Start Redis
+### 3. Start development infrastructure
 
-Example with Docker:
+From the repository root:
 
 ```bash
-docker run -d --name aveon-redis -p 6379:6379 redis:7
+pnpm dev:infra
 ```
+
+This starts PostgreSQL on `localhost:5433` and Redis on `localhost:6379` without exposing the production Compose services differently.
 
 ### 4. Run the app
 
-From the repo root:
+From the repo root (this also starts the development infrastructure):
 
 ```bash
 pnpm dev

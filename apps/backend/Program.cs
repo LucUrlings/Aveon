@@ -111,14 +111,21 @@ if (app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-app.UseDefaultFiles();
-app.UseStaticFiles();
+var hasWebRoot = Directory.Exists(app.Environment.WebRootPath);
+if (hasWebRoot)
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapFallbackToFile("index.html");
+if (hasWebRoot)
+{
+    app.MapFallbackToFile("index.html");
+}
 
 await DatabaseInitializer.InitializeAsync(app.Services);
 

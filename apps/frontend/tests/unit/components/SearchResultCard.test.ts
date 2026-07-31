@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SearchResultCard from '../../../src/components/flight-search/SearchResultCard.vue'
+import SelectedOutboundSummary from '../../../src/components/flight-search/SelectedOutboundSummary.vue'
 import type { SearchResult } from '../../../src/features/flight-search/types'
 
 const clipboardWriteText = vi.fn()
@@ -243,6 +244,24 @@ describe('SearchResultCard', () => {
     expect(wrapper.find('.difference-badge').exists()).toBe(false)
   })
 
+  it('lets return searches choose a one-way result as the outbound leg', async () => {
+    const wrapper = mount(SearchResultCard, {
+      props: {
+        result: directResult,
+        expanded: false,
+        allowOutboundSelection: true,
+        selectedOutboundLegId: null,
+      },
+    })
+
+    expect(wrapper.text()).toContain('Choose outbound')
+    await wrapper.get('.leg-filter-button').trigger('click')
+
+    expect(wrapper.emitted('filterLeg')).toEqual([
+      [{ legId: 'direct-leg-1', legIndex: 0 }],
+    ])
+  })
+
   it('renders an actual return fare using the round-trip layout', () => {
     const wrapper = mount(SearchResultCard, {
       props: {
@@ -255,6 +274,42 @@ describe('SearchResultCard', () => {
     expect(wrapper.text()).toContain('Outbound')
     expect(wrapper.text()).toContain('Return')
     expect(wrapper.text()).toContain('Single round-trip booking')
+  })
+
+  it('renders the selected outbound once in a dedicated summary', async () => {
+    const wrapper = mount(SelectedOutboundSummary, {
+      props: { result: directResult },
+    })
+
+    expect(wrapper.text()).toContain('Selected outbound')
+    expect(wrapper.text()).toContain('AMS → DUB')
+    expect(wrapper.text()).toContain('EUR 120.00')
+
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.emitted('clear')).toHaveLength(1)
+  })
+
+  it('renders selected-outbound return options as compact inbound rows', async () => {
+    const wrapper = mount(SearchResultCard, {
+      props: {
+        result: syntheticReturnResult,
+        expanded: false,
+        compactReturn: true,
+        selectedOutboundLegId: 'return-outbound-leg',
+      },
+    })
+
+    expect(wrapper.find('.compact-return-card').exists()).toBe(true)
+    expect(wrapper.text()).toContain('CDG → AMS')
+    expect(wrapper.text()).not.toContain('AMS → CDG')
+    expect(wrapper.text()).toContain('Book return')
+    expect(wrapper.text()).not.toContain('Book outbound')
+    expect(wrapper.text()).toContain('Total trip')
+
+    await wrapper.get('.compact-return-actions button').trigger('click')
+    expect(wrapper.emitted('filterLeg')).toEqual([
+      [{ legId: 'return-return-leg', legIndex: 1 }],
+    ])
   })
 
   it('renders synthetic return booking links and emits fare toggle for multi-option results', async () => {

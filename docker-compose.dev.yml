@@ -1,0 +1,8 @@
+services:
+  aveon-postgres:
+    ports:
+      - "${POSTGRES_DEV_PORT:-5433}:5432"
+
+  aveon-redis:
+    ports:
+      - "${REDIS_DEV_PORT:-6379}:6379"

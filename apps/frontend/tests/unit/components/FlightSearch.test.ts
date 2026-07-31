@@ -380,7 +380,7 @@ describe('FlightSearch', () => {
       },
     )
 
-    expect(wrapper.get('.combination-prop').text()).toBe('4')
+    expect(wrapper.get('.combination-prop').text()).toBe('8')
 
     await wrapper.get('.submit-search').trigger('click')
     await flushPromises()
@@ -598,6 +598,70 @@ describe('FlightSearch', () => {
       page: 1,
       pageSize: 100,
     }))
+  })
+
+  it('ignores an in-flight polling response after a newer search starts', async () => {
+    let resolveOldPoll!: (session: SearchSessionResponse) => void
+    const oldPoll = new Promise<SearchSessionResponse>((resolve) => {
+      resolveOldPoll = resolve
+    })
+    const oldRunningSession = makeSession({
+      searchId: 'search-old',
+      status: 'running',
+      completedCombinations: 1,
+    })
+    const newCompletedSession = makeSession({
+      searchId: 'search-new',
+      response: {
+        ...makeSession().response,
+        results: [{ ...makeSession().response.results[0], id: 'new-result' }],
+      },
+    })
+    const staleCompletedSession = makeSession({
+      searchId: 'search-old',
+      response: {
+        ...makeSession().response,
+        results: [{ ...makeSession().response.results[0], id: 'stale-result' }],
+      },
+    })
+
+    mockSearchFlightsRequest
+      .mockResolvedValueOnce(oldRunningSession)
+      .mockResolvedValueOnce(newCompletedSession)
+    mockGetSearchSession.mockImplementation((searchId: string) => (
+      searchId === 'search-old' ? oldPoll : Promise.resolve(newCompletedSession)
+    ))
+
+    const { wrapper } = await mountWithRouter('/', {
+      global: {
+        stubs: {
+          FlightSearchBar: {
+            emits: ['submit'],
+            template: '<button class="submit-search" @click="$emit(\'submit\')">submit</button>',
+          },
+          SearchFilters: true,
+          SearchResultCard: {
+            props: ['result'],
+            template: '<div class="result-card-stub">{{ result.id }}</div>',
+          },
+        },
+      },
+    })
+
+    await wrapper.get('.submit-search').trigger('click')
+    await vi.waitFor(() => expect(mockGetSearchSession).toHaveBeenCalledWith(
+      'search-old',
+      expect.any(Object),
+    ))
+
+    await wrapper.get('.submit-search').trigger('click')
+    await vi.waitFor(() => expect(wrapper.text()).toContain('new-result'))
+
+    resolveOldPoll(staleCompletedSession)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('new-result')
+    expect(wrapper.text()).not.toContain('stale-result')
   })
 
   it('loads the next page automatically when the scroll sentinel is reached', async () => {

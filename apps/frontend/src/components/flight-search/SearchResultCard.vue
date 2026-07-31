@@ -4,6 +4,7 @@ import type { SearchResult } from '../../features/flight-search/types'
 import OneWaySearchResultCard from './OneWaySearchResultCard.vue'
 import ReturnSearchResultCard from './ReturnSearchResultCard.vue'
 import SyntheticReturnSearchResultCard from './SyntheticReturnSearchResultCard.vue'
+import CompactReturnSearchResultCard from './CompactReturnSearchResultCard.vue'
 import { formatResultForShare, isActualReturnFare, isSyntheticReturnFare } from './SearchResultCard.shared'
 
 const props = defineProps<{
@@ -11,6 +12,8 @@ const props = defineProps<{
   expanded: boolean
   selectedOutboundLegId?: string | null
   selectedReturnLegId?: string | null
+  allowOutboundSelection?: boolean
+  compactReturn?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -22,6 +25,10 @@ const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
 let copyResetTimer: number | null = null
 
 const cardComponent = computed(() => {
+  if (props.compactReturn && props.result.isRoundTrip && props.result.legs.length > 1) {
+    return CompactReturnSearchResultCard
+  }
+
   if (isSyntheticReturnFare(props.result)) {
     return SyntheticReturnSearchResultCard
   }
@@ -100,6 +107,7 @@ onBeforeUnmount(() => {
     :copy-label="copyLabel"
     :selected-outbound-leg-id="selectedOutboundLegId"
     :selected-return-leg-id="selectedReturnLegId"
+    :show-outbound-selection="allowOutboundSelection"
     @toggle-expanded="emit('toggleExpanded', $event)"
     @copy-fare="copyFare"
     @filter-leg="emit('filterLeg', $event)"

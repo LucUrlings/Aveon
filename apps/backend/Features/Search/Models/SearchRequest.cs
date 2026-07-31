@@ -27,9 +27,13 @@ public record SearchRequest(
         var end = ReturnDateFrom.Value <= ReturnDateTo.Value ? ReturnDateTo.Value : ReturnDateFrom.Value;
         var dates = new List<DateOnly>();
 
-        for (var date = start; date <= end; date = date.AddDays(1))
+        for (var date = start; ; date = date.AddDays(1))
         {
             dates.Add(date);
+            if (date == end)
+            {
+                break;
+            }
         }
 
         return dates;
