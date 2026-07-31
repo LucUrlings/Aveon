@@ -19,6 +19,7 @@ const progressPercentage = computed(() => {
   <section class="progress-shell" aria-label="Flight search progress">
     <div class="progress-copy">
       <p class="eyebrow">Search Progress</p>
+      <span class="progress-spinner" aria-hidden="true" />
       <strong>
         {{ session.completedCombinations }} / {{ session.totalCombinations }} combinations
       </strong>
@@ -66,6 +67,22 @@ const progressPercentage = computed(() => {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--brand);
+}
+
+.progress-spinner {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  border: 2px solid color-mix(in srgb, var(--brand) 22%, transparent);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: progress-spin 0.75s linear infinite;
+}
+
+@keyframes progress-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .progress-copy strong {

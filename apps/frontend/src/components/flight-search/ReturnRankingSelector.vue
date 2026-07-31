@@ -75,7 +75,7 @@ const moveSelection = (event: KeyboardEvent, currentIndex: number) => {
           <small>{{ formatDuration(returnDuration(leadingResults[option.value]!)) }} return</small>
         </span>
         <span v-else class="return-ranking-summary pending">
-          <strong>—</strong>
+          <strong>Pending</strong>
           <small>Finding fares</small>
         </span>
       </button>

@@ -79,7 +79,7 @@ const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
 const apiBaseUrl = configuredApiBaseUrl
   ? configuredApiBaseUrl.replace(/\/$/, '')
   : import.meta.env.DEV
-    ? 'http://localhost:5200'
+    ? 'http://localhost:5210'
     : ''
 
 const normalizeAirportOption = (airport: ApiAirportOption): AirportOption => ({

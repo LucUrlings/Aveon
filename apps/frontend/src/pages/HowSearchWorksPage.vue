@@ -50,7 +50,7 @@
           <span class="flow-number">03</span>
           <div class="flow-copy">
             <h3>Results arrive progressively</h3>
-            <p>A search session is returned immediately. The page polls that session and adds normalized, grouped fares as individual calls finish—you do not wait for the slowest combination.</p>
+            <p>A search session is returned immediately. The page polls that session and adds normalized, grouped fares as individual calls finish, so you do not wait for the slowest combination.</p>
           </div>
           <span class="flow-tag">Stream</span>
         </li>
@@ -132,7 +132,7 @@
     <section class="guide-note">
       <div>
         <p class="guide-eyebrow">Good to know</p>
-        <h2>Aveon helps you discover—it does not sell the ticket.</h2>
+        <h2>Aveon helps you discover. It does not sell the ticket.</h2>
       </div>
       <p>Prices and availability originate with flight providers and can change before booking. Aveon sends you to the relevant provider to complete each purchase.</p>
       <RouterLink to="/">Search flights <span aria-hidden="true">→</span></RouterLink>

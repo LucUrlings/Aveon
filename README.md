@@ -163,7 +163,7 @@ Current backend test coverage includes:
 
 The frontend types are generated from the backend Swagger document.
 
-With the backend running on `http://127.0.0.1:5200`:
+With the backend running on `http://127.0.0.1:5210`:
 
 ```bash
 pnpm --dir apps/frontend generate:types
@@ -213,7 +213,7 @@ Important env vars:
 
 - `FLIGHTAPI_API_KEY`
 - `AVEON_PORT`
-- `AVEON_PUBLIC_URL` — public origin injected when the deployed container starts; local Vite startup also uses it when supplied
+- `AVEON_PUBLIC_URL`: public origin injected when the deployed container starts; local Vite startup also uses it when supplied
 - `REDIS_FLIGHT_API_ONE_WAY_TTL_MINUTES`
 - `REDIS_AIRPORT_DATA_TTL_MINUTES`
 

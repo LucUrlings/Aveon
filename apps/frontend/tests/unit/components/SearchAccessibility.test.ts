@@ -51,6 +51,7 @@ describe('search accessibility', () => {
     })
 
     const progressbar = wrapper.get('[role="progressbar"]')
+    expect(wrapper.get('.progress-spinner').attributes('aria-hidden')).toBe('true')
     expect(progressbar.attributes('aria-valuenow')).toBe('4')
     expect(progressbar.attributes('aria-valuemax')).toBe('10')
     expect(progressbar.attributes('aria-valuetext')).toContain('4 of 10')
