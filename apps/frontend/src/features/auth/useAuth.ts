@@ -7,6 +7,7 @@ const anonymousUser: CurrentUser = {
   id: null,
   email: null,
   roles: [],
+  defaultReturnRanking: null,
 }
 
 const user = ref<CurrentUser>(anonymousUser)

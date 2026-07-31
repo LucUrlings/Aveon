@@ -1,16 +1,24 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { updatePreferences } from '../features/auth/api'
 import { useAuth } from '../features/auth/useAuth'
+import { returnRankingOptions, useSearchPreferences, type ReturnRanking } from '../features/preferences/useSearchPreferences'
 
 const auth = useAuth()
+const preferences = useSearchPreferences()
 const authMode = ref<'login' | 'register'>('login')
 const authEmail = ref('')
 const authPassword = ref('')
 const authError = ref<string | null>(null)
 const authSubmitting = ref(false)
+const preferencesError = ref<string | null>(null)
+const preferencesSaving = ref(false)
 const accountMenu = ref<HTMLDetailsElement | null>(null)
 
-onMounted(() => void auth.refresh())
+onMounted(async () => {
+  await auth.refresh()
+  preferences.applyAccountReturnRanking(auth.user.value.defaultReturnRanking)
+})
 
 const submitAuth = async () => {
   authError.value = null
@@ -20,6 +28,7 @@ const submitAuth = async () => {
     if (authMode.value === 'register') await auth.signUp(credentials)
     else await auth.signIn(credentials)
     authPassword.value = ''
+    preferences.applyAccountReturnRanking(auth.user.value.defaultReturnRanking)
     if (accountMenu.value) accountMenu.value.open = false
   } catch (error) {
     authError.value = error instanceof Error ? error.message : 'Authentication failed.'
@@ -38,6 +47,25 @@ const signOut = async () => {
     authError.value = error instanceof Error ? error.message : 'Logout failed.'
   } finally {
     authSubmitting.value = false
+  }
+}
+
+const updateReturnRanking = async (value: ReturnRanking) => {
+  preferencesError.value = null
+  preferences.setReturnRanking(value)
+
+  if (!auth.isAuthenticated.value) return
+
+  preferencesSaving.value = true
+  try {
+    const user = await updatePreferences(value)
+    preferences.applyAccountReturnRanking(user.defaultReturnRanking)
+  } catch (error) {
+    preferencesError.value = error instanceof Error
+      ? `${error.message} Your choice is saved only on this device.`
+      : 'Could not save to your account. Your choice is saved only on this device.'
+  } finally {
+    preferencesSaving.value = false
   }
 }
 </script>
@@ -60,7 +88,39 @@ const signOut = async () => {
         <a href="https://github.com/LucUrlings/Aveon" target="_blank" rel="noreferrer">Source <span aria-hidden="true">↗</span></a>
       </div>
 
-      <details ref="accountMenu" class="account-menu">
+      <div class="navbar-actions">
+        <details class="preferences-menu">
+          <summary aria-label="Search preferences">
+            <span aria-hidden="true">⚙</span>
+            <span class="preferences-label">Preferences</span>
+          </summary>
+          <div class="preferences-popover">
+            <p class="account-kicker">Return options</p>
+            <strong>Default ranking</strong>
+            <p class="preferences-copy">
+              Used whenever you choose an outbound flight.
+              {{ auth.isAuthenticated.value ? 'Saved to your account.' : 'Saved on this device until you sign in.' }}
+            </p>
+            <div class="ranking-options" role="radiogroup" aria-label="Default return ranking">
+              <button
+                v-for="option in returnRankingOptions"
+                :key="option.value"
+                type="button"
+                :class="{ active: preferences.returnRanking.value === option.value }"
+                role="radio"
+                :aria-checked="preferences.returnRanking.value === option.value"
+                :disabled="preferencesSaving"
+                @click="updateReturnRanking(option.value)"
+              >
+                <span><strong>{{ option.label }}</strong><small>{{ option.description }}</small></span>
+                <span class="ranking-check" aria-hidden="true">✓</span>
+              </button>
+            </div>
+            <p v-if="preferencesError" class="account-error" role="alert">{{ preferencesError }}</p>
+          </div>
+        </details>
+
+        <details ref="accountMenu" class="account-menu">
         <summary>
           <span class="account-avatar" aria-hidden="true">{{ auth.isAuthenticated.value ? '✓' : '○' }}</span>
           <span>{{ auth.isAuthenticated.value ? 'Account' : 'Sign in' }}</span>
@@ -94,7 +154,8 @@ const signOut = async () => {
             </button>
           </form>
         </div>
-      </details>
+        </details>
+      </div>
     </nav>
   </header>
 </template>

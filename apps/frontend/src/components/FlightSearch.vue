@@ -5,6 +5,8 @@ import FlightSearchBar from './flight-search/FlightSearchBar.vue'
 import SearchFilters from './flight-search/SearchFilters.vue'
 import SearchResultCard from './flight-search/SearchResultCard.vue'
 import SelectedOutboundSummary from './flight-search/SelectedOutboundSummary.vue'
+import { rankReturnOptions } from '../features/flight-search/returnRanking'
+import { returnRankingOptions, useSearchPreferences } from '../features/preferences/useSearchPreferences'
 import { fetchAirportSuggestions, getSearchSession, searchFlightsRequest } from '../features/flight-search/api'
 import {
   cabinOptions,
@@ -18,6 +20,7 @@ import {
 
 const MAX_DEPARTURE_RANGE_DAYS = 10
 const DEFAULT_PAGE_SIZE = 100
+const preferences = useSearchPreferences()
 
 const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10)
 
@@ -447,7 +450,12 @@ const availableMaxDurationMinutes = computed(() => {
   return response.value.filters.durationMinutes.max
 })
 
-const filteredResults = computed(() => loadedResults.value)
+const filteredResults = computed(() => selectedOutboundLegId.value
+  ? rankReturnOptions(loadedResults.value, preferences.returnRanking.value)
+  : loadedResults.value)
+const returnRankingLabel = computed(() => returnRankingOptions.find(
+  (option) => option.value === preferences.returnRanking.value,
+)?.label ?? 'Best value')
 const selectedOutboundSummaryResult = computed<SearchResult | null>(() => {
   if (!selectedOutboundLegId.value) {
     return null
@@ -1421,6 +1429,7 @@ const loadNextPage = async () => {
               </div>
             </div>
             <div class="results-stats">
+              <span v-if="selectedOutboundLegId">Sorted: {{ returnRankingLabel }}</span>
               <span
                 :title="`Loaded flights: ${filteredResults.length}\nDirect: ${loadedStopCounts.direct}\n1 stop: ${loadedStopCounts.oneStop}\n2+ stops: ${loadedStopCounts.twoPlusStop}`"
               >

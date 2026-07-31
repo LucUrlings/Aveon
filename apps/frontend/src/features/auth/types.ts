@@ -3,6 +3,7 @@ export type CurrentUser = {
   id: string | null
   email: string | null
   roles: string[]
+  defaultReturnRanking: 'best' | 'cheapest' | 'fastest' | null
 }
 
 export type AuthCredentials = {

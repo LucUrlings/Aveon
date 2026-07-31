@@ -43,6 +43,16 @@ describe('product shell', () => {
     expect(authMocks.refresh).toHaveBeenCalled()
   })
 
+  it('stores a user-selected default for return ranking', async () => {
+    const wrapper = mount(AppNavbar, {
+      global: { stubs: { RouterLink: routerLinkStub } },
+    })
+
+    await wrapper.get('.ranking-options button:nth-child(2)').trigger('click')
+
+    expect(window.localStorage.getItem('aveon.return-ranking')).toBe('cheapest')
+  })
+
   it('explains the product and links to the repository and creator website', () => {
     const wrapper = mount(AboutPage, {
       global: { stubs: { RouterLink: routerLinkStub } },
