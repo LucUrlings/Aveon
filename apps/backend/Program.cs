@@ -60,6 +60,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 builder.Services.AddScoped<IAirportService, AirportService>();
 builder.Services.AddScoped<ISearchLimitResolver, SearchLimitResolver>();
+builder.Services.AddSingleton<IProviderCallLimiter, ProviderCallLimiter>();
 builder.Services.AddSingleton<ISearchSessionStore, RedisSearchSessionStore>();
 builder.Services.AddSingleton<ISearchService, SearchService>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(serviceProvider =>

@@ -206,6 +206,112 @@
   font-size: 0.8rem;
 }
 
+.return-ranking-selector {
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-subtle);
+}
+
+.return-ranking-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.return-ranking-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.return-ranking-heading span {
+  color: var(--brand);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.return-ranking-heading strong {
+  color: var(--ink-strong);
+  font-size: 0.94rem;
+}
+
+.return-ranking-heading small {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.return-ranking-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.return-ranking-options button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-width: 0;
+  gap: 9px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.return-ranking-options button:hover:not(:disabled) {
+  border-color: rgba(79, 70, 229, 0.3);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.return-ranking-options button.active {
+  border-color: rgba(79, 70, 229, 0.45);
+  background: linear-gradient(135deg, #f5f5ff, #effbfc);
+  box-shadow: 0 6px 14px rgba(79, 70, 229, 0.1);
+}
+
+.return-ranking-label,
+.return-ranking-summary {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.return-ranking-label > strong {
+  color: var(--ink-strong);
+  font-size: 0.82rem;
+}
+
+.return-ranking-label small,
+.return-ranking-summary small {
+  color: var(--muted);
+  font-size: 0.67rem;
+  line-height: 1.25;
+}
+
+.return-ranking-summary {
+  justify-items: end;
+  text-align: right;
+}
+
+.return-ranking-summary > strong {
+  color: var(--brand-strong);
+  font-size: 0.86rem;
+}
+
+.return-ranking-summary.pending > strong {
+  color: var(--muted-soft);
+}
+
 .fare-expand-enter-active,
 .fare-expand-leave-active {
   transition: opacity 0.18s ease, transform 0.18s ease;
@@ -234,5 +340,9 @@
   .compact-return-actions {
     justify-content: start;
     justify-items: start;
+  }
+
+  .return-ranking-options {
+    grid-template-columns: 1fr;
   }
 }

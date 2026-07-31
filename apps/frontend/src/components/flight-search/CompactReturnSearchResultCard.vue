@@ -33,9 +33,10 @@ const stopLabel = computed(() => {
   return stops === 0 ? 'Direct' : `${stops} stop${stops === 1 ? '' : 's'}`
 })
 const primaryOption = computed(() => props.result.priceOptions[0])
+const isSyntheticFare = computed(() => isSyntheticReturnFare(props.result))
 const primaryLinks = computed(() => {
   const links = primaryOption.value?.bookingLinks ?? []
-  if (!isSyntheticReturnFare(props.result)) {
+  if (!isSyntheticFare.value) {
     return links
   }
 
@@ -49,8 +50,8 @@ const primaryLinks = computed(() => {
     <div class="compact-return-flight">
       <div class="compact-return-title">
         <strong>{{ returnAirlines }}</strong>
-        <span :class="['compact-booking-badge', { synthetic: isSyntheticReturnFare(result) }]">
-          {{ isSyntheticReturnFare(result) ? 'Separate return ticket' : 'Round-trip fare' }}
+        <span :class="['compact-booking-badge', { synthetic: isSyntheticFare }]">
+          {{ isSyntheticFare ? 'Separate return ticket' : 'Round-trip fare' }}
         </span>
       </div>
       <div class="compact-return-timing">
@@ -76,7 +77,7 @@ const primaryLinks = computed(() => {
           target="_blank"
           rel="noreferrer"
         >
-          {{ isSyntheticReturnFare(result) ? 'Book return' : (link.label || 'View fare') }}
+          {{ isSyntheticFare ? 'Book return' : (link.label || 'View fare') }}
           <small v-if="link.price">{{ formatPrice(link.price.amount, link.price.currency) }}</small>
         </a>
       </div>

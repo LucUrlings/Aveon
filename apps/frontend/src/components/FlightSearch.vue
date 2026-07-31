@@ -1,206 +1,127 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter, type LocationQueryValue } from 'vue-router'
 import FlightSearchBar from './flight-search/FlightSearchBar.vue'
 import SearchFilters from './flight-search/SearchFilters.vue'
-import SearchResultCard from './flight-search/SearchResultCard.vue'
-import SelectedOutboundSummary from './flight-search/SelectedOutboundSummary.vue'
-import { rankReturnOptions } from '../features/flight-search/returnRanking'
-import { returnRankingOptions, useSearchPreferences } from '../features/preferences/useSearchPreferences'
-import { fetchAirportSuggestions, getSearchSession, searchFlightsRequest } from '../features/flight-search/api'
+import SearchProgress from './flight-search/SearchProgress.vue'
+import SearchResultsPanel from './flight-search/SearchResultsPanel.vue'
+import { rankReturnOptions, returnRankingOptions, type ReturnRanking } from '../features/flight-search/returnRanking'
+import { useAirportPicker } from '../features/flight-search/useAirportPicker'
+import { useSearchDates } from '../features/flight-search/useSearchDates'
+import { useSearchFilters } from '../features/flight-search/useSearchFilters'
+import { useSearchRouteState } from '../features/flight-search/useSearchRouteState'
+import { useSearchSession } from '../features/flight-search/useSearchSession'
+import { buildSearchRequestKey, getExplicitSelection } from '../features/flight-search/searchRoute'
 import {
   cabinOptions,
   type AirportOption,
   type SearchRequest,
   type SearchResult,
   type SearchResultsQuery,
-  type SearchResponse,
-  type SearchSessionResponse,
 } from '../features/flight-search/types'
 
 const MAX_DEPARTURE_RANGE_DAYS = 10
 const DEFAULT_PAGE_SIZE = 100
-const preferences = useSearchPreferences()
 
-const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10)
-
-const getDateAheadOfToday = (daysAhead: number) => {
-  const today = new Date()
-  return toDateInputValue(new Date(Date.UTC(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate() + daysAhead,
-  )))
-}
-
-const defaultDepartureDates = [
-  getDateAheadOfToday(7),
-  getDateAheadOfToday(8),
-  getDateAheadOfToday(9),
-]
-
-const originInput = ref('')
-const destinationInput = ref('')
-const originAirports = ref<AirportOption[]>([
+const originPicker = useAirportPicker([
   { code: 'DUB', name: 'Dublin', displayLabel: 'Dublin (DUB)' },
 ])
-const destinationAirports = ref<AirportOption[]>([
+const destinationPicker = useAirportPicker([
   { code: 'AMS', name: 'Amsterdam Schiphol', displayLabel: 'Amsterdam Schiphol (AMS)' },
 ])
+const originInput = originPicker.input
+const destinationInput = destinationPicker.input
+const originAirports = originPicker.airports
+const destinationAirports = destinationPicker.airports
 
-const tripType = ref<'oneWay' | 'return'>('oneWay')
-const departureDateFrom = ref(defaultDepartureDates[0])
-const departureDateTo = ref(defaultDepartureDates[defaultDepartureDates.length - 1])
-const selectedDepartureDates = ref<string[]>([...defaultDepartureDates])
-const returnDateFrom = ref<string | null>(null)
-const returnDateTo = ref<string | null>(null)
-const selectedReturnDates = ref<string[]>([])
 const adults = ref(1)
 const cabinClass = ref('economy')
 
-const originSuggestions = ref<AirportOption[]>([])
-const destinationSuggestions = ref<AirportOption[]>([])
+const originSuggestions = originPicker.suggestions
+const destinationSuggestions = destinationPicker.suggestions
 
-const loading = ref(false)
-const error = ref<string | null>(null)
-const response = ref<SearchResponse | null>(null)
-const searchSession = ref<SearchSessionResponse | null>(null)
-const loadedResults = ref<SearchResponse['results']>([])
 const expandedResultIds = ref<string[]>([])
 const isSearchCollapsed = ref(false)
 
-const includeDirectFlights = ref(true)
-const includeOneStopFlights = ref(false)
-const includeTwoPlusStopFlights = ref(false)
-const selectedProviders = ref<string[]>([])
-const selectedAirlines = ref<string[]>([])
-const selectedDepartureAirports = ref<string[]>([])
-const selectedArrivalAirports = ref<string[]>([])
-const maxDurationMinutes = ref(0)
-const departureTimeRange = ref<[number, number]>([0, 1439])
-const arrivalTimeRange = ref<[number, number]>([0, 1439])
-const returnDepartureTimeRange = ref<[number, number]>([0, 1439])
-const returnArrivalTimeRange = ref<[number, number]>([0, 1439])
+const {
+  includeDirectFlights,
+  includeOneStopFlights,
+  includeTwoPlusStopFlights,
+  selectedProviders,
+  selectedAirlines,
+  selectedDepartureAirports,
+  selectedArrivalAirports,
+  maxDurationMinutes,
+  departureTimeRange,
+  arrivalTimeRange,
+  returnDepartureTimeRange,
+  returnArrivalTimeRange,
+} = useSearchFilters()
 const selectedOutboundLegId = ref<string | null>(null)
 const selectedOutboundResult = ref<SearchResult | null>(null)
 const selectedReturnLegId = ref<string | null>(null)
-const currentPage = ref(1)
-const isLoadingMore = ref(false)
-const loadMoreSentinel = ref<HTMLElement | null>(null)
-let originRequestId = 0
-let destinationRequestId = 0
-let pollingTimer: number | null = null
-let filterRefreshTimer: number | null = null
-let loadMoreObserver: IntersectionObserver | null = null
+const returnRanking = ref<ReturnRanking>('best')
+const searchDates = useSearchDates(() => {
+  returnDepartureTimeRange.value = [0, 1439]
+  returnArrivalTimeRange.value = [0, 1439]
+  selectedOutboundLegId.value = null
+  selectedOutboundResult.value = null
+  selectedReturnLegId.value = null
+  returnRanking.value = 'best'
+})
+const {
+  tripType,
+  departureDateFrom,
+  departureDateTo,
+  selectedDepartureDates,
+  returnDateFrom,
+  returnDateTo,
+  selectedReturnDates,
+} = searchDates
 let hasMounted = false
-let hasHydratedFiltersFromUrl = false
-let isSyncingRoute = false
-let lastExecutedSearchKey: string | null = null
-let activeSearchGeneration = 0
-let latestSessionRequestId = 0
 
-const route = useRoute()
-const router = useRouter()
-
-const getQueryString = (value: LocationQueryValue | LocationQueryValue[] | undefined) =>
-  Array.isArray(value) ? value[0] ?? null : value ?? null
-
-const buildAirportOption = (code: string): AirportOption => ({
-  code,
-  name: null,
-  displayLabel: code,
+const sessionState = useSearchSession({
+  buildQuery: () => buildSearchResultsQuery(),
+  buildRequest: (): SearchRequest => ({
+    originAirports: originAirports.value.map((airport) => airport.code),
+    destinationAirports: destinationAirports.value.map((airport) => airport.code),
+    departureDates: [...selectedDepartureDates.value],
+    returnDates: tripType.value === 'return' ? [...selectedReturnDates.value] : [],
+    adults: adults.value,
+    cabinClass: cabinClass.value,
+  }),
+  getSearchKey: () => getCurrentSearchRequestKey(),
+  validateRequest: () => tripType.value === 'return' && !selectedDepartureDates.value.some((departureDate) =>
+    selectedReturnDates.value.some((returnDate) => returnDate >= departureDate))
+    ? 'Select at least one return date on or after a departure date.'
+    : null,
+  isReady: () => hasMounted,
+  onSearchReset: () => {
+    expandedResultIds.value = []
+    selectedOutboundLegId.value = null
+    selectedOutboundResult.value = null
+    selectedReturnLegId.value = null
+    returnRanking.value = 'best'
+  },
+  onSearchAccepted: () => {
+    isSearchCollapsed.value = true
+  },
 })
-
-const parseStringListParam = (value: string | null) =>
-  (value ?? '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-const parseCodeListParam = (value: string | null) =>
-  parseStringListParam(value).map((item) => item.toUpperCase())
-
-const parseDateListParam = (value: string | null) =>
-  (value ?? '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .sort((left, right) => left.localeCompare(right))
-
-const parseNumberParam = (value: string | null, fallback: number) => {
-  if (value === null || value.trim() === '') {
-    return fallback
-  }
-
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : fallback
-}
-
-const parseBooleanParam = (value: string | null, fallback: boolean) => {
-  if (value === '1' || value === 'true') {
-    return true
-  }
-
-  if (value === '0' || value === 'false') {
-    return false
-  }
-
-  return fallback
-}
-
-const parseRangeParam = (value: string | null, fallback: [number, number]): [number, number] => {
-  if (!value) {
-    return fallback
-  }
-
-  const [startRaw, endRaw] = value.split('-', 2)
-  const start = Number(startRaw)
-  const end = Number(endRaw)
-
-  if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    return fallback
-  }
-
-  return [Math.min(start, end), Math.max(start, end)]
-}
-
-const hasActiveFilterQuery = (params: Record<string, LocationQueryValue | LocationQueryValue[] | undefined>) =>
-  [
-    'direct',
-    'oneStop',
-    'twoPlusStop',
-    'providers',
-    'airlines',
-    'departureAirports',
-    'arrivalAirports',
-    'maxDuration',
-    'departureTime',
-    'arrivalTime',
-    'returnDepartureTime',
-    'returnArrivalTime',
-    'outboundLegId',
-    'returnLegId',
-  ].some((key) => params[key] !== undefined)
-
-const buildSearchRequestKey = (
-  origins: string[],
-  destinations: string[],
-  dates: string[],
-  tripTypeValue: 'oneWay' | 'return',
-  returnDateFromValue: string | null,
-  returnDateToValue: string | null,
-  adultsValue: number,
-  cabinClassValue: string,
-) => JSON.stringify({
-  origins: [...origins].sort((left, right) => left.localeCompare(right)),
-  destinations: [...destinations].sort((left, right) => left.localeCompare(right)),
-  dates: [...dates].sort((left, right) => left.localeCompare(right)),
-  tripType: tripTypeValue,
-  returnDateFrom: returnDateFromValue,
-  returnDateTo: returnDateToValue,
-  adults: adultsValue,
-  cabinClass: cabinClassValue,
-})
+const {
+  loading,
+  error,
+  response,
+  searchSession,
+  loadedResults,
+  currentPage,
+  isLoadingMore,
+  isPolling,
+  hasMoreResults,
+  lastExecutedSearchKey,
+  search: searchFlights,
+  scheduleRefresh: scheduleSearchSessionRefresh,
+  loadNextPage,
+  dispose: disposeSearchSession,
+} = sessionState
 
 const getCurrentSearchRequestKey = () => {
   const origins = uniqueAirportCodes(originAirports.value)
@@ -216,198 +137,10 @@ const getCurrentSearchRequestKey = () => {
     destinations,
     dates,
     tripType.value,
-    returnDateFrom.value,
-    returnDateTo.value,
+    tripType.value === 'return' ? selectedReturnDates.value : [],
     adults.value,
     cabinClass.value,
   )
-}
-
-const getSearchRequestKeyFromQuery = (params: Record<string, LocationQueryValue | LocationQueryValue[] | undefined>) => {
-  const origins = parseCodeListParam(getQueryString(params.origins))
-  const destinations = parseCodeListParam(getQueryString(params.destinations))
-  const dates = parseDateListParam(getQueryString(params.dates))
-
-  if (origins.length === 0 || destinations.length === 0 || dates.length === 0) {
-    return null
-  }
-
-  return buildSearchRequestKey(
-    origins,
-    destinations,
-    dates,
-    getQueryString(params.tripType) === 'return' ? 'return' : 'oneWay',
-    getQueryString(params.returnDateFrom),
-    getQueryString(params.returnDateTo),
-    parseNumberParam(getQueryString(params.adults), 1),
-    getQueryString(params.cabinClass)?.trim() || 'economy',
-  )
-}
-
-const applyUrlState = () => {
-  const params = route.query
-
-  const originCodes = parseCodeListParam(getQueryString(params.origins))
-  if (originCodes.length > 0) {
-    originAirports.value = originCodes.map(buildAirportOption)
-  }
-
-  const destinationCodes = parseCodeListParam(getQueryString(params.destinations))
-  if (destinationCodes.length > 0) {
-    destinationAirports.value = destinationCodes.map(buildAirportOption)
-  }
-
-  const selectedDates = parseDateListParam(getQueryString(params.dates))
-  if (selectedDates.length > 0) {
-    selectedDepartureDates.value = selectedDates
-    departureDateFrom.value = selectedDates[0]
-    departureDateTo.value = selectedDates[selectedDates.length - 1]
-  }
-
-  tripType.value = getQueryString(params.tripType) === 'return' ? 'return' : 'oneWay'
-  returnDateFrom.value = getQueryString(params.returnDateFrom)
-  returnDateTo.value = getQueryString(params.returnDateTo)
-  selectedReturnDates.value = buildReturnDatesFromBounds(returnDateFrom.value, returnDateTo.value)
-
-  adults.value = parseNumberParam(getQueryString(params.adults), adults.value)
-
-  const cabinClassParam = getQueryString(params.cabinClass)?.trim()
-  if (cabinClassParam) {
-    cabinClass.value = cabinClassParam
-  }
-
-  includeDirectFlights.value = parseBooleanParam(getQueryString(params.direct), includeDirectFlights.value)
-  includeOneStopFlights.value = parseBooleanParam(getQueryString(params.oneStop), includeOneStopFlights.value)
-  includeTwoPlusStopFlights.value = parseBooleanParam(getQueryString(params.twoPlusStop), includeTwoPlusStopFlights.value)
-  selectedProviders.value = parseStringListParam(getQueryString(params.providers))
-  selectedAirlines.value = parseStringListParam(getQueryString(params.airlines))
-  selectedDepartureAirports.value = parseCodeListParam(getQueryString(params.departureAirports))
-  selectedArrivalAirports.value = parseCodeListParam(getQueryString(params.arrivalAirports))
-  maxDurationMinutes.value = parseNumberParam(getQueryString(params.maxDuration), maxDurationMinutes.value)
-  departureTimeRange.value = parseRangeParam(getQueryString(params.departureTime), departureTimeRange.value)
-  arrivalTimeRange.value = parseRangeParam(getQueryString(params.arrivalTime), arrivalTimeRange.value)
-  returnDepartureTimeRange.value = parseRangeParam(getQueryString(params.returnDepartureTime), returnDepartureTimeRange.value)
-  returnArrivalTimeRange.value = parseRangeParam(getQueryString(params.returnArrivalTime), returnArrivalTimeRange.value)
-  selectedOutboundLegId.value = getQueryString(params.outboundLegId)
-  selectedReturnLegId.value = getQueryString(params.returnLegId)
-  hasHydratedFiltersFromUrl = hasActiveFilterQuery(params)
-}
-
-const setListParam = (params: Record<string, string>, key: string, values: string[]) => {
-  const cleanedValues = values.map((value) => value.trim()).filter(Boolean)
-  if (cleanedValues.length === 0) {
-    delete params[key]
-    return
-  }
-
-  params[key] = cleanedValues.join(',')
-}
-
-const setBooleanParam = (params: Record<string, string>, key: string, value: boolean, fallback: boolean) => {
-  if (value === fallback) {
-    delete params[key]
-    return
-  }
-
-  params[key] = value ? '1' : '0'
-}
-
-const setNumberParam = (params: Record<string, string>, key: string, value: number, fallback: number) => {
-  if (value === fallback) {
-    delete params[key]
-    return
-  }
-
-  params[key] = String(value)
-}
-
-const setRangeParam = (params: Record<string, string>, key: string, value: [number, number], fallback: [number, number]) => {
-  if (value[0] === fallback[0] && value[1] === fallback[1]) {
-    delete params[key]
-    return
-  }
-
-  params[key] = `${value[0]}-${value[1]}`
-}
-
-const getExplicitSelection = (selectedValues: string[], availableValues: string[]) => {
-  const cleanedSelectedValues = selectedValues.map((value) => value.trim()).filter(Boolean)
-  const cleanedAvailableValues = availableValues.map((value) => value.trim()).filter(Boolean)
-
-  if (
-    cleanedSelectedValues.length === 0 ||
-    (cleanedAvailableValues.length > 0 &&
-      cleanedSelectedValues.length === cleanedAvailableValues.length &&
-      cleanedAvailableValues.every((value) => cleanedSelectedValues.includes(value)))
-  ) {
-    return []
-  }
-
-  return cleanedSelectedValues
-}
-
-const updateRouteState = async () => {
-  if (!hasMounted || isSyncingRoute) {
-    return
-  }
-
-  const query: Record<string, string> = {}
-  setListParam(query, 'origins', originAirports.value.map((airport) => airport.code))
-  setListParam(query, 'destinations', destinationAirports.value.map((airport) => airport.code))
-  setListParam(query, 'dates', selectedDepartureDates.value)
-  if (tripType.value === 'return') {
-    query.tripType = 'return'
-    if (returnDateFrom.value) {
-      query.returnDateFrom = returnDateFrom.value
-    }
-    if (returnDateTo.value) {
-      query.returnDateTo = returnDateTo.value
-    }
-  }
-  query.adults = String(adults.value)
-
-  if (cabinClass.value !== 'economy') {
-    query.cabinClass = cabinClass.value
-  }
-
-  setBooleanParam(query, 'direct', includeDirectFlights.value, true)
-  setBooleanParam(query, 'oneStop', includeOneStopFlights.value, false)
-  setBooleanParam(query, 'twoPlusStop', includeTwoPlusStopFlights.value, false)
-  setListParam(query, 'providers', getExplicitSelection(selectedProviders.value, providerFilters.value))
-  setListParam(query, 'airlines', getExplicitSelection(selectedAirlines.value, airlineFilters.value))
-  setListParam(query, 'departureAirports', getExplicitSelection(selectedDepartureAirports.value, departureAirportFilters.value))
-  setListParam(query, 'arrivalAirports', getExplicitSelection(selectedArrivalAirports.value, arrivalAirportFilters.value))
-  setNumberParam(query, 'maxDuration', maxDurationMinutes.value, response.value ? availableMaxDurationMinutes.value : 0)
-  setRangeParam(query, 'departureTime', departureTimeRange.value, [0, 1439])
-  setRangeParam(query, 'arrivalTime', arrivalTimeRange.value, [0, 1439])
-  if (tripType.value === 'return') {
-    setRangeParam(query, 'returnDepartureTime', returnDepartureTimeRange.value, [0, 1439])
-    setRangeParam(query, 'returnArrivalTime', returnArrivalTimeRange.value, [0, 1439])
-
-    if (selectedOutboundLegId.value) {
-      query.outboundLegId = selectedOutboundLegId.value
-    }
-
-    if (selectedReturnLegId.value) {
-      query.returnLegId = selectedReturnLegId.value
-    }
-  }
-
-  isSyncingRoute = true
-  try {
-    await router.replace({ query })
-  } finally {
-    isSyncingRoute = false
-  }
-}
-
-const syncSearchFromRoute = () => {
-  const routeSearchKey = getSearchRequestKeyFromQuery(route.query)
-  if (!routeSearchKey || routeSearchKey === lastExecutedSearchKey) {
-    return
-  }
-
-  void searchFlights()
 }
 
 const providerFilters = computed(() => {
@@ -450,12 +183,51 @@ const availableMaxDurationMinutes = computed(() => {
   return response.value.filters.durationMinutes.max
 })
 
+const { hasHydratedFiltersFromUrl, initialize: initializeRouteState } = useSearchRouteState({
+  originAirports,
+  destinationAirports,
+  selectedDepartureDates,
+  departureDateFrom,
+  departureDateTo,
+  tripType,
+  selectedReturnDates,
+  returnDateFrom,
+  returnDateTo,
+  adults,
+  cabinClass,
+  includeDirectFlights,
+  includeOneStopFlights,
+  includeTwoPlusStopFlights,
+  selectedProviders,
+  selectedAirlines,
+  selectedDepartureAirports,
+  selectedArrivalAirports,
+  maxDurationMinutes,
+  departureTimeRange,
+  arrivalTimeRange,
+  returnDepartureTimeRange,
+  returnArrivalTimeRange,
+  selectedOutboundLegId,
+  selectedReturnLegId,
+  response,
+  providerFilters,
+  airlineFilters,
+  departureAirportFilters,
+  arrivalAirportFilters,
+  availableMaxDurationMinutes,
+  lastExecutedSearchKey,
+  search: searchFlights,
+  onReady: () => {
+    hasMounted = true
+  },
+})
+
 const filteredResults = computed(() => selectedOutboundLegId.value
-  ? rankReturnOptions(loadedResults.value, preferences.returnRanking.value)
+  ? rankReturnOptions(loadedResults.value, returnRanking.value)
   : loadedResults.value)
 const returnRankingLabel = computed(() => returnRankingOptions.find(
-  (option) => option.value === preferences.returnRanking.value,
-)?.label ?? 'Best value')
+  (option) => option.value === returnRanking.value,
+)?.label ?? 'Recommended')
 const selectedOutboundSummaryResult = computed<SearchResult | null>(() => {
   if (!selectedOutboundLegId.value) {
     return null
@@ -481,11 +253,6 @@ const selectedOutboundSummaryResult = computed<SearchResult | null>(() => {
     priceOptions: [],
   }
 })
-const hasSelectedLegFilters = computed(() =>
-  Boolean(selectedOutboundLegId.value || selectedReturnLegId.value),
-)
-const totalPages = computed(() => response.value?.pagination.totalPages ?? 0)
-const hasMoreResults = computed(() => response.value !== null && currentPage.value < totalPages.value)
 const paginationSummary = computed(() => {
   if (!response.value || response.value.pagination.totalResults === 0 || filteredResults.value.length === 0) {
     return 'No results'
@@ -519,40 +286,12 @@ const loadedStopCounts = computed(() => {
   return counts
 })
 
-const searchSummary = computed(() => {
-  if (!response.value) {
-    return 'Search across multiple airports and compare grouped fares.'
-  }
-
-  if (tripType.value === 'return' && !selectedOutboundLegId.value) {
-    return `${response.value.pagination.totalResults} outbound flights to choose from`
-  }
-
-  if (tripType.value === 'return') {
-    return `${response.value.pagination.totalResults} return options for your outbound`
-  }
-
-  return `${response.value.pagination.totalResults} flights after filters`
-})
-
-const progressPercentage = computed(() => {
-  if (!searchSession.value || searchSession.value.totalCombinations === 0) {
-    return 0
-  }
-
-  return Math.round((searchSession.value.completedCombinations / searchSession.value.totalCombinations) * 100)
-})
-
-const isPolling = computed(() =>
-  searchSession.value?.status === 'running',
-)
-
 const compactSearchSummary = computed(() => {
   const origins = originAirports.value.map((airport) => airport.code).join(', ')
   const destinations = destinationAirports.value.map((airport) => airport.code).join(', ')
   const dateSummary = selectedDepartureDates.value.join(', ')
-  const returnSummary = tripType.value === 'return' && returnDateFrom.value && returnDateTo.value
-    ? ` returning ${returnDateFrom.value}${returnDateTo.value !== returnDateFrom.value ? ` to ${returnDateTo.value}` : ''}`
+  const returnSummary = tripType.value === 'return' && selectedReturnDates.value.length > 0
+    ? ` returning ${selectedReturnDates.value.join(', ')}`
     : ''
   return `${origins} to ${destinations} on ${dateSummary}${returnSummary}`
 })
@@ -594,7 +333,7 @@ const searchCombinationCount = computed(() => {
     return routeCombinationCount * departureDateCount
   }
 
-  const returnDates = buildReturnDates()
+  const returnDates = [...new Set(selectedReturnDates.value)]
   const validRoundTripPairCount = departureDates.reduce((count, departureDate) => (
     count + returnDates.filter((returnDate) => returnDate >= departureDate).length
   ), 0)
@@ -605,110 +344,6 @@ const searchCombinationCount = computed(() => {
     validRoundTripPairCount
   )
 })
-
-const addDays = (dateString: string, days: number) => {
-  const date = new Date(`${dateString}T00:00:00Z`)
-  date.setUTCDate(date.getUTCDate() + days)
-  return date.toISOString().slice(0, 10)
-}
-
-const buildDateRange = (start: string | null, end: string | null) => {
-  if (!start || !end) {
-    return []
-  }
-
-  const first = start <= end ? start : end
-  const last = start <= end ? end : start
-  const dates: string[] = []
-
-  for (let dateValue = first; dateValue <= last; dateValue = addDays(dateValue, 1)) {
-    dates.push(dateValue)
-  }
-
-  return dates
-}
-
-const buildReturnDatesFromBounds = (start: string | null, end: string | null) =>
-  buildDateRange(start, end)
-
-const buildReturnDates = () =>
-  tripType.value === 'return'
-    ? buildReturnDatesFromBounds(returnDateFrom.value, returnDateTo.value)
-    : []
-
-const isSelected = (items: AirportOption[], code: string) =>
-  items.some((item) => item.code === code)
-
-const removeAirport = (
-  items: typeof originAirports | typeof destinationAirports,
-  code: string,
-) => {
-  items.value = items.value.filter((item) => item.code !== code)
-}
-
-const addAirport = (
-  items: typeof originAirports | typeof destinationAirports,
-  input: typeof originInput | typeof destinationInput,
-  suggestions: typeof originSuggestions | typeof destinationSuggestions,
-  airport: AirportOption,
-) => {
-  if (isSelected(items.value, airport.code)) {
-    input.value = ''
-    suggestions.value = []
-    return
-  }
-
-  items.value = [...items.value, airport]
-  input.value = ''
-  suggestions.value = []
-}
-
-const tryAddFromInput = (
-  items: typeof originAirports | typeof destinationAirports,
-  input: typeof originInput | typeof destinationInput,
-  suggestions: typeof originSuggestions | typeof destinationSuggestions,
-) => {
-  const trimmed = input.value.trim()
-  if (!trimmed) {
-    return
-  }
-
-  const match = suggestions.value.find((option) =>
-    option.code.toLowerCase() === trimmed.toLowerCase() ||
-    option.displayLabel.toLowerCase() === trimmed.toLowerCase(),
-  )
-
-  if (match) {
-    addAirport(items, input, suggestions, match)
-  }
-}
-
-const updateSuggestions = async (
-  query: string,
-  items: typeof originAirports | typeof destinationAirports,
-  suggestions: typeof originSuggestions | typeof destinationSuggestions,
-  requestId: number,
-  getLatestRequestId: () => number,
-) => {
-  const trimmed = query.trim()
-  if (trimmed.length < 2) {
-    suggestions.value = []
-    return
-  }
-
-  try {
-    const lookup = await fetchAirportSuggestions(trimmed)
-    if (requestId !== getLatestRequestId()) {
-      return
-    }
-
-    suggestions.value = lookup.filter((airport) => !isSelected(items.value, airport.code))
-  } catch {
-    if (requestId === getLatestRequestId()) {
-      suggestions.value = []
-    }
-  }
-}
 
 const arraysEqual = (left: string[], right: string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index])
@@ -817,105 +452,10 @@ const buildSearchResultsQuery = (): SearchResultsQuery => {
   return query
 }
 
-watch(originInput, (value) => {
-  originRequestId += 1
-  void updateSuggestions(value, originAirports, originSuggestions, originRequestId, () => originRequestId)
-})
-
-watch(destinationInput, (value) => {
-  destinationRequestId += 1
-  void updateSuggestions(value, destinationAirports, destinationSuggestions, destinationRequestId, () => destinationRequestId)
-})
-
-watch(departureDateFrom, (value) => {
-  if (departureDateTo.value < value) {
-    departureDateTo.value = value
-    return
-  }
-
-  const maxAllowedEnd = addDays(value, MAX_DEPARTURE_RANGE_DAYS - 1)
-  if (departureDateTo.value > maxAllowedEnd) {
-    departureDateTo.value = maxAllowedEnd
-  }
-})
-
-watch(departureDateTo, (value) => {
-  if (departureDateFrom.value > value) {
-    departureDateFrom.value = value
-    return
-  }
-
-  const minAllowedStart = addDays(value, -(MAX_DEPARTURE_RANGE_DAYS - 1))
-  if (departureDateFrom.value < minAllowedStart) {
-    departureDateFrom.value = minAllowedStart
-  }
-
-  if (tripType.value === 'return' && (!returnDateFrom.value || returnDateFrom.value < value)) {
-    returnDateFrom.value = value
-    if (!returnDateTo.value || returnDateTo.value < value) {
-      returnDateTo.value = value
-    }
-  }
-})
-
-watch(tripType, (value) => {
-  if (value === 'oneWay') {
-    returnDateFrom.value = null
-    returnDateTo.value = null
-    selectedReturnDates.value = []
-    returnDepartureTimeRange.value = [0, 1439]
-    returnArrivalTimeRange.value = [0, 1439]
-    selectedOutboundLegId.value = null
-    selectedOutboundResult.value = null
-    selectedReturnLegId.value = null
-    return
-  }
-
-  if (!returnDateFrom.value) {
-    returnDateFrom.value = departureDateTo.value
-  }
-
-  if (!returnDateTo.value) {
-    returnDateTo.value = returnDateFrom.value
-  }
-
-  selectedReturnDates.value = buildReturnDates()
-})
-
-watch(returnDateFrom, (value) => {
-  if (!value) {
-    return
-  }
-
-  if (value < departureDateTo.value) {
-    returnDateFrom.value = departureDateTo.value
-    return
-  }
-
-  if (returnDateTo.value && returnDateTo.value < value) {
-    returnDateTo.value = value
-  }
-
-  selectedReturnDates.value = buildReturnDates()
-})
-
-watch(returnDateTo, (value) => {
-  if (!value || !returnDateFrom.value) {
-    return
-  }
-
-  if (value < returnDateFrom.value) {
-    returnDateTo.value = returnDateFrom.value
-    return
-  }
-
-  selectedReturnDates.value = buildReturnDates()
-})
-
 watch(
   response,
   (nextResponse, previousResponse) => {
-    const shouldResetFilters = !previousResponse && Boolean(nextResponse) && !hasHydratedFiltersFromUrl
+    const shouldResetFilters = !previousResponse && Boolean(nextResponse) && !hasHydratedFiltersFromUrl.value
     const previousProviderFilters = previousResponse?.filters.providers.map((option: { value: string }) => option.value) ?? []
     const previousAirlineFilters = previousResponse?.filters.airlines.map((option: { value: string }) => option.value) ?? []
     const previousDepartureAirportFilters = previousResponse?.filters.departureAirports.map((option: { value: string }) => option.value) ?? []
@@ -926,7 +466,7 @@ watch(
     syncSelectedFiltersToAvailable(selectedDepartureAirports, departureAirportFilters.value, previousDepartureAirportFilters, shouldResetFilters)
     syncSelectedFiltersToAvailable(selectedArrivalAirports, arrivalAirportFilters.value, previousArrivalAirportFilters, shouldResetFilters)
     syncMaxDurationToAvailable(shouldResetFilters)
-    hasHydratedFiltersFromUrl = false
+    hasHydratedFiltersFromUrl.value = false
   },
   { immediate: true },
 )
@@ -958,99 +498,6 @@ watch(
 
 watch(
   [
-    originAirports,
-    destinationAirports,
-    tripType,
-    selectedDepartureDates,
-    returnDateFrom,
-    returnDateTo,
-    selectedReturnDates,
-    adults,
-    cabinClass,
-    includeDirectFlights,
-    includeOneStopFlights,
-    includeTwoPlusStopFlights,
-    selectedProviders,
-    selectedAirlines,
-    selectedDepartureAirports,
-    selectedArrivalAirports,
-    maxDurationMinutes,
-    departureTimeRange,
-    arrivalTimeRange,
-    returnDepartureTimeRange,
-    returnArrivalTimeRange,
-    selectedOutboundLegId,
-    selectedReturnLegId,
-    isSearchCollapsed,
-  ],
-  () => {
-    void updateRouteState()
-  },
-  { deep: true },
-)
-
-const loadSearchSession = async (
-  searchId: string,
-  options: { page?: number; append?: boolean; generation?: number } = {},
-) => {
-  const page = options.page ?? currentPage.value
-  const append = options.append ?? false
-  const generation = options.generation ?? activeSearchGeneration
-  const requestId = ++latestSessionRequestId
-  const session = await getSearchSession(searchId, {
-    ...buildSearchResultsQuery(),
-    page,
-  })
-
-  if (generation !== activeSearchGeneration || requestId !== latestSessionRequestId) {
-    return null
-  }
-
-  searchSession.value = session
-  loadedResults.value = append
-    ? [...loadedResults.value, ...session.response.results]
-    : [...session.response.results]
-  response.value = {
-    ...session.response,
-    results: [...loadedResults.value],
-  }
-  error.value = session.errorMessage ?? null
-  currentPage.value = page
-
-  return session
-}
-
-const scheduleSearchSessionRefresh = () => {
-  if (!hasMounted || !searchSession.value?.searchId) {
-    return
-  }
-
-  if (filterRefreshTimer !== null) {
-    window.clearTimeout(filterRefreshTimer)
-  }
-
-  const searchId = searchSession.value.searchId
-  const generation = activeSearchGeneration
-  filterRefreshTimer = window.setTimeout(async () => {
-    filterRefreshTimer = null
-    try {
-      const session = await loadSearchSession(searchId, { page: 1, append: false, generation })
-      if (session?.status === 'running' && generation === activeSearchGeneration) {
-        stopPolling()
-        pollingTimer = window.setTimeout(() => {
-          void pollSearchSession(searchId, generation)
-        }, 1000)
-      }
-    } catch (err) {
-      if (generation === activeSearchGeneration) {
-        error.value = err instanceof Error ? err.message : 'Unknown error'
-      }
-    }
-  }, 200)
-}
-
-watch(
-  [
     includeDirectFlights,
     includeOneStopFlights,
     includeTwoPlusStopFlights,
@@ -1073,18 +520,6 @@ watch(
 )
 
 watch(
-  () => route.query,
-  () => {
-    if (isSyncingRoute) {
-      return
-    }
-
-    applyUrlState()
-    syncSearchFromRoute()
-  },
-)
-
-watch(
   pageTitle,
   (value) => {
     document.title = value
@@ -1092,164 +527,13 @@ watch(
   { immediate: true },
 )
 
-const setupLoadMoreObserver = () => {
-  loadMoreObserver?.disconnect()
-  loadMoreObserver = null
-
-  if (!loadMoreSentinel.value || typeof IntersectionObserver === 'undefined') {
-    return
-  }
-
-  loadMoreObserver = new IntersectionObserver(
-    (entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        void loadNextPage()
-      }
-    },
-    {
-      root: null,
-      rootMargin: '0px 0px 320px 0px',
-      threshold: 0,
-    },
-  )
-
-  loadMoreObserver.observe(loadMoreSentinel.value)
-}
-
 onMounted(() => {
-  applyUrlState()
-  hasMounted = true
-  void updateRouteState()
-  void fetchAirportSuggestions(originAirports.value[0].code)
-  void fetchAirportSuggestions(destinationAirports.value[0].code)
-  syncSearchFromRoute()
-  setupLoadMoreObserver()
-})
-
-watch(loadMoreSentinel, () => {
-  setupLoadMoreObserver()
-})
-
-watch(hasMoreResults, () => {
-  setupLoadMoreObserver()
+  initializeRouteState()
 })
 
 onBeforeUnmount(() => {
-  activeSearchGeneration += 1
-  latestSessionRequestId += 1
-  stopPolling()
-  if (filterRefreshTimer !== null) {
-    window.clearTimeout(filterRefreshTimer)
-  }
-  loadMoreObserver?.disconnect()
+  disposeSearchSession()
 })
-
-const stopPolling = () => {
-  if (pollingTimer !== null) {
-    window.clearTimeout(pollingTimer)
-    pollingTimer = null
-  }
-}
-
-const pollSearchSession = async (searchId: string, generation: number) => {
-  try {
-    const session = await loadSearchSession(searchId, { page: 1, append: false, generation })
-
-    if (!session || generation !== activeSearchGeneration) {
-      return
-    }
-
-    if (session.status === 'running') {
-      pollingTimer = window.setTimeout(() => {
-        void pollSearchSession(searchId, generation)
-      }, 1000)
-      return
-    }
-
-    stopPolling()
-  } catch (err) {
-    if (generation === activeSearchGeneration) {
-      error.value = err instanceof Error ? err.message : 'Unknown error'
-      stopPolling()
-    }
-  }
-}
-
-const searchFlights = async () => {
-  const latestDepartureDate = [...selectedDepartureDates.value]
-    .sort((left, right) => left.localeCompare(right))
-    .at(-1)
-
-  if (
-    tripType.value === 'return' &&
-    (!returnDateFrom.value || !returnDateTo.value ||
-      (latestDepartureDate !== undefined && returnDateFrom.value < latestDepartureDate))
-  ) {
-    error.value = 'The return date range must start on or after the latest outbound date.'
-    return
-  }
-
-  const generation = ++activeSearchGeneration
-  latestSessionRequestId += 1
-  stopPolling()
-  if (filterRefreshTimer !== null) {
-    window.clearTimeout(filterRefreshTimer)
-    filterRefreshTimer = null
-  }
-  loading.value = true
-  error.value = null
-  response.value = null
-  searchSession.value = null
-  loadedResults.value = []
-  expandedResultIds.value = []
-  selectedOutboundLegId.value = null
-  selectedOutboundResult.value = null
-  selectedReturnLegId.value = null
-
-  try {
-    lastExecutedSearchKey = getCurrentSearchRequestKey()
-
-    const request: SearchRequest = {
-      originAirports: originAirports.value.map((airport) => airport.code),
-      destinationAirports: destinationAirports.value.map((airport) => airport.code),
-      selectedDates: [...selectedDepartureDates.value],
-      returnDateFrom: tripType.value === 'return' ? returnDateFrom.value : null,
-      returnDateTo: tripType.value === 'return' ? returnDateTo.value : null,
-      adults: adults.value,
-      cabinClass: cabinClass.value,
-    }
-
-    const session = await searchFlightsRequest(request)
-
-    if (generation !== activeSearchGeneration) {
-      return
-    }
-
-    searchSession.value = session
-    loadedResults.value = [...session.response.results]
-    response.value = {
-      ...session.response,
-      results: [...loadedResults.value],
-    }
-    isSearchCollapsed.value = true
-    currentPage.value = 1
-    loading.value = false
-
-    if (session.status === 'running') {
-      await pollSearchSession(session.searchId, generation)
-    } else {
-      await loadSearchSession(session.searchId, { page: 1, append: false, generation })
-    }
-  } catch (err) {
-    if (generation === activeSearchGeneration) {
-      error.value = err instanceof Error ? err.message : 'Unknown error'
-    }
-  } finally {
-    if (generation === activeSearchGeneration && !isPolling.value) {
-      loading.value = false
-    }
-  }
-}
 
 const toggleExpanded = (resultId: string) => {
   if (expandedResultIds.value.includes(resultId)) {
@@ -1260,12 +544,11 @@ const toggleExpanded = (resultId: string) => {
   expandedResultIds.value = [...expandedResultIds.value, resultId]
 }
 
-const isExpanded = (resultId: string) => expandedResultIds.value.includes(resultId)
-
 const toggleLegFilter = ({ legId, legIndex }: { legId: string; legIndex: number }) => {
   if (legIndex === 0) {
     const isClearingSelection = selectedOutboundLegId.value === legId
     selectedOutboundLegId.value = isClearingSelection ? null : legId
+    returnRanking.value = 'best'
     selectedOutboundResult.value = isClearingSelection
       ? null
       : loadedResults.value.find((result) => result.legs[0]?.id === legId) ?? null
@@ -1279,14 +562,19 @@ const clearLegFilters = () => {
   selectedOutboundLegId.value = null
   selectedOutboundResult.value = null
   selectedReturnLegId.value = null
+  returnRanking.value = 'best'
 }
 
-const removeOriginAirport = (code: string) => removeAirport(originAirports, code)
-const removeDestinationAirport = (code: string) => removeAirport(destinationAirports, code)
-const addOriginAirport = (airport: AirportOption) => addAirport(originAirports, originInput, originSuggestions, airport)
-const addDestinationAirport = (airport: AirportOption) => addAirport(destinationAirports, destinationInput, destinationSuggestions, airport)
-const confirmOriginInput = () => tryAddFromInput(originAirports, originInput, originSuggestions)
-const confirmDestinationInput = () => tryAddFromInput(destinationAirports, destinationInput, destinationSuggestions)
+const updateReturnRanking = (ranking: ReturnRanking) => {
+  returnRanking.value = ranking
+}
+
+const removeOriginAirport = originPicker.removeAirport
+const removeDestinationAirport = destinationPicker.removeAirport
+const addOriginAirport = originPicker.addAirport
+const addDestinationAirport = destinationPicker.addAirport
+const confirmOriginInput = originPicker.confirmInput
+const confirmDestinationInput = destinationPicker.confirmInput
 const swapLocations = () => {
   const previousOriginAirports = [...originAirports.value]
   const previousDestinationAirports = [...destinationAirports.value]
@@ -1303,29 +591,12 @@ const swapLocations = () => {
   destinationSuggestions.value = previousOriginSuggestions
 }
 
-const loadNextPage = async () => {
-  if (!searchSession.value?.searchId || isLoadingMore.value || !hasMoreResults.value || isPolling.value) {
-    return
-  }
-
-  isLoadingMore.value = true
-  try {
-    await loadSearchSession(searchSession.value.searchId, {
-      page: currentPage.value + 1,
-      append: true,
-    })
-  } finally {
-    isLoadingMore.value = false
-  }
-}
-
 </script>
 
 <template>
   <main class="search-page">
     <section class="hero-panel">
       <div class="hero-copy">
-        <p class="eyebrow">Aveon</p>
         <div class="hero-heading">
           <h1>Flight discovery across nearby airports</h1>
           <p class="lead">
@@ -1374,20 +645,7 @@ const loadNextPage = async () => {
     <p v-if="error" class="error-message">{{ error }}</p>
 
     <Transition name="progress-shell">
-      <section v-if="isPolling && searchSession" class="progress-shell">
-        <div class="progress-copy">
-          <p class="eyebrow">Search Progress</p>
-          <strong>
-            {{ searchSession.completedCombinations }} / {{ searchSession.totalCombinations }} combinations
-          </strong>
-          <span v-if="searchSession.failedCombinations > 0">
-            {{ searchSession.failedCombinations }} failed
-          </span>
-        </div>
-        <div class="progress-bar">
-          <div class="progress-bar-fill" :style="{ width: `${progressPercentage}%` }" />
-        </div>
-      </section>
+      <SearchProgress v-if="isPolling && searchSession" :session="searchSession" />
     </Transition>
 
     <section class="results-grid" :class="{ 'results-only': !response }">
@@ -1413,83 +671,29 @@ const loadNextPage = async () => {
         :provider-filters="providerFilters"
       />
 
-      <section class="results-panel">
-        <div v-if="response" class="results-shell">
-          <div class="results-header">
-            <div>
-              <p class="eyebrow">Results</p>
-              <h2>{{ searchSummary }}</h2>
-              <div v-if="hasSelectedLegFilters" class="results-active-filters">
-                <span class="active-filter-chip">
-                  {{ selectedOutboundLegId ? 'Outbound selected' : 'Return selected' }}
-                </span>
-                <button class="clear-active-filter" type="button" @click="clearLegFilters">
-                  Clear
-                </button>
-              </div>
-            </div>
-            <div class="results-stats">
-              <span v-if="selectedOutboundLegId">Sorted: {{ returnRankingLabel }}</span>
-              <span
-                :title="`Loaded flights: ${filteredResults.length}\nDirect: ${loadedStopCounts.direct}\n1 stop: ${loadedStopCounts.oneStop}\n2+ stops: ${loadedStopCounts.twoPlusStop}`"
-              >
-                {{ filteredResults.length }} loaded flights
-                <template v-if="response.pagination.totalResults > 0">
-                  (out of {{ response.pagination.totalResults }})
-                </template>
-              </span>
-              <span>{{ response.metadata.providerResultCount }} provider fares</span>
-              <span>{{ response.metadata.searchCombinationCount }} search combinations</span>
-            </div>
-          </div>
-
-          <SelectedOutboundSummary
-            v-if="selectedOutboundSummaryResult"
-            :result="selectedOutboundSummaryResult"
-            @clear="clearLegFilters"
-          />
-
-          <TransitionGroup name="result-list" tag="div" class="results-list">
-            <SearchResultCard
-              v-for="result in filteredResults"
-              :key="result.id"
-              :result="result"
-              :expanded="isExpanded(result.id)"
-              :selected-outbound-leg-id="selectedOutboundLegId"
-              :selected-return-leg-id="selectedReturnLegId"
-              :allow-outbound-selection="tripType === 'return'"
-              :compact-return="Boolean(selectedOutboundLegId)"
-              @toggle-expanded="toggleExpanded"
-              @filter-leg="toggleLegFilter"
-            />
-          </TransitionGroup>
-
-          <div
-            v-if="selectedOutboundLegId && filteredResults.length === 0"
-            class="return-options-status"
-          >
-            <strong>{{ isPolling ? 'Finding return options…' : 'No compatible return options found' }}</strong>
-            <span v-if="isPolling">Recommendations will appear here as providers respond.</span>
-            <span v-else>Try another outbound flight or broaden the search filters.</span>
-          </div>
-
-          <div v-if="response.pagination.totalPages > 1" class="pagination-bar">
-            <span class="pagination-summary">{{ paginationSummary }}</span>
-            <span class="pagination-page">Page {{ currentPage }} of {{ totalPages }}</span>
-          </div>
-
-          <div
-            v-if="response.pagination.totalPages > 1 && hasMoreResults"
-            ref="loadMoreSentinel"
-            class="load-more-sentinel"
-            aria-hidden="true"
-          />
-
-          <div v-if="isLoadingMore" class="load-more-status">
-            Loading more fares…
-          </div>
-        </div>
-      </section>
+      <SearchResultsPanel
+        v-if="response"
+        :trip-type="tripType"
+        :response="response"
+        :results="filteredResults"
+        :is-polling="isPolling"
+        :is-loading-more="isLoadingMore"
+        :selected-outbound-leg-id="selectedOutboundLegId"
+        :selected-return-leg-id="selectedReturnLegId"
+        :selected-outbound-summary-result="selectedOutboundSummaryResult"
+        :selected-ranking="returnRanking"
+        :ranking-label="returnRankingLabel"
+        :expanded-result-ids="expandedResultIds"
+        :current-page="currentPage"
+        :has-more-results="hasMoreResults"
+        :pagination-summary="paginationSummary"
+        :loaded-stop-counts="loadedStopCounts"
+        @clear-leg-filters="clearLegFilters"
+        @select-ranking="updateReturnRanking"
+        @toggle-expanded="toggleExpanded"
+        @filter-leg="toggleLegFilter"
+        @load-more="loadNextPage"
+      />
     </section>
   </main>
 </template>

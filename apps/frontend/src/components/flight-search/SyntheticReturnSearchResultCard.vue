@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { SearchResult } from '../../features/flight-search/types'
 import {
   formatDateTime,
@@ -10,13 +11,17 @@ import {
   getFareIdentityChips,
 } from './SearchResultCard.shared'
 
-defineProps<{
+const props = defineProps<{
   result: SearchResult
   expanded: boolean
   copyLabel: string
   selectedOutboundLegId?: string | null
   selectedReturnLegId?: string | null
 }>()
+
+const airlineSummary = computed(() => getAirlineSummary(props.result))
+const identityChips = computed(() => getFareIdentityChips(props.result))
+const fareDifferenceBadges = computed(() => getFareDifferenceBadges(props.result))
 
 const emit = defineEmits<{
   toggleExpanded: [resultId: string]
@@ -30,7 +35,7 @@ const emit = defineEmits<{
     <div class="details-header">
       <div class="details-main">
         <p class="trip-badge synthetic">Separate bookings</p>
-        <p class="provider">{{ getAirlineSummary(result) }}</p>
+        <p class="provider">{{ airlineSummary }}</p>
         <p class="route">
           {{ result.legs[0]?.originAirport }} round trip to
           {{ result.legs[0]?.destinationAirport }}
@@ -52,7 +57,7 @@ const emit = defineEmits<{
 
     <div class="identity-chip-row" aria-label="Fare details">
       <span
-        v-for="chip in getFareIdentityChips(result)"
+        v-for="chip in identityChips"
         :key="chip"
         class="identity-chip"
       >
@@ -60,9 +65,9 @@ const emit = defineEmits<{
       </span>
     </div>
 
-    <div v-if="getFareDifferenceBadges(result).length" class="difference-badge-row" aria-label="Fare notices">
+    <div v-if="fareDifferenceBadges.length" class="difference-badge-row" aria-label="Fare notices">
       <span
-        v-for="badge in getFareDifferenceBadges(result)"
+        v-for="badge in fareDifferenceBadges"
         :key="`${badge.tone}-${badge.label}`"
         class="difference-badge"
         :class="`tone-${badge.tone}`"

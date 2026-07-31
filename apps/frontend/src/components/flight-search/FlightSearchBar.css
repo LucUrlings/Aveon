@@ -6,8 +6,8 @@
   background: var(--surface-raised);
   box-shadow: var(--shadow-lg);
   backdrop-filter: blur(20px);
-  padding: 18px 20px;
-  margin-bottom: 18px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
 }
 
 .search-shell.collapsed {
@@ -18,8 +18,8 @@
   display: flex;
   justify-content: space-between;
   align-items: start;
-  gap: 16px;
-  margin-bottom: 10px;
+  gap: 12px;
+  margin-bottom: 6px;
 }
 
 .search-shell-header > div,
@@ -36,8 +36,8 @@
 }
 
 .eyebrow {
-  margin: 0 0 6px;
-  font-size: 0.72rem;
+  margin: 0 0 3px;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -47,7 +47,7 @@
 h2 {
   margin: 0;
   color: var(--ink-strong);
-  font-size: 1.18rem;
+  font-size: 1.08rem;
   font-weight: 730;
   overflow-wrap: anywhere;
 }
@@ -55,10 +55,11 @@ h2 {
 .collapse-toggle {
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 6px 10px;
+  padding: 5px 9px;
   background: var(--surface-subtle);
   color: var(--ink);
   font: inherit;
+  font-size: 0.86rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -66,14 +67,14 @@ h2 {
 .search-form {
   width: 100%;
   min-width: 0;
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .search-layout {
   display: grid;
   width: 100%;
   min-width: 0;
-  gap: 14px;
+  gap: 10px;
 }
 
 .airport-grid {
@@ -81,7 +82,7 @@ h2 {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   width: 100%;
   min-width: 0;
-  gap: 12px;
+  gap: 10px;
   align-items: start;
 }
 
@@ -96,7 +97,7 @@ h2 {
   align-items: flex-start;
   justify-content: center;
   align-self: start;
-  padding-top: 67px;
+  padding-top: 57px;
 }
 
 .swap-locations-button {
@@ -106,8 +107,8 @@ h2 {
   align-self: center;
   border: 1px solid var(--border);
   border-radius: 999px;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   background: var(--surface);
   color: var(--muted);
@@ -131,15 +132,15 @@ h2 {
   display: grid;
   width: 100%;
   min-width: 0;
-  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 8px;
   align-items: start;
   max-width: 1200px;
 }
 
 .field {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   min-width: 0;
 }
@@ -155,7 +156,7 @@ h2 {
 .airport-picker {
   position: relative;
   display: grid;
-  gap: 8px;
+  gap: 5px;
   width: 100%;
   min-width: 0;
 }
@@ -163,8 +164,8 @@ h2 {
 .chip-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  min-height: 30px;
+  gap: 4px;
+  min-height: 26px;
   max-width: 100%;
   min-width: 0;
 }
@@ -172,11 +173,11 @@ h2 {
 .airport-chip {
   border: 1px solid rgba(79, 70, 229, 0.12);
   border-radius: 999px;
-  padding: 4px 8px;
+  padding: 3px 7px;
   background: var(--brand-soft);
   color: var(--brand-strong);
   font-weight: 700;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   cursor: pointer;
   max-width: 100%;
 }
@@ -190,10 +191,10 @@ h2 {
   box-sizing: border-box;
   border: 1px solid var(--border-strong);
   border-radius: 12px;
-  padding: 10px 12px;
-  min-height: 44px;
+  padding: 8px 10px;
+  min-height: 40px;
   font: inherit;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   background: var(--surface);
   color: var(--ink);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
@@ -217,7 +218,16 @@ h2 {
 }
 
 .field-trip-type {
-  max-width: 140px;
+  max-width: 130px;
+}
+
+.field-wide :deep(.date-range-trigger) {
+  min-height: 40px;
+  padding: 8px 10px;
+}
+
+.field-wide :deep(.date-range-trigger-label) {
+  font-size: 0.88rem;
 }
 
 .suggestions-list {
@@ -256,7 +266,7 @@ h2 {
 .search-button {
   border: none;
   border-radius: 12px;
-  padding: 11px 18px;
+  padding: 9px 16px;
   font: inherit;
   font-weight: 750;
   color: #fff;
@@ -277,7 +287,7 @@ h2 {
 }
 
 .search-actions {
-  margin-top: 16px;
+  margin-top: 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -287,7 +297,7 @@ h2 {
 .combination-count {
   margin: 0;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -318,7 +328,7 @@ h2 {
 
 @media (max-width: 960px) {
   .search-shell {
-    padding: 16px;
+    padding: 14px;
   }
 
   .airport-grid,
@@ -386,6 +396,11 @@ h2 {
     min-height: 40px;
     padding: 8px 9px;
     font-size: 0.9rem;
+  }
+
+  .field-wide :deep(.date-range-trigger) {
+    min-height: 40px;
+    padding: 8px 9px;
   }
 
   .suggestions-list {

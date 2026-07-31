@@ -208,7 +208,7 @@ afterEach(() => {
 })
 
 describe('FlightSearch', () => {
-  it('submits selectedDates to the backend and passes combination count to the search bar', async () => {
+  it('submits exact departure dates to the backend and passes combination count to the search bar', async () => {
     mockSearchFlightsRequest.mockResolvedValue(makeSession())
 
     const { wrapper, router } = await mountWithRouter('/', {
@@ -237,15 +237,14 @@ describe('FlightSearch', () => {
 
     expect(wrapper.get('.combination-prop').text()).toBe('3')
     expect(mockSearchFlightsRequest).toHaveBeenCalledWith(expect.objectContaining({
-      selectedDates: getDefaultDepartureDates(),
-      returnDateFrom: null,
-      returnDateTo: null,
-    }))
+      departureDates: getDefaultDepartureDates(),
+      returnDates: [],
+    }), expect.any(AbortSignal))
     expect(mockGetSearchSession).toHaveBeenCalledWith('search-1', expect.objectContaining({
       direct: true,
       oneStop: false,
       twoPlusStop: false,
-    }))
+    }), expect.any(AbortSignal))
     expect(router.currentRoute.value.query.adults).toBe('1')
   })
 
@@ -308,7 +307,7 @@ describe('FlightSearch', () => {
         departureTime: [0, 720],
         page: 1,
         pageSize: 100,
-      }))
+      }), expect.any(AbortSignal))
     })
     expect(document.title).toBe('Aveon · 1 flights from DUB to AMS')
   })
@@ -355,11 +354,11 @@ describe('FlightSearch', () => {
     expect(router.currentRoute.value.query.dates).toBe('2026-06-01,2026-06-03')
   })
 
-  it('submits return-date ranges for return searches and counts return combinations', async () => {
+  it('submits exact return dates for return searches and counts return combinations', async () => {
     mockSearchFlightsRequest.mockResolvedValue(makeSession())
 
     const { wrapper } = await mountWithRouter(
-      '/?origins=AMS&destinations=DUB&dates=2026-06-01,2026-06-03&tripType=return&returnDateFrom=2026-06-10&returnDateTo=2026-06-11',
+      '/?origins=AMS&destinations=DUB&dates=2026-06-01,2026-06-03&tripType=return&returnDates=2026-06-10,2026-06-12',
       {
         global: {
           stubs: {
@@ -386,10 +385,9 @@ describe('FlightSearch', () => {
     await flushPromises()
 
     expect(mockSearchFlightsRequest).toHaveBeenCalledWith(expect.objectContaining({
-      selectedDates: ['2026-06-01', '2026-06-03'],
-      returnDateFrom: '2026-06-10',
-      returnDateTo: '2026-06-11',
-    }))
+      departureDates: ['2026-06-01', '2026-06-03'],
+      returnDates: ['2026-06-10', '2026-06-12'],
+    }), expect.any(AbortSignal))
   })
 
   it('refetches return searches with per-leg time filters', async () => {
@@ -441,7 +439,7 @@ describe('FlightSearch', () => {
     mockGetSearchSession.mockResolvedValue(makeSession())
 
     const { wrapper } = await mountWithRouter(
-      '/?origins=AMS&destinations=DUB&dates=2026-06-01&tripType=return&returnDateFrom=2026-06-10&returnDateTo=2026-06-10',
+      '/?origins=AMS&destinations=DUB&dates=2026-06-01&tripType=return&returnDates=2026-06-10',
       {
         global: {
           stubs: {
@@ -479,7 +477,7 @@ describe('FlightSearch', () => {
         returnArrivalTime: [1140, 1320],
         page: 1,
         pageSize: 100,
-      }))
+      }), expect.any(AbortSignal))
     })
   })
 
@@ -527,7 +525,7 @@ describe('FlightSearch', () => {
     mockGetSearchSession.mockResolvedValue(makeSession())
 
     const { wrapper } = await mountWithRouter(
-      '/?origins=AMS&destinations=DUB&dates=2026-06-01&tripType=return&returnDateFrom=2026-06-10&returnDateTo=2026-06-10',
+      '/?origins=AMS&destinations=DUB&dates=2026-06-01&tripType=return&returnDates=2026-06-10',
       {
         global: {
           stubs: {
@@ -558,7 +556,7 @@ describe('FlightSearch', () => {
         outboundLegId: 'return-outbound-leg',
         page: 1,
         pageSize: 100,
-      }))
+      }), expect.any(AbortSignal))
     })
   })
 
@@ -587,17 +585,17 @@ describe('FlightSearch', () => {
     expect(mockSearchFlightsRequest).toHaveBeenCalledWith(expect.objectContaining({
       originAirports: ['DUB'],
       destinationAirports: ['AMS'],
-      selectedDates: ['2026-05-15', '2026-05-16', '2026-05-17'],
+      departureDates: ['2026-05-15', '2026-05-16', '2026-05-17'],
       adults: 1,
       cabinClass: 'economy',
-    }))
+    }), expect.any(AbortSignal))
     expect(mockGetSearchSession).toHaveBeenCalledWith('search-1', expect.objectContaining({
       direct: true,
       oneStop: false,
       twoPlusStop: false,
       page: 1,
       pageSize: 100,
-    }))
+    }), expect.any(AbortSignal))
   })
 
   it('ignores an in-flight polling response after a newer search starts', async () => {
@@ -652,10 +650,13 @@ describe('FlightSearch', () => {
     await vi.waitFor(() => expect(mockGetSearchSession).toHaveBeenCalledWith(
       'search-old',
       expect.any(Object),
+      expect.any(AbortSignal),
     ))
+    const oldSessionSignal = mockGetSearchSession.mock.calls.find((call) => call[0] === 'search-old')?.[2] as AbortSignal
 
     await wrapper.get('.submit-search').trigger('click')
     await vi.waitFor(() => expect(wrapper.text()).toContain('new-result'))
+    expect(oldSessionSignal.aborted).toBe(true)
 
     resolveOldPoll(staleCompletedSession)
     await flushPromises()
@@ -716,7 +717,7 @@ describe('FlightSearch', () => {
     expect(mockGetSearchSession).toHaveBeenCalledWith('search-1', expect.objectContaining({
       page: 1,
       pageSize: 100,
-    }))
+    }), expect.any(AbortSignal))
 
     intersectionObserverCallbacks.at(-1)?.(
       [{ isIntersecting: true } as IntersectionObserverEntry],
@@ -727,8 +728,11 @@ describe('FlightSearch', () => {
       expect(mockGetSearchSession).toHaveBeenLastCalledWith('search-1', expect.objectContaining({
         page: 2,
         pageSize: 100,
-      }))
+      }), expect.any(AbortSignal))
     })
+    await vi.waitFor(() => expect(wrapper.text()).toContain('page-2-result'))
+    expect(wrapper.text()).toContain('Showing 3 of 220')
     expect(router.currentRoute.value.query.page).toBeUndefined()
   })
+
 })

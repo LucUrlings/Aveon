@@ -69,8 +69,9 @@ const emit = defineEmits<{
                   <button
                     v-for="airport in originAirports"
                     :key="airport.code"
-                    type="button"
-                    class="airport-chip"
+                  type="button"
+                  class="airport-chip"
+                  :aria-label="`Remove ${airport.displayLabel} from origin airports`"
                     @click="emit('removeOriginAirport', airport.code)"
                   >
                     {{ airport.code }}
@@ -78,14 +79,19 @@ const emit = defineEmits<{
                 </div>
                 <input
                   v-model="originInput"
+                  aria-label="Add an origin airport or city"
+                  aria-autocomplete="list"
+                  :aria-expanded="originSuggestions.length > 0"
+                  aria-controls="origin-suggestions"
                   placeholder="Add airport or city"
                   @keydown.enter.prevent="emit('confirmOriginInput')"
                 />
-                <ul v-if="originSuggestions.length" class="suggestions-list">
+                <ul v-if="originSuggestions.length" id="origin-suggestions" class="suggestions-list" role="listbox" aria-label="Origin airport suggestions">
                   <li v-for="airport in originSuggestions" :key="airport.code">
                     <button
                       type="button"
                       class="suggestion-button"
+                      role="option"
                       @click="emit('addOriginAirport', airport)"
                     >
                       {{ airport.displayLabel }}
@@ -135,8 +141,9 @@ const emit = defineEmits<{
                   <button
                     v-for="airport in destinationAirports"
                     :key="airport.code"
-                    type="button"
-                    class="airport-chip"
+                  type="button"
+                  class="airport-chip"
+                  :aria-label="`Remove ${airport.displayLabel} from destination airports`"
                     @click="emit('removeDestinationAirport', airport.code)"
                   >
                     {{ airport.code }}
@@ -144,14 +151,19 @@ const emit = defineEmits<{
                 </div>
                 <input
                   v-model="destinationInput"
+                  aria-label="Add a destination airport or city"
+                  aria-autocomplete="list"
+                  :aria-expanded="destinationSuggestions.length > 0"
+                  aria-controls="destination-suggestions"
                   placeholder="Add airport or city"
                   @keydown.enter.prevent="emit('confirmDestinationInput')"
                 />
-                <ul v-if="destinationSuggestions.length" class="suggestions-list">
+                <ul v-if="destinationSuggestions.length" id="destination-suggestions" class="suggestions-list" role="listbox" aria-label="Destination airport suggestions">
                   <li v-for="airport in destinationSuggestions" :key="airport.code">
                     <button
                       type="button"
                       class="suggestion-button"
+                      role="option"
                       @click="emit('addDestinationAirport', airport)"
                     >
                       {{ airport.displayLabel }}
@@ -210,12 +222,12 @@ const emit = defineEmits<{
         </div>
 
         <div class="search-actions">
-          <p class="combination-count">
+          <p class="combination-count" aria-live="polite">
             {{ searchCombinationCount }}
             {{ searchCombinationCount === 1 ? 'combination' : 'combinations' }}
           </p>
 
-          <button class="search-button" type="submit" :disabled="loading">
+          <button class="search-button" type="submit" :disabled="loading" :aria-busy="loading">
             {{ loading ? 'Searching...' : 'Search flights' }}
           </button>
         </div>

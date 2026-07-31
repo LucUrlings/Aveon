@@ -91,9 +91,8 @@ describe('flight search api', () => {
     const session = await searchFlightsRequest({
       originAirports: ['AMS'],
       destinationAirports: ['DUB'],
-      selectedDates: ['2026-05-15'],
-      returnDateFrom: null,
-      returnDateTo: null,
+      departureDates: ['2026-05-15'],
+      returnDates: [],
       adults: 1,
       cabinClass: 'economy',
     })
@@ -137,6 +136,19 @@ describe('flight search api', () => {
     await expect(getSearchSession('search-1', { direct: true, providers: ['FlightApi:KLM'] })).rejects.toThrow('Bad request from backend')
   })
 
+  it('uses the browser market and locale for Skyscanner transport deeplinks only', async () => {
+    const originalLanguage = navigator.language
+    Object.defineProperty(navigator, 'language', { configurable: true, value: 'en-IE' })
+
+    const { normalizeBookingLink } = await import('../../../src/features/flight-search/api')
+
+    expect(normalizeBookingLink('https://www.skyscanner.nl/transport_deeplink/4.0/US/en-GB/EUR/ryan/1/example'))
+      .toBe('https://www.skyscanner.nl/transport_deeplink/4.0/IE/en-IE/EUR/ryan/1/example')
+    expect(normalizeBookingLink('https://www.ryanair.com/gb/en')).toBe('https://www.ryanair.com/gb/en')
+
+    Object.defineProperty(navigator, 'language', { configurable: true, value: originalLanguage })
+  })
+
   it('throws validation messages from problem details for failed search requests', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
@@ -157,9 +169,8 @@ describe('flight search api', () => {
     await expect(searchFlightsRequest({
       originAirports: ['DUB'],
       destinationAirports: ['AMS'],
-      selectedDates: ['2026-05-15'],
-      returnDateFrom: null,
-      returnDateTo: null,
+      departureDates: ['2026-05-15'],
+      returnDates: [],
       adults: 1,
       cabinClass: 'economy',
     })).rejects.toThrow('Search exceeds the limit of 15 combinations.')
@@ -237,5 +248,43 @@ describe('flight search api', () => {
     expect(requestUrl.searchParams.get('returnLegId')).toBe('ret-1')
     expect(requestUrl.searchParams.get('page')).toBe('2')
     expect(requestUrl.searchParams.get('pageSize')).toBe('100')
+  })
+
+  it('drops provider options without a real total price instead of displaying a fabricated free fare', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        searchId: 'search-1',
+        status: 'completed',
+        response: {
+          results: [
+            {
+              id: 'missing-price',
+              priceOptions: [{ id: 'missing', provider: 'FlightApi:Example', totalPrice: null }],
+            },
+            {
+              id: 'priced',
+              priceOptions: [{
+                id: 'priced-option',
+                provider: 'FlightApi:Example',
+                totalPrice: { amount: 123.45, currency: 'EUR' },
+              }],
+            },
+          ],
+        },
+      }),
+    })
+
+    const { getSearchSession } = await import('../../../src/features/flight-search/api')
+    const controller = new AbortController()
+    const session = await getSearchSession('search-1', {}, controller.signal)
+
+    expect(session.response.results).toHaveLength(1)
+    expect(session.response.results[0].id).toBe('priced')
+    expect(session.response.results[0].priceOptions[0].totalPrice).toEqual({ amount: 123.45, currency: 'EUR' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/search/search-1'),
+      expect.objectContaining({ signal: controller.signal }),
+    )
   })
 })

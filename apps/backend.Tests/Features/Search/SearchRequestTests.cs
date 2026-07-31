@@ -12,8 +12,7 @@ public sealed class SearchRequestTests
             ["DUB"],
             ["AMS"],
             [new DateOnly(2026, 5, 17), new DateOnly(2026, 5, 15), new DateOnly(2026, 5, 17)],
-            null,
-            null,
+            [],
             1,
             "economy");
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { SearchResult } from '../../features/flight-search/types'
 import {
   formatDateTime,
@@ -10,13 +11,18 @@ import {
   getPrimaryBookingLink,
 } from './SearchResultCard.shared'
 
-defineProps<{
+const props = defineProps<{
   result: SearchResult
   expanded: boolean
   copyLabel: string
   selectedOutboundLegId?: string | null
   selectedReturnLegId?: string | null
 }>()
+
+const airlineSummary = computed(() => getAirlineSummary(props.result))
+const identityChips = computed(() => getFareIdentityChips(props.result))
+const fareDifferenceBadges = computed(() => getFareDifferenceBadges(props.result))
+const primaryBookingLink = computed(() => getPrimaryBookingLink(props.result))
 
 const emit = defineEmits<{
   toggleExpanded: [resultId: string]
@@ -30,7 +36,7 @@ const emit = defineEmits<{
     <div class="details-header">
       <div class="details-main">
         <p class="trip-badge">Round trip</p>
-        <p class="provider">{{ getAirlineSummary(result) }}</p>
+        <p class="provider">{{ airlineSummary }}</p>
         <p class="route">
           {{ result.legs[0]?.originAirport }} round trip to
           {{ result.legs[0]?.destinationAirport }}
@@ -52,7 +58,7 @@ const emit = defineEmits<{
 
     <div class="identity-chip-row" aria-label="Fare details">
       <span
-        v-for="chip in getFareIdentityChips(result)"
+        v-for="chip in identityChips"
         :key="chip"
         class="identity-chip"
       >
@@ -60,9 +66,9 @@ const emit = defineEmits<{
       </span>
     </div>
 
-    <div v-if="getFareDifferenceBadges(result).length" class="difference-badge-row" aria-label="Fare notices">
+    <div v-if="fareDifferenceBadges.length" class="difference-badge-row" aria-label="Fare notices">
       <span
-        v-for="badge in getFareDifferenceBadges(result)"
+        v-for="badge in fareDifferenceBadges"
         :key="`${badge.tone}-${badge.label}`"
         class="difference-badge"
         :class="`tone-${badge.tone}`"
@@ -120,13 +126,13 @@ const emit = defineEmits<{
             {{ result.priceOptions[0].totalPrice.amount.toFixed(2) }}
           </strong>
           <a
-            v-if="getPrimaryBookingLink(result)"
+            v-if="primaryBookingLink"
             class="primary-fare-link"
-            :href="getPrimaryBookingLink(result)?.url"
+            :href="primaryBookingLink.url"
             target="_blank"
             rel="noreferrer"
           >
-            {{ getPrimaryBookingLink(result)?.label || 'View fare' }}
+            {{ primaryBookingLink.label || 'View fare' }}
           </a>
         </div>
       </div>

@@ -7,4 +7,6 @@ public record SearchOptions
     public int AnonymousMaxSearchCombinations { get; init; } = 15;
 
     public int UserMaxSearchCombinations { get; init; } = 100;
+
+    public int MaxConcurrentProviderCalls { get; init; } = 5;
 }

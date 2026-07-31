@@ -5,7 +5,6 @@ type ApiCurrentUser = {
   id?: string | null
   email?: string | null
   roles?: string[] | null
-  defaultReturnRanking?: string | null
 }
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
@@ -20,9 +19,6 @@ const normalizeCurrentUser = (user: ApiCurrentUser): CurrentUser => ({
   id: user.id ?? null,
   email: user.email ?? null,
   roles: user.roles ?? [],
-  defaultReturnRanking: user.defaultReturnRanking === 'cheapest' || user.defaultReturnRanking === 'fastest' || user.defaultReturnRanking === 'best'
-    ? user.defaultReturnRanking
-    : null,
 })
 
 const readErrorMessage = async (response: Response) => {
@@ -89,9 +85,3 @@ export const logout = async () => {
     throw new Error(await readErrorMessage(response))
   }
 }
-
-export const updatePreferences = (defaultReturnRanking: NonNullable<CurrentUser['defaultReturnRanking']>) =>
-  requestCurrentUser('/api/v1/auth/preferences', {
-    method: 'PUT',
-    body: JSON.stringify({ defaultReturnRanking }),
-  })

@@ -16,7 +16,6 @@ describe('auth api', () => {
         id: 'user-1',
         email: 'luc@example.com',
         roles: ['User'],
-        defaultReturnRanking: 'best',
       }),
     })
 
@@ -27,7 +26,6 @@ describe('auth api', () => {
       id: 'user-1',
       email: 'luc@example.com',
       roles: ['User'],
-      defaultReturnRanking: 'best',
     })
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/auth/me'),
@@ -79,30 +77,4 @@ describe('auth api', () => {
     await expect(register({ email: 'luc@example.com', password: 'short' })).rejects.toThrow('Password is too short.')
   })
 
-  it('saves the signed-in user default return ranking', async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        isAuthenticated: true,
-        id: 'user-1',
-        email: 'luc@example.com',
-        roles: ['User'],
-        defaultReturnRanking: 'fastest',
-      }),
-    })
-
-    const { updatePreferences } = await import('../../../src/features/auth/api')
-
-    await expect(updatePreferences('fastest')).resolves.toMatchObject({
-      defaultReturnRanking: 'fastest',
-    })
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/auth/preferences'),
-      expect.objectContaining({
-        method: 'PUT',
-        credentials: 'include',
-        body: JSON.stringify({ defaultReturnRanking: 'fastest' }),
-      }),
-    )
-  })
 })

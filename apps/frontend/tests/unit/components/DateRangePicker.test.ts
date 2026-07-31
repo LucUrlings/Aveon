@@ -16,10 +16,16 @@ const mountPicker = (overrides: Record<string, unknown> = {}) =>
 describe('DateRangePicker', () => {
   it('shows all selected dates in the trigger label', () => {
     const wrapper = mountPicker()
+    const formatter = new Intl.DateTimeFormat(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    })
 
-    expect(wrapper.text()).toContain('15 May 2026')
-    expect(wrapper.text()).toContain('16 May 2026')
-    expect(wrapper.text()).toContain('17 May 2026')
+    expect(wrapper.text()).toContain(formatter.format(new Date('2026-05-15T00:00:00Z')))
+    expect(wrapper.text()).toContain(formatter.format(new Date('2026-05-16T00:00:00Z')))
+    expect(wrapper.text()).toContain(formatter.format(new Date('2026-05-17T00:00:00Z')))
   })
 
   it('switches to specific dates mode', async () => {
@@ -30,6 +36,11 @@ describe('DateRangePicker', () => {
 
     expect(wrapper.text()).toContain('Specific dates mode')
     expect(wrapper.text()).toContain('Up to 4 picked dates')
+    expect(wrapper.get('.date-range-trigger').attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('[role="dialog"]').exists()).toBe(true)
+
+    await wrapper.get('.date-range-picker').trigger('keydown.esc')
+    expect(wrapper.get('.date-range-trigger').attributes('aria-expanded')).toBe('false')
   })
 
   it('emits the full consecutive date list in range mode', async () => {
@@ -66,5 +77,22 @@ describe('DateRangePicker', () => {
       '2026-05-16',
       '2026-05-17',
     ]))).toBe(true)
+  })
+
+  it('fills the current bounds when switching from specific dates back to range mode', async () => {
+    const wrapper = mountPicker({
+      selectedDates: ['2026-05-15', '2026-05-17'],
+    })
+
+    await wrapper.get('.date-range-trigger').trigger('click')
+    await wrapper.get('.selection-mode-button:last-of-type').trigger('click')
+    await wrapper.get('.selection-mode-button:first-of-type').trigger('click')
+
+    const selectedDatesUpdates = wrapper.emitted('update:selectedDates')
+    expect(selectedDatesUpdates?.at(-1)?.[0]).toEqual([
+      '2026-05-15',
+      '2026-05-16',
+      '2026-05-17',
+    ])
   })
 })

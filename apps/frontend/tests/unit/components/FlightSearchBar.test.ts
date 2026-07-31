@@ -62,6 +62,9 @@ describe('FlightSearchBar', () => {
     expect(wrapper.emitted('swapLocations')).toBeTruthy()
     expect(wrapper.emitted('confirmOriginInput')).toBeTruthy()
     expect(wrapper.emitted('addOriginAirport')).toBeTruthy()
+    expect(wrapper.get('input[aria-label="Add an origin airport or city"]').attributes('aria-controls')).toBe('origin-suggestions')
+    expect(wrapper.get('.airport-chip').attributes('aria-label')).toContain('Remove Amsterdam')
+    expect(wrapper.get('.combination-count').attributes('aria-live')).toBe('polite')
   })
 
   it('shows return date inputs for return trips', () => {

@@ -11,6 +11,7 @@ namespace backend.Features.Search;
 public sealed class SearchService(
     IServiceScopeFactory serviceScopeFactory,
     ISearchSessionStore searchSessionStore,
+    IProviderCallLimiter providerCallLimiter,
     ILogger<SearchService> logger) : ISearchService
 {
     private const int MaxConcurrentProviderCalls = 5;
@@ -168,7 +169,12 @@ public sealed class SearchService(
 
             try
             {
-                var providerResponse = await flightSearchProvider.SearchOneWayAsync(request, CancellationToken.None);
+                FlightApiOneWayResponse providerResponse;
+                using (await providerCallLimiter.AcquireAsync(CancellationToken.None))
+                {
+                    providerResponse = await flightSearchProvider.SearchOneWayAsync(request, CancellationToken.None);
+                }
+
                 var mappedFareOptions = MapToSearchFareOptions(providerResponse, isRoundTrip: false)
                     .Take(MaxStoredFareOptionsPerDirection)
                     .ToList();
@@ -212,7 +218,12 @@ public sealed class SearchService(
 
             try
             {
-                var providerResponse = await flightSearchProvider.SearchRoundTripAsync(request, CancellationToken.None);
+                FlightApiOneWayResponse providerResponse;
+                using (await providerCallLimiter.AcquireAsync(CancellationToken.None))
+                {
+                    providerResponse = await flightSearchProvider.SearchRoundTripAsync(request, CancellationToken.None);
+                }
+
                 var mappedFareOptions = MapToSearchFareOptions(providerResponse, isRoundTrip: true)
                     .Take(MaxStoredFareOptionsPerDirection)
                     .ToList();
@@ -610,22 +621,16 @@ public sealed class SearchService(
             throw new ArgumentException("At least one destination airport is required.");
         }
 
-        if ((request.ReturnDateFrom is null) != (request.ReturnDateTo is null))
+        var departureDates = request.GetDepartureDates().ToList();
+        var returnDates = request.GetReturnDates().ToList();
+        if (returnDates.Count > 0)
         {
-            throw new ArgumentException("Both return dates must be provided for a round-trip search.");
-        }
-
-        if (request.ReturnDateFrom is not null && request.ReturnDateTo is not null)
-        {
-            var latestDepartureDate = request.GetDepartureDates().LastOrDefault();
-            var firstReturnDate = request.ReturnDateFrom.Value <= request.ReturnDateTo.Value
-                ? request.ReturnDateFrom.Value
-                : request.ReturnDateTo.Value;
-
-            if (latestDepartureDate != default && firstReturnDate < latestDepartureDate)
+            var hasValidRoundTripPair = departureDates.Any(departureDate =>
+                returnDates.Any(returnDate => returnDate >= departureDate));
+            if (!hasValidRoundTripPair)
             {
                 throw new ArgumentException(
-                    "The return date range must start on or after the latest outbound date.");
+                    "At least one return date must be on or after a selected departure date.");
             }
         }
 
@@ -662,25 +667,15 @@ public sealed class SearchService(
             !string.Equals(origin, destination, StringComparison.OrdinalIgnoreCase)));
 
         var outboundCount = routeCount * departureDates.Count;
-        if (request.ReturnDateFrom is null || request.ReturnDateTo is null)
+        var returnDates = request.GetReturnDates().ToList();
+        if (returnDates.Count == 0)
         {
             return outboundCount;
         }
 
-        var returnStart = request.ReturnDateFrom.Value <= request.ReturnDateTo.Value
-            ? request.ReturnDateFrom.Value
-            : request.ReturnDateTo.Value;
-        var returnEnd = request.ReturnDateFrom.Value <= request.ReturnDateTo.Value
-            ? request.ReturnDateTo.Value
-            : request.ReturnDateFrom.Value;
-        var returnDateCount = (long)returnEnd.DayNumber - returnStart.DayNumber + 1;
+        var returnDateCount = returnDates.Count;
         var validRoundTripDatePairCount = departureDates.Sum(departureDate =>
-        {
-            var firstValidReturnDate = departureDate > returnStart ? departureDate : returnStart;
-            return firstValidReturnDate > returnEnd
-                ? 0L
-                : (long)returnEnd.DayNumber - firstValidReturnDate.DayNumber + 1;
-        });
+            (long)returnDates.Count(returnDate => returnDate >= departureDate));
 
         return outboundCount +
             (routeCount * returnDateCount) +
@@ -690,7 +685,7 @@ public sealed class SearchService(
     private static SearchPlan BuildSearchPlan(SearchRequest request)
     {
         var outboundRequests = ExpandOneWaySearches(request).ToList();
-        if (request.ReturnDateFrom is null || request.ReturnDateTo is null)
+        if (!request.GetReturnDates().Any())
         {
             return new SearchPlan(
                 IsRoundTripSearch: false,

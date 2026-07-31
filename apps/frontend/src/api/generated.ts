@@ -232,11 +232,8 @@ export interface components {
         SearchRequest: {
             originAirports?: string[] | null;
             destinationAirports?: string[] | null;
-            selectedDates?: string[] | null;
-            /** Format: date */
-            returnDateFrom?: string | null;
-            /** Format: date */
-            returnDateTo?: string | null;
+            departureDates?: string[] | null;
+            returnDates?: string[] | null;
             /** Format: int32 */
             adults?: number;
             cabinClass?: string | null;

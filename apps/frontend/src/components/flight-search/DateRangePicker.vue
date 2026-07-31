@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 
 const props = defineProps<{
   maxRangeDays: number
@@ -9,6 +9,7 @@ const props = defineProps<{
 const startDate = defineModel<string>('startDate', { required: true })
 const endDate = defineModel<string>('endDate', { required: true })
 const selectedDates = defineModel<string[]>('selectedDates', { required: true })
+const popoverId = useId()
 
 type SelectionMode = 'range' | 'specific'
 
@@ -18,15 +19,17 @@ const displayMonth = ref('')
 const anchorDate = ref<string | null>(null)
 const selectionMode = ref<SelectionMode>('range')
 
-const monthFormatter = new Intl.DateTimeFormat('en-IE', {
+const monthFormatter = new Intl.DateTimeFormat(undefined, {
   month: 'long',
   year: 'numeric',
+  timeZone: 'UTC',
 })
 
-const triggerFormatter = new Intl.DateTimeFormat('en-IE', {
+const triggerFormatter = new Intl.DateTimeFormat(undefined, {
   day: '2-digit',
   month: 'short',
   year: 'numeric',
+  timeZone: 'UTC',
 })
 
 const weekdayLabels = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
@@ -56,9 +59,9 @@ const toDateString = (date: Date) => {
 
 const today = new Date()
 const todayDateString = toDateString(new Date(Date.UTC(
-  today.getUTCFullYear(),
-  today.getUTCMonth(),
-  today.getUTCDate(),
+  today.getFullYear(),
+  today.getMonth(),
+  today.getDate(),
 )))
 
 const addDays = (value: string, days: number) => {
@@ -255,9 +258,21 @@ const togglePicker = () => {
   }
 }
 
+const formatDateForScreenReader = (dateValue: string) => new Intl.DateTimeFormat(undefined, {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'UTC',
+}).format(new Date(`${dateValue}T00:00:00Z`))
+
 const setSelectionMode = (mode: SelectionMode) => {
   selectionMode.value = mode
   anchorDate.value = null
+
+  if (mode === 'range') {
+    selectedDates.value = buildSelectedDates(startDate.value, endDate.value)
+  }
 }
 
 const moveMonth = (offset: number) => {
@@ -314,8 +329,15 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="pickerRoot" class="date-range-picker">
-    <button type="button" class="date-range-trigger" @click="togglePicker">
+  <div ref="pickerRoot" class="date-range-picker" @keydown.esc="closePicker">
+    <button
+      type="button"
+      class="date-range-trigger"
+      aria-haspopup="dialog"
+      :aria-expanded="isOpen"
+      :aria-controls="popoverId"
+      @click="togglePicker"
+    >
       <span class="date-range-trigger-label">{{ formattedRange }}</span>
       <span class="date-range-trigger-meta">
         {{ selectionMode === 'range' ? `Up to ${maxRangeDays} consecutive days` : `Up to ${maxRangeDays} picked dates` }}
@@ -323,7 +345,7 @@ onBeforeUnmount(() => {
     </button>
 
     <Transition name="date-range-popover">
-      <div v-if="isOpen" class="date-range-popover">
+      <div v-if="isOpen" :id="popoverId" class="date-range-popover" role="dialog" :aria-label="heading ?? 'Select travel dates'">
         <div class="date-range-popover-header">
           <div class="date-range-popover-copy">
             <p>{{ heading ?? 'Select travel dates' }}</p>
@@ -337,6 +359,7 @@ onBeforeUnmount(() => {
                 type="button"
                 class="selection-mode-button"
                 :class="{ active: selectionMode === 'range' }"
+                :aria-pressed="selectionMode === 'range'"
                 @click="setSelectionMode('range')"
               >
                 Range
@@ -345,26 +368,27 @@ onBeforeUnmount(() => {
                 type="button"
                 class="selection-mode-button"
                 :class="{ active: selectionMode === 'specific' }"
+                :aria-pressed="selectionMode === 'specific'"
                 @click="setSelectionMode('specific')"
               >
                 Specific dates
               </button>
             </div>
             <div class="calendar-jumpers">
-              <select v-model="selectedMonth" class="calendar-jump-select">
+              <select v-model="selectedMonth" class="calendar-jump-select" aria-label="Calendar month">
                 <option v-for="month in availableMonthOptions" :key="month.value" :value="month.value">
                   {{ month.label }}
                 </option>
               </select>
-              <select v-model="selectedYear" class="calendar-jump-select">
+              <select v-model="selectedYear" class="calendar-jump-select" aria-label="Calendar year">
                 <option v-for="year in yearOptions" :key="year" :value="year">
                   {{ year }}
                 </option>
               </select>
             </div>
             <div class="calendar-nav-group">
-              <button type="button" class="calendar-nav" @click="moveMonth(-1)">Prev</button>
-              <button type="button" class="calendar-nav" @click="moveMonth(1)">Next</button>
+              <button type="button" class="calendar-nav" aria-label="Previous month" @click="moveMonth(-1)">Prev</button>
+              <button type="button" class="calendar-nav" aria-label="Next month" @click="moveMonth(1)">Next</button>
             </div>
           </div>
         </div>
@@ -390,6 +414,8 @@ onBeforeUnmount(() => {
                     disabled: isDisabledDate(cell.date),
                   }"
                   :disabled="isDisabledDate(cell.date)"
+                  :aria-label="formatDateForScreenReader(cell.date)"
+                  :aria-pressed="isSelectedDate(cell.date)"
                   @click="selectDate(cell.date)"
                 >
                   <span class="calendar-day-number">{{ Number(cell.date.slice(-2)) }}</span>

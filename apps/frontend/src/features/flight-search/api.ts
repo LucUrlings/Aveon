@@ -109,23 +109,70 @@ const normalizeLeg = (leg: ApiSearchResultLegWithId): SearchResultLeg => ({
   segments: (leg.segments ?? []).map(normalizeSegment),
 })
 
-const normalizePriceOption = (option: ApiSearchResultPriceOptionWithLinks): SearchResultPriceOption => ({
-  id: option.id ?? '',
-  provider: option.provider ?? '',
-  totalPrice: {
-    amount: option.totalPrice?.amount ?? 0,
-    currency: option.totalPrice?.currency ?? '',
-  },
-  bookingLinks: (() => {
+const getBrowserMarket = () => {
+  if (typeof navigator === 'undefined') return null
+
+  const locale = navigator.language
+  const market = locale.match(/-([A-Z]{2})\b/i)?.[1]
+  return market?.toUpperCase() ?? null
+}
+
+const getBrowserLocale = () => {
+  if (typeof navigator === 'undefined') return null
+
+  const locale = navigator.language
+  return /^[a-z]{2,3}-[A-Z]{2}$/i.test(locale) ? locale : null
+}
+
+// FlightAPI supplies Skyscanner transport deeplinks containing market and locale as
+// path segments. A US market can make a carrier checkout default to USD even when
+// the quoted fare is EUR, so replace only those trusted path segments.
+export const normalizeBookingLink = (rawUrl: string) => {
+  const market = getBrowserMarket()
+  const locale = getBrowserLocale()
+  if (!market || !locale) return rawUrl
+
+  try {
+    const url = new URL(rawUrl)
+    if (url.hostname !== 'www.skyscanner.nl') return rawUrl
+
+    const segments = url.pathname.split('/')
+    const transportDeepLinkIndex = segments.indexOf('transport_deeplink')
+    const versionIndex = transportDeepLinkIndex + 1
+    const marketIndex = transportDeepLinkIndex + 2
+    const localeIndex = transportDeepLinkIndex + 3
+
+    if (transportDeepLinkIndex < 0 || !/^\d+(\.\d+)*$/.test(segments[versionIndex] ?? '')) {
+      return rawUrl
+    }
+
+    segments[marketIndex] = market
+    segments[localeIndex] = locale
+    url.pathname = segments.join('/')
+    return url.toString()
+  } catch {
+    return rawUrl
+  }
+}
+
+const normalizePriceOption = (option: ApiSearchResultPriceOptionWithLinks): SearchResultPriceOption | null => {
+  const amount = option.totalPrice?.amount
+  const currency = option.totalPrice?.currency?.trim()
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || !currency) {
+    return null
+  }
+
+  return {
+    id: option.id ?? '',
+    provider: option.provider ?? '',
+    totalPrice: { amount, currency },
+    bookingLinks: (() => {
     const explicitLinks = ((option.bookingLinks as ApiSearchResultBookingLink[] | null | undefined) ?? [])
       .map((link) => ({
         label: link.label ?? '',
-        url: link.url ?? '',
-        price: link.price
-          ? {
-              amount: link.price.amount ?? 0,
-              currency: link.price.currency ?? '',
-            }
+        url: normalizeBookingLink(link.url ?? ''),
+        price: typeof link.price?.amount === 'number' && Number.isFinite(link.price.amount) && link.price.amount >= 0 && link.price.currency?.trim()
+          ? { amount: link.price.amount, currency: link.price.currency.trim() }
           : null,
       }))
       .filter((link) => link.url)
@@ -135,18 +182,29 @@ const normalizePriceOption = (option: ApiSearchResultPriceOptionWithLinks): Sear
     }
 
     return option.deepLink
-      ? [{ label: 'View fare', url: option.deepLink }]
+      ? [{ label: 'View fare', url: normalizeBookingLink(option.deepLink) }]
       : []
-  })(),
-})
+    })(),
+  }
+}
 
-const normalizeResult = (result: ApiSearchResult): SearchResult => ({
-  id: result.id ?? '',
-  isRoundTrip: result.isRoundTrip ?? false,
-  legs: ((result.legs as ApiSearchResultLegWithId[] | null | undefined) ?? []).map(normalizeLeg),
-  totalDurationMinutes: result.totalDurationMinutes ?? 0,
-  priceOptions: (result.priceOptions ?? []).map(normalizePriceOption),
-})
+const normalizeResult = (result: ApiSearchResult): SearchResult | null => {
+  const priceOptions = (result.priceOptions ?? [])
+    .map(normalizePriceOption)
+    .filter((option): option is SearchResultPriceOption => option !== null)
+
+  if (priceOptions.length === 0) {
+    return null
+  }
+
+  return {
+    id: result.id ?? '',
+    isRoundTrip: result.isRoundTrip ?? false,
+    legs: ((result.legs as ApiSearchResultLegWithId[] | null | undefined) ?? []).map(normalizeLeg),
+    totalDurationMinutes: result.totalDurationMinutes ?? 0,
+    priceOptions,
+  }
+}
 
 const normalizeMetadata = (metadata: ApiSearchMetadata | undefined): SearchMetadata => ({
   searchCombinationCount: metadata?.searchCombinationCount ?? 0,
@@ -191,12 +249,18 @@ const normalizePagination = (pagination: ApiSearchPagination | undefined, result
   totalPages: pagination?.totalPages ?? (resultCount > 0 ? 1 : 0),
 })
 
-const normalizeSearchResponse = (response: ApiSearchResponseWithFilters): SearchResponse => ({
-  results: (response.results ?? []).map(normalizeResult),
-  metadata: normalizeMetadata(response.metadata),
-  filters: normalizeFilters(response.filters),
-  pagination: normalizePagination(response.pagination, (response.results ?? []).length),
-})
+const normalizeSearchResponse = (response: ApiSearchResponseWithFilters): SearchResponse => {
+  const results = (response.results ?? [])
+    .map(normalizeResult)
+    .filter((result): result is SearchResult => result !== null)
+
+  return {
+    results,
+    metadata: normalizeMetadata(response.metadata),
+    filters: normalizeFilters(response.filters),
+    pagination: normalizePagination(response.pagination, results.length),
+  }
+}
 
 const normalizeSearchSessionResponse = (session: ApiSearchSessionResponse): SearchSessionResponse => {
   return {
@@ -232,8 +296,8 @@ const readErrorMessage = async (response: Response) => {
   return message || fallback
 }
 
-export const fetchAirportSuggestions = async (query: string) => {
-  const res = await fetch(`${apiBaseUrl}/api/v1/airports?query=${encodeURIComponent(query)}`)
+export const fetchAirportSuggestions = async (query: string, signal?: AbortSignal) => {
+  const res = await fetch(`${apiBaseUrl}/api/v1/airports?query=${encodeURIComponent(query)}`, { signal })
   if (!res.ok) {
     throw new Error(`Airport lookup failed with HTTP ${res.status}`)
   }
@@ -242,7 +306,7 @@ export const fetchAirportSuggestions = async (query: string) => {
   return (lookup.airports ?? []).map(normalizeAirportOption)
 }
 
-export const searchFlightsRequest = async (request: SearchRequest) => {
+export const searchFlightsRequest = async (request: SearchRequest, signal?: AbortSignal) => {
   const res = await fetch(`${apiBaseUrl}/api/v1/search`, {
     method: 'POST',
     credentials: 'include',
@@ -250,6 +314,7 @@ export const searchFlightsRequest = async (request: SearchRequest) => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(request satisfies ApiSearchRequest),
+    signal,
   })
 
   if (!res.ok) {
@@ -326,7 +391,7 @@ const buildResultsQueryParams = (query: SearchResultsQuery) => {
   return params
 }
 
-export const getSearchSession = async (searchId: string, query: SearchResultsQuery = {}) => {
+export const getSearchSession = async (searchId: string, query: SearchResultsQuery = {}, signal?: AbortSignal) => {
   const queryString = buildResultsQueryParams(query).toString()
   const url = queryString
     ? `${apiBaseUrl}/api/v1/search/${encodeURIComponent(searchId)}?${queryString}`
@@ -334,6 +399,7 @@ export const getSearchSession = async (searchId: string, query: SearchResultsQue
 
   const res = await fetch(url, {
     credentials: 'include',
+    signal,
   })
 
   if (!res.ok) {

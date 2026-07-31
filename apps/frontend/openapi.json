@@ -476,7 +476,7 @@
             },
             "nullable": true
           },
-          "selectedDates": {
+          "departureDates": {
             "type": "array",
             "items": {
               "type": "string",
@@ -484,14 +484,12 @@
             },
             "nullable": true
           },
-          "returnDateFrom": {
-            "type": "string",
-            "format": "date",
-            "nullable": true
-          },
-          "returnDateTo": {
-            "type": "string",
-            "format": "date",
+          "returnDates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
             "nullable": true
           },
           "adults": {

@@ -7,10 +7,15 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace backend.Infrastructure.Persistence.Migrations;
 
 [DbContext(typeof(AppDbContext))]
-[Migration("20260731185000_AddDefaultReturnRankingToUser")]
-public partial class AddDefaultReturnRankingToUser : Migration
+[Migration("20260731210500_RemoveDefaultReturnRankingFromUser")]
+public partial class RemoveDefaultReturnRankingFromUser : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.Sql("ALTER TABLE \"AspNetUsers\" DROP COLUMN IF EXISTS \"DefaultReturnRanking\";");
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.AddColumn<string>(
             name: "DefaultReturnRanking",
@@ -18,12 +23,5 @@ public partial class AddDefaultReturnRankingToUser : Migration
             type: "text",
             nullable: false,
             defaultValue: "best");
-    }
-
-    protected override void Down(MigrationBuilder migrationBuilder)
-    {
-        migrationBuilder.DropColumn(
-            name: "DefaultReturnRanking",
-            table: "AspNetUsers");
     }
 }

@@ -61,9 +61,8 @@ public sealed class SearchServiceTests
             [
                 "AMS", "BCN", "CDG", "FRA", "MAD", "LHR", "OSL", "CPH", "MXP", "ARN"
             ],
-            SelectedDates: [new DateOnly(2026, 5, 15)],
-            ReturnDateFrom: null,
-            ReturnDateTo: null,
+            DepartureDates: [new DateOnly(2026, 5, 15)],
+            ReturnDates: [],
             Adults: 1,
             CabinClass: "economy");
 
@@ -85,9 +84,8 @@ public sealed class SearchServiceTests
         var request = new SearchRequest(
             OriginAirports: ["DUB", "ORK", "SNN", "NOC", "KIR", "WAT", "SXL", "CFN", "KNO"],
             DestinationAirports: ["AMS", "BCN", "CDG", "FRA", "MAD", "LHR", "OSL", "CPH", "MXP", "ARN", "HEL", "BER"],
-            SelectedDates: [new DateOnly(2026, 5, 15)],
-            ReturnDateFrom: null,
-            ReturnDateTo: null,
+            DepartureDates: [new DateOnly(2026, 5, 15)],
+            ReturnDates: [],
             Adults: 1,
             CabinClass: "economy");
 
@@ -97,7 +95,7 @@ public sealed class SearchServiceTests
     }
 
     [Fact]
-    public async Task StartSearchAsync_RejectsHugeReturnRange_BeforeMaterializingIt()
+    public async Task StartSearchAsync_RejectsSearchWhoseExplicitReturnDatesExceedLimit()
     {
         var store = new FlakySearchSessionStore(failingCalls: []);
         var provider = new RecordingFlightSearchProvider();
@@ -105,9 +103,8 @@ public sealed class SearchServiceTests
         var request = new SearchRequest(
             OriginAirports: ["DUB"],
             DestinationAirports: ["AMS"],
-            SelectedDates: [DateOnly.MinValue],
-            ReturnDateFrom: DateOnly.MinValue,
-            ReturnDateTo: DateOnly.MaxValue,
+            DepartureDates: Enumerable.Range(0, 50).Select(day => new DateOnly(2026, 5, 1).AddDays(day)).ToList(),
+            ReturnDates: [new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 3)],
             Adults: 1,
             CabinClass: "economy");
 
@@ -120,7 +117,7 @@ public sealed class SearchServiceTests
     }
 
     [Fact]
-    public async Task StartSearchAsync_RejectsReturnRangeBeforeLatestOutboundDate()
+    public async Task StartSearchAsync_RejectsReturnDatesBeforeAllDepartureDates()
     {
         var store = new FlakySearchSessionStore(failingCalls: []);
         var provider = new RecordingFlightSearchProvider();
@@ -129,8 +126,7 @@ public sealed class SearchServiceTests
             ["DUB"],
             ["AMS"],
             [new DateOnly(2026, 8, 7), new DateOnly(2026, 8, 8), new DateOnly(2026, 8, 9)],
-            new DateOnly(2026, 8, 7),
-            new DateOnly(2026, 8, 7),
+            [new DateOnly(2026, 8, 6)],
             1,
             "economy");
 
@@ -138,7 +134,7 @@ public sealed class SearchServiceTests
             service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None));
 
         Assert.Equal(
-            "The return date range must start on or after the latest outbound date.",
+            "At least one return date must be on or after a selected departure date.",
             error.Message);
         Assert.Empty(provider.Requests);
         Assert.Empty(provider.RoundTripRequests);
@@ -153,9 +149,8 @@ public sealed class SearchServiceTests
         var request = new SearchRequest(
             OriginAirports: ["DUB"],
             DestinationAirports: ["AMS"],
-            SelectedDates: [new DateOnly(2026, 5, 15)],
-            ReturnDateFrom: new DateOnly(2026, 5, 15),
-            ReturnDateTo: new DateOnly(2026, 5, 15),
+            DepartureDates: [new DateOnly(2026, 5, 15)],
+            ReturnDates: [new DateOnly(2026, 5, 15)],
             Adults: 1,
             CabinClass: "economy");
 
@@ -173,9 +168,8 @@ public sealed class SearchServiceTests
         var request = new SearchRequest(
             OriginAirports: ["DUB"],
             DestinationAirports: ["AMS"],
-            SelectedDates: [new DateOnly(2026, 5, 15), new DateOnly(2026, 5, 16)],
-            ReturnDateFrom: null,
-            ReturnDateTo: null,
+            DepartureDates: [new DateOnly(2026, 5, 15), new DateOnly(2026, 5, 16)],
+            ReturnDates: [],
             Adults: 1,
             CabinClass: "economy");
 
@@ -198,9 +192,8 @@ public sealed class SearchServiceTests
         var request = new SearchRequest(
             OriginAirports: ["DUB", "ORK", "SNN"],
             DestinationAirports: ["AMS", "BCN", "CDG", "FRA", "MAD", "LHR"],
-            SelectedDates: [new DateOnly(2026, 5, 15)],
-            ReturnDateFrom: null,
-            ReturnDateTo: null,
+            DepartureDates: [new DateOnly(2026, 5, 15)],
+            ReturnDates: [],
             Adults: 1,
             CabinClass: "economy");
 
@@ -237,9 +230,8 @@ public sealed class SearchServiceTests
         var request = new SearchRequest(
             OriginAirports: ["DUB"],
             DestinationAirports: ["DUB"],
-            SelectedDates: [new DateOnly(2026, 5, 15)],
-            ReturnDateFrom: null,
-            ReturnDateTo: null,
+            DepartureDates: [new DateOnly(2026, 5, 15)],
+            ReturnDates: [],
             Adults: 1,
             CabinClass: "economy");
 
@@ -279,14 +271,14 @@ public sealed class SearchServiceTests
         var service = new SearchService(
             scopeFactory,
             store,
+            new ProviderCallLimiter(Options.Create(new SearchOptions())),
             NullLogger<SearchService>.Instance);
 
         var request = new SearchRequest(
             ["DUB"],
             ["AMS", "CDG"],
             [new DateOnly(2026, 5, 15)],
-            null,
-            null,
+            [],
             1,
             "economy");
 
@@ -307,8 +299,7 @@ public sealed class SearchServiceTests
             ["DUB"],
             ["AMS"],
             [new DateOnly(2026, 5, 15)],
-            new DateOnly(2026, 5, 15),
-            new DateOnly(2026, 5, 15),
+            [new DateOnly(2026, 5, 15)],
             1,
             "economy");
         var store = new FlakySearchSessionStore(failingCalls: []);
@@ -331,8 +322,7 @@ public sealed class SearchServiceTests
             ["DUB"],
             ["CGN"],
             [new DateOnly(2026, 8, 7)],
-            new DateOnly(2026, 8, 12),
-            new DateOnly(2026, 8, 12),
+            [new DateOnly(2026, 8, 12)],
             1,
             "economy");
         var store = new FlakySearchSessionStore(failingCalls: []);
@@ -357,8 +347,7 @@ public sealed class SearchServiceTests
             ["DUB"],
             ["AMS"],
             [new DateOnly(2026, 5, 15)],
-            new DateOnly(2026, 5, 16),
-            new DateOnly(2026, 5, 16),
+            [new DateOnly(2026, 5, 16)],
             1,
             "economy");
         var store = new FlakySearchSessionStore(failingCalls: []);
@@ -385,8 +374,7 @@ public sealed class SearchServiceTests
             ["DUB"],
             ["AMS"],
             [new DateOnly(2026, 5, 15)],
-            new DateOnly(2026, 5, 15),
-            new DateOnly(2026, 5, 15),
+            [new DateOnly(2026, 5, 15)],
             1,
             "economy");
         var store = new FlakySearchSessionStore(failingCalls: []);
@@ -434,8 +422,7 @@ public sealed class SearchServiceTests
             ["DUB"],
             ["AMS"],
             [new DateOnly(2026, 5, 15)],
-            new DateOnly(2026, 5, 15),
-            new DateOnly(2026, 5, 15),
+            [new DateOnly(2026, 5, 15)],
             1,
             "economy");
         var store = new FlakySearchSessionStore(failingCalls: []);
@@ -463,8 +450,7 @@ public sealed class SearchServiceTests
             ["DUB"],
             ["AMS", "DUS"],
             [new DateOnly(2026, 5, 15)],
-            new DateOnly(2026, 5, 16),
-            new DateOnly(2026, 5, 16),
+            [new DateOnly(2026, 5, 16)],
             1,
             "economy");
         var store = new FlakySearchSessionStore(failingCalls: []);
@@ -735,8 +721,7 @@ public sealed class SearchServiceTests
             ["DUB"],
             ["AMS"],
             [new DateOnly(2026, 5, 15)],
-            null,
-            null,
+            [],
             1,
             "economy");
 
@@ -956,6 +941,7 @@ public sealed class SearchServiceTests
         services.AddLogging();
         services.AddSingleton<ISearchSessionStore>(store);
         services.AddSingleton<IFlightSearchProvider>(flightSearchProvider);
+        services.AddSingleton<IProviderCallLimiter>(new ProviderCallLimiter(Options.Create(new SearchOptions())));
         services.AddSingleton<ISearchService, SearchService>();
 
         var serviceProvider = services.BuildServiceProvider();

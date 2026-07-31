@@ -1,5 +1,12 @@
 import type { SearchResult } from './types'
-import type { ReturnRanking } from '../preferences/useSearchPreferences'
+
+export type ReturnRanking = 'best' | 'cheapest' | 'fastest'
+
+export const returnRankingOptions: Array<{ value: ReturnRanking; label: string }> = [
+  { value: 'best', label: 'Recommended' },
+  { value: 'cheapest', label: 'Cheapest' },
+  { value: 'fastest', label: 'Fastest' },
+]
 
 const getPrice = (result: SearchResult) => result.priceOptions[0]?.totalPrice.amount ?? Number.POSITIVE_INFINITY
 const getStopCount = (result: SearchResult) => result.legs.reduce(

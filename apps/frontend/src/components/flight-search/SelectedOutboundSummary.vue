@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { SearchResult } from '../../features/flight-search/types'
 import {
   formatDateTime,
@@ -8,9 +9,12 @@ import {
   getPrimaryBookingLink,
 } from './SearchResultCard.shared'
 
-defineProps<{
+const props = defineProps<{
   result: SearchResult
 }>()
+
+const airlineSummary = computed(() => getAirlineSummary(props.result))
+const primaryBookingLink = computed(() => getPrimaryBookingLink(props.result))
 
 const emit = defineEmits<{
   clear: []
@@ -22,7 +26,7 @@ const emit = defineEmits<{
     <div class="selected-outbound-heading">
       <div>
         <span class="selected-outbound-label">Selected outbound</span>
-        <strong>{{ getAirlineSummary(result) }}</strong>
+        <strong>{{ airlineSummary }}</strong>
       </div>
       <button type="button" @click="emit('clear')">Change outbound</button>
     </div>
@@ -44,8 +48,8 @@ const emit = defineEmits<{
         {{ formatPrice(result.priceOptions[0].totalPrice.amount, result.priceOptions[0].totalPrice.currency) }}
       </strong>
       <a
-        v-if="getPrimaryBookingLink(result)"
-        :href="getPrimaryBookingLink(result)?.url"
+        v-if="primaryBookingLink"
+        :href="primaryBookingLink.url"
         target="_blank"
         rel="noreferrer"
       >

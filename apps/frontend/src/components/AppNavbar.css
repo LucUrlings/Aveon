@@ -22,23 +22,6 @@
 .navbar-links a { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 7px 13px; color: var(--muted); font-size: 0.8rem; font-weight: 700; text-decoration: none; transition: color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease; }
 .navbar-links a:hover { color: var(--ink-strong); }
 .navbar-links a.active { background: var(--surface); color: var(--brand-strong); box-shadow: var(--shadow-sm); }
-.navbar-actions { display: flex; align-items: center; justify-content: end; gap: 8px; min-width: 0; }
-.preferences-menu, .account-menu { position: relative; }
-.preferences-menu summary { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 7px 10px; background: var(--surface); color: var(--muted); box-shadow: var(--shadow-sm); font-size: 0.76rem; font-weight: 750; cursor: pointer; list-style: none; }
-.preferences-menu summary::-webkit-details-marker { display: none; }
-.preferences-menu[open] summary { border-color: rgba(79, 70, 229, 0.28); color: var(--brand-strong); background: var(--brand-soft); }
-.preferences-popover { position: absolute; top: calc(100% + 10px); right: 0; width: min(330px, calc(100vw - 24px)); padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-lg); transform-origin: top right; }
-.preferences-menu[open] .preferences-popover { animation: account-popover-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-.preferences-copy { margin: 6px 0 15px; color: var(--muted); font-size: 0.78rem; line-height: 1.45; }
-.ranking-options { display: grid; gap: 7px; }
-.ranking-options button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 11px; padding: 10px; background: var(--surface); color: var(--ink); text-align: left; cursor: pointer; transition: border-color 0.18s ease, background-color 0.18s ease; }
-.ranking-options button:hover { border-color: rgba(79, 70, 229, 0.3); background: var(--surface-subtle); }
-.ranking-options button.active { border-color: rgba(79, 70, 229, 0.32); background: var(--brand-soft); }
-.ranking-options button > span:first-child { display: grid; gap: 2px; }
-.ranking-options strong { font-size: 0.8rem; }
-.ranking-options small { color: var(--muted); font-size: 0.7rem; line-height: 1.3; }
-.ranking-check { display: grid; width: 19px; height: 19px; place-items: center; border: 1px solid var(--border-strong); border-radius: 999px; color: transparent; font-size: 0.68rem; }
-.ranking-options button.active .ranking-check { border-color: var(--brand); background: var(--brand); color: #fff; }
 .account-menu { position: relative; justify-self: end; }
 .account-menu summary { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px 5px 5px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); font-size: 0.78rem; font-weight: 750; cursor: pointer; list-style: none; }
 .account-menu summary::-webkit-details-marker { display: none; }
@@ -64,13 +47,15 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .account-avatar { transition: none; }
-  .account-menu[open] .account-popover, .preferences-menu[open] .preferences-popover { animation: none; }
+  .account-menu[open] .account-popover { animation: none; }
 }
 @media (max-width: 760px) {
   .navbar { grid-template-columns: minmax(0, 1fr) auto; gap: 9px 14px; padding: 9px 14px; }
   .navbar-links { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
   .navbar-links a { justify-content: center; padding-left: 7px; padding-right: 7px; font-size: 0.74rem; text-align: center; }
   .navbar-product { display: none; }
-  .preferences-label { display: none; }
 }
-@media (max-width: 420px) { .navbar-links a { padding-left: 3px; padding-right: 3px; font-size: 0.7rem; } }
+@media (max-width: 420px) {
+  .navbar-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .navbar-links a { min-height: 34px; padding-left: 6px; padding-right: 6px; font-size: 0.74rem; }
+}

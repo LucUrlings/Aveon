@@ -82,36 +82,13 @@ public sealed class AuthController(
     {
         if (User.Identity?.IsAuthenticated != true)
         {
-            return Ok(new CurrentUserResponse(false, null, null, [], null));
+            return Ok(new CurrentUserResponse(false, null, null, []));
         }
 
         var user = await userManager.GetUserAsync(User);
         return user is null
-            ? Ok(new CurrentUserResponse(false, null, null, [], null))
+            ? Ok(new CurrentUserResponse(false, null, null, []))
             : Ok(await BuildCurrentUserResponseAsync(user));
-    }
-
-    [HttpPut("preferences")]
-    [Authorize]
-    [ProducesResponseType<CurrentUserResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<CurrentUserResponse>> UpdatePreferences([FromBody] UpdatePreferencesRequest request)
-    {
-        var user = await userManager.GetUserAsync(User);
-        if (user is null)
-        {
-            return Unauthorized();
-        }
-
-        user.DefaultReturnRanking = request.DefaultReturnRanking;
-        var updateResult = await userManager.UpdateAsync(user);
-        if (!updateResult.Succeeded)
-        {
-            AddIdentityErrors(updateResult);
-            return ValidationProblem(ModelState);
-        }
-
-        return Ok(await BuildCurrentUserResponseAsync(user));
     }
 
     private async Task<CurrentUserResponse> BuildCurrentUserResponseAsync(ApplicationUser user)
@@ -121,8 +98,7 @@ public sealed class AuthController(
             true,
             user.Id,
             user.Email,
-            roles.ToList(),
-            user.DefaultReturnRanking);
+            roles.ToList());
     }
 
     private void AddIdentityErrors(IdentityResult result)

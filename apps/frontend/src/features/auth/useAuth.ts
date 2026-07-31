@@ -7,37 +7,74 @@ const anonymousUser: CurrentUser = {
   id: null,
   email: null,
   roles: [],
-  defaultReturnRanking: null,
 }
 
 const user = ref<CurrentUser>(anonymousUser)
 const loading = ref(false)
+let authStateVersion = 0
 
 export const useAuth = () => {
   const isAuthenticated = computed(() => user.value.isAuthenticated)
 
   const refresh = async () => {
+    const refreshVersion = authStateVersion
     loading.value = true
     try {
-      user.value = await getCurrentUser()
+      const refreshedUser = await getCurrentUser()
+      if (refreshVersion === authStateVersion) {
+        user.value = refreshedUser
+      }
     } catch {
-      user.value = anonymousUser
+      if (refreshVersion === authStateVersion) {
+        user.value = anonymousUser
+      }
     } finally {
-      loading.value = false
+      if (refreshVersion === authStateVersion) {
+        loading.value = false
+      }
     }
   }
 
   const signIn = async (credentials: AuthCredentials) => {
-    user.value = await login(credentials)
+    const mutationVersion = ++authStateVersion
+    try {
+      const signedInUser = await login(credentials)
+      if (mutationVersion === authStateVersion) {
+        user.value = signedInUser
+      }
+    } finally {
+      if (mutationVersion === authStateVersion) {
+        loading.value = false
+      }
+    }
   }
 
   const signUp = async (credentials: AuthCredentials) => {
-    user.value = await register(credentials)
+    const mutationVersion = ++authStateVersion
+    try {
+      const registeredUser = await register(credentials)
+      if (mutationVersion === authStateVersion) {
+        user.value = registeredUser
+      }
+    } finally {
+      if (mutationVersion === authStateVersion) {
+        loading.value = false
+      }
+    }
   }
 
   const signOut = async () => {
-    await logout()
-    user.value = anonymousUser
+    const mutationVersion = ++authStateVersion
+    try {
+      await logout()
+      if (mutationVersion === authStateVersion) {
+        user.value = anonymousUser
+      }
+    } finally {
+      if (mutationVersion === authStateVersion) {
+        loading.value = false
+      }
+    }
   }
 
   return {
