@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import AirportGroupPicker from './AirportGroupPicker.vue'
 import DateRangePicker from './DateRangePicker.vue'
 import type { AirportOption } from '../../features/flight-search/types'
 
@@ -41,38 +41,6 @@ const emit = defineEmits<{
   addDestinationAirport: [airport: AirportOption]
 }>()
 
-const originActiveIndex = ref(-1)
-const destinationActiveIndex = ref(-1)
-
-watch(() => props.originSuggestions, () => { originActiveIndex.value = -1 })
-watch(() => props.destinationSuggestions, () => { destinationActiveIndex.value = -1 })
-
-const handleSuggestionKeydown = (
-  event: KeyboardEvent,
-  suggestions: AirportOption[],
-  activeIndex: number,
-  setActiveIndex: (value: number) => void,
-  addAirport: (airport: AirportOption) => void,
-  confirmInput: () => void,
-) => {
-  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-    event.preventDefault()
-    if (suggestions.length === 0) return
-    const offset = event.key === 'ArrowDown' ? 1 : -1
-    setActiveIndex((activeIndex + offset + suggestions.length) % suggestions.length)
-    return
-  }
-  if (event.key === 'Escape') {
-    setActiveIndex(-1)
-    return
-  }
-  if (event.key !== 'Enter') return
-
-  event.preventDefault()
-  const suggestion = suggestions[activeIndex]
-  if (suggestion) addAirport(suggestion)
-  else confirmInput()
-}
 </script>
 
 <template>
@@ -98,50 +66,18 @@ const handleSuggestionKeydown = (
       <form v-if="!isCollapsed" id="flight-search-form" class="search-form" @submit.prevent="emit('submit')">
         <div class="search-layout">
           <div class="airport-grid">
-            <div class="field">
-              <span>Origin airports</span>
-              <div class="airport-picker">
-                <div class="chip-row">
-                  <button
-                    v-for="airport in originAirports"
-                    :key="airport.code"
-                  type="button"
-                  class="airport-chip"
-                  :aria-label="`Remove ${airport.displayLabel} from origin airports`"
-                    @click="emit('removeOriginAirport', airport.code)"
-                  >
-                    {{ airport.code }}
-                  </button>
-                </div>
-                <input
-                  v-model="originInput"
-                  role="combobox"
-                  aria-label="Add an origin airport or city"
-                  aria-autocomplete="list"
-                  :aria-expanded="originSuggestions.length > 0"
-                  aria-controls="origin-suggestions"
-                  :aria-activedescendant="originActiveIndex >= 0 ? `origin-suggestion-${originSuggestions[originActiveIndex]?.code}` : undefined"
-                  placeholder="Add airport or city"
-                  @keydown="handleSuggestionKeydown($event, originSuggestions, originActiveIndex, (value) => originActiveIndex = value, (airport) => emit('addOriginAirport', airport), () => emit('confirmOriginInput'))"
-                />
-                <ul v-if="originSuggestions.length" id="origin-suggestions" class="suggestions-list" role="listbox" aria-label="Origin airport suggestions">
-                  <li v-for="airport in originSuggestions" :key="airport.code" role="none">
-                    <button
-                      type="button"
-                      class="suggestion-button"
-                      role="option"
-                      :id="`origin-suggestion-${airport.code}`"
-                      tabindex="-1"
-                      :aria-selected="originActiveIndex === originSuggestions.indexOf(airport)"
-                      @mouseenter="originActiveIndex = originSuggestions.indexOf(airport)"
-                      @click="emit('addOriginAirport', airport)"
-                    >
-                      {{ airport.displayLabel }}
-                    </button>
-                  </li>
-                </ul>
-              </div>
-            </div>
+            <AirportGroupPicker
+              v-model:input="originInput"
+              v-model:airports="originAirports"
+              label="Origin airports"
+              input-aria-label="Add an origin airport or city"
+              suggestions-aria-label="Origin airport suggestions"
+              suggestion-id-prefix="origin"
+              :suggestions="originSuggestions"
+              @confirm-input="emit('confirmOriginInput')"
+              @remove-airport="emit('removeOriginAirport', $event)"
+              @add-airport="emit('addOriginAirport', $event)"
+            />
 
             <div class="swap-locations-wrap">
               <button
@@ -176,50 +112,18 @@ const handleSuggestionKeydown = (
               </button>
             </div>
 
-            <div class="field">
-              <span>Destination airports</span>
-              <div class="airport-picker">
-                <div class="chip-row">
-                  <button
-                    v-for="airport in destinationAirports"
-                    :key="airport.code"
-                  type="button"
-                  class="airport-chip"
-                  :aria-label="`Remove ${airport.displayLabel} from destination airports`"
-                    @click="emit('removeDestinationAirport', airport.code)"
-                  >
-                    {{ airport.code }}
-                  </button>
-                </div>
-                <input
-                  v-model="destinationInput"
-                  role="combobox"
-                  aria-label="Add a destination airport or city"
-                  aria-autocomplete="list"
-                  :aria-expanded="destinationSuggestions.length > 0"
-                  aria-controls="destination-suggestions"
-                  :aria-activedescendant="destinationActiveIndex >= 0 ? `destination-suggestion-${destinationSuggestions[destinationActiveIndex]?.code}` : undefined"
-                  placeholder="Add airport or city"
-                  @keydown="handleSuggestionKeydown($event, destinationSuggestions, destinationActiveIndex, (value) => destinationActiveIndex = value, (airport) => emit('addDestinationAirport', airport), () => emit('confirmDestinationInput'))"
-                />
-                <ul v-if="destinationSuggestions.length" id="destination-suggestions" class="suggestions-list" role="listbox" aria-label="Destination airport suggestions">
-                  <li v-for="airport in destinationSuggestions" :key="airport.code" role="none">
-                    <button
-                      type="button"
-                      class="suggestion-button"
-                      role="option"
-                      :id="`destination-suggestion-${airport.code}`"
-                      tabindex="-1"
-                      :aria-selected="destinationActiveIndex === destinationSuggestions.indexOf(airport)"
-                      @mouseenter="destinationActiveIndex = destinationSuggestions.indexOf(airport)"
-                      @click="emit('addDestinationAirport', airport)"
-                    >
-                      {{ airport.displayLabel }}
-                    </button>
-                  </li>
-                </ul>
-              </div>
-            </div>
+            <AirportGroupPicker
+              v-model:input="destinationInput"
+              v-model:airports="destinationAirports"
+              label="Destination airports"
+              input-aria-label="Add a destination airport or city"
+              suggestions-aria-label="Destination airport suggestions"
+              suggestion-id-prefix="destination"
+              :suggestions="destinationSuggestions"
+              @confirm-input="emit('confirmDestinationInput')"
+              @remove-airport="emit('removeDestinationAirport', $event)"
+              @add-airport="emit('addDestinationAirport', $event)"
+            />
           </div>
 
           <div class="settings-grid">

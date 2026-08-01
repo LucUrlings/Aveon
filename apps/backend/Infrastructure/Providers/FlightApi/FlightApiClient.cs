@@ -13,6 +13,7 @@ public sealed class FlightApiClient(
     HttpClient httpClient,
     IOptions<FlightApiOptions> options,
     IProviderResponseCache providerResponseCache,
+    IFlightApiRequestGate requestGate,
     ILogger<FlightApiClient> logger) : IFlightSearchProvider, IAirportLookupProvider
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -35,6 +36,7 @@ public sealed class FlightApiClient(
         var cachedResponse = await providerResponseCache.GetAsync<FlightApiOneWayResponse>(cacheKey, cancellationToken);
         if (cachedResponse is not null)
         {
+            requestGate.RecordCacheHit();
             logger.LogInformation("FlightApi cache hit for key {CacheKey}", cacheKey);
             return cachedResponse;
         }
@@ -54,10 +56,20 @@ public sealed class FlightApiClient(
             cabinClass,
             cacheKey);
 
-        HttpResponseMessage response;
         try
         {
-            response = await httpClient.GetAsync(path, cancellationToken);
+            var result = await GetLiveResponseAsync<FlightApiOneWayResponse>(path, cancellationToken);
+            stopwatch.Stop();
+            logger.LogInformation(
+                "FlightApi one-way search succeeded for {OriginAirport} -> {DestinationAirport} on {DepartureDate} in {ElapsedMilliseconds} ms",
+                request.OriginAirport,
+                request.DestinationAirport,
+                request.DepartureDate,
+                stopwatch.ElapsedMilliseconds);
+
+            await providerResponseCache.SetAsync(cacheKey, result, cancellationToken);
+            logger.LogInformation("Stored FlightApi response in cache for key {CacheKey}", cacheKey);
+            return result;
         }
         catch (Exception ex)
         {
@@ -71,37 +83,6 @@ public sealed class FlightApiClient(
                 stopwatch.ElapsedMilliseconds);
             throw;
         }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            stopwatch.Stop();
-            logger.LogWarning(
-                "FlightApi one-way search returned HTTP {StatusCode} for {OriginAirport} -> {DestinationAirport} on {DepartureDate} after {ElapsedMilliseconds} ms",
-                (int)response.StatusCode,
-                request.OriginAirport,
-                request.DestinationAirport,
-                request.DepartureDate,
-                stopwatch.ElapsedMilliseconds);
-        }
-
-        response.EnsureSuccessStatusCode();
-
-        var payload = await response.Content.ReadFromJsonAsync<FlightApiOneWayResponse>(SerializerOptions, cancellationToken);
-        var result = payload ?? new FlightApiOneWayResponse();
-        stopwatch.Stop();
-
-        logger.LogInformation(
-            "FlightApi one-way search succeeded for {OriginAirport} -> {DestinationAirport} on {DepartureDate} with HTTP {StatusCode} in {ElapsedMilliseconds} ms",
-            request.OriginAirport,
-            request.DestinationAirport,
-            request.DepartureDate,
-            (int)response.StatusCode,
-            stopwatch.ElapsedMilliseconds);
-
-        await providerResponseCache.SetAsync(cacheKey, result, cancellationToken);
-        logger.LogInformation("Stored FlightApi response in cache for key {CacheKey}", cacheKey);
-
-        return result;
     }
 
     public async Task<FlightApiOneWayResponse> SearchRoundTripAsync(
@@ -117,6 +98,7 @@ public sealed class FlightApiClient(
         var cachedResponse = await providerResponseCache.GetAsync<FlightApiOneWayResponse>(cacheKey, cancellationToken);
         if (cachedResponse is not null)
         {
+            requestGate.RecordCacheHit();
             logger.LogInformation("FlightApi round-trip cache hit for key {CacheKey}", cacheKey);
             return cachedResponse;
         }
@@ -137,10 +119,21 @@ public sealed class FlightApiClient(
             cabinClass,
             cacheKey);
 
-        HttpResponseMessage response;
         try
         {
-            response = await httpClient.GetAsync(path, cancellationToken);
+            var result = await GetLiveResponseAsync<FlightApiOneWayResponse>(path, cancellationToken);
+            stopwatch.Stop();
+            logger.LogInformation(
+                "FlightApi round-trip search succeeded for {OriginAirport} -> {DestinationAirport} on {DepartureDate} returning {ReturnDate} in {ElapsedMilliseconds} ms",
+                request.OriginAirport,
+                request.DestinationAirport,
+                request.DepartureDate,
+                request.ReturnDate,
+                stopwatch.ElapsedMilliseconds);
+
+            await providerResponseCache.SetAsync(cacheKey, result, cancellationToken);
+            logger.LogInformation("Stored FlightApi round-trip response in cache for key {CacheKey}", cacheKey);
+            return result;
         }
         catch (Exception ex)
         {
@@ -155,39 +148,6 @@ public sealed class FlightApiClient(
                 stopwatch.ElapsedMilliseconds);
             throw;
         }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            stopwatch.Stop();
-            logger.LogWarning(
-                "FlightApi round-trip search returned HTTP {StatusCode} for {OriginAirport} -> {DestinationAirport} on {DepartureDate} returning {ReturnDate} after {ElapsedMilliseconds} ms",
-                (int)response.StatusCode,
-                request.OriginAirport,
-                request.DestinationAirport,
-                request.DepartureDate,
-                request.ReturnDate,
-                stopwatch.ElapsedMilliseconds);
-        }
-
-        response.EnsureSuccessStatusCode();
-
-        var payload = await response.Content.ReadFromJsonAsync<FlightApiOneWayResponse>(SerializerOptions, cancellationToken);
-        var result = payload ?? new FlightApiOneWayResponse();
-        stopwatch.Stop();
-
-        logger.LogInformation(
-            "FlightApi round-trip search succeeded for {OriginAirport} -> {DestinationAirport} on {DepartureDate} returning {ReturnDate} with HTTP {StatusCode} in {ElapsedMilliseconds} ms",
-            request.OriginAirport,
-            request.DestinationAirport,
-            request.DepartureDate,
-            request.ReturnDate,
-            (int)response.StatusCode,
-            stopwatch.ElapsedMilliseconds);
-
-        await providerResponseCache.SetAsync(cacheKey, result, cancellationToken);
-        logger.LogInformation("Stored FlightApi round-trip response in cache for key {CacheKey}", cacheKey);
-
-        return result;
     }
 
     public async Task<FlightApiCodeLookupResponse> SearchAirportsAsync(
@@ -203,6 +163,7 @@ public sealed class FlightApiClient(
         var cachedResponse = await providerResponseCache.GetAsync<FlightApiCodeLookupResponse>(cacheKey, cancellationToken);
         if (cachedResponse is not null)
         {
+            requestGate.RecordCacheHit();
             logger.LogInformation("FlightApi airport lookup cache hit for key {CacheKey}", cacheKey);
             return cachedResponse;
         }
@@ -218,10 +179,18 @@ public sealed class FlightApiClient(
             trimmedQuery,
             cacheKey);
 
-        HttpResponseMessage response;
         try
         {
-            response = await httpClient.GetAsync(path, cancellationToken);
+            var result = await GetLiveResponseAsync<FlightApiCodeLookupResponse>(path, cancellationToken);
+            stopwatch.Stop();
+            logger.LogInformation(
+                "FlightApi airport lookup succeeded for query {Query} in {ElapsedMilliseconds} ms",
+                trimmedQuery,
+                stopwatch.ElapsedMilliseconds);
+
+            await providerResponseCache.SetAsync(cacheKey, result, cancellationToken);
+            logger.LogInformation("Stored FlightApi airport lookup response in cache for key {CacheKey}", cacheKey);
+            return result;
         }
         catch (Exception ex)
         {
@@ -233,34 +202,65 @@ public sealed class FlightApiClient(
                 stopwatch.ElapsedMilliseconds);
             throw;
         }
+    }
 
-        if (!response.IsSuccessStatusCode)
+    private async Task<T> GetLiveResponseAsync<T>(string path, CancellationToken cancellationToken)
+        where T : new()
+    {
+        var maximumAttempts = Math.Max(_options.MaxRetryAttempts, 1);
+
+        for (var attempt = 1; attempt <= maximumAttempts; attempt += 1)
         {
-            stopwatch.Stop();
-            logger.LogWarning(
-                "FlightApi airport lookup returned HTTP {StatusCode} for query {Query} after {ElapsedMilliseconds} ms",
-                (int)response.StatusCode,
-                trimmedQuery,
-                stopwatch.ElapsedMilliseconds);
+            TimeSpan? retryDelay = null;
+            using (await requestGate.AcquireAsync(cancellationToken))
+            {
+                requestGate.RecordLiveCall();
+                using var response = await httpClient.GetAsync(path, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    requestGate.RecordThrottledResponse();
+                    if (attempt < maximumAttempts)
+                    {
+                        retryDelay = GetRetryDelay(response, attempt, _options.MaxRetryDelaySeconds);
+                    }
+                }
+
+                if (retryDelay is null)
+                {
+                    response.EnsureSuccessStatusCode();
+                    return await response.Content.ReadFromJsonAsync<T>(SerializerOptions, cancellationToken) ?? new T();
+                }
+            }
+
+            logger.LogWarning("FlightApi returned HTTP 429; retrying attempt {Attempt} of {MaximumAttempts} after {Delay}", attempt + 1, maximumAttempts, retryDelay);
+            await Task.Delay(retryDelay.Value, cancellationToken);
         }
 
-        response.EnsureSuccessStatusCode();
-
-        var payload = await response.Content.ReadFromJsonAsync<FlightApiCodeLookupResponse>(SerializerOptions, cancellationToken);
-        var result = payload ?? new FlightApiCodeLookupResponse();
-        stopwatch.Stop();
-
-        logger.LogInformation(
-            "FlightApi airport lookup succeeded for query {Query} with HTTP {StatusCode} in {ElapsedMilliseconds} ms",
-            trimmedQuery,
-            (int)response.StatusCode,
-            stopwatch.ElapsedMilliseconds);
-
-        await providerResponseCache.SetAsync(cacheKey, result, cancellationToken);
-        logger.LogInformation("Stored FlightApi airport lookup response in cache for key {CacheKey}", cacheKey);
-
-        return result;
+        throw new InvalidOperationException("FlightApi retry loop completed without a response.");
     }
+
+    private static TimeSpan GetRetryDelay(HttpResponseMessage response, int attempt, int maxRetryDelaySeconds)
+    {
+        TimeSpan? retryAfter = response.Headers.RetryAfter?.Delta;
+        if (retryAfter is null && response.Headers.RetryAfter?.Date is { } retryDate)
+        {
+            retryAfter = retryDate - DateTimeOffset.UtcNow;
+        }
+        if (retryAfter is not null)
+        {
+            return ClampDelay(retryAfter.Value > TimeSpan.Zero ? retryAfter.Value : TimeSpan.FromMilliseconds(100), maxRetryDelaySeconds);
+        }
+
+        var boundedExponentialDelay = TimeSpan.FromMilliseconds(250 * Math.Pow(2, attempt - 1));
+        var jitter = TimeSpan.FromMilliseconds(Random.Shared.Next(0, 151));
+        return ClampDelay(boundedExponentialDelay + jitter, maxRetryDelaySeconds);
+    }
+
+    private static TimeSpan ClampDelay(TimeSpan delay, int maxRetryDelaySeconds) =>
+        delay <= TimeSpan.FromSeconds(Math.Max(maxRetryDelaySeconds, 1))
+            ? delay
+            : TimeSpan.FromSeconds(Math.Max(maxRetryDelaySeconds, 1));
 
     private static string MapCabinClass(string cabinClass) =>
         cabinClass.Trim().ToLowerInvariant() switch

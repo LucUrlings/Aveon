@@ -23,12 +23,15 @@ public sealed class FlightApiClientTests
             }
         };
         var handler = new RecordingHttpMessageHandler();
-        var client = CreateClient(handler, cache);
+        var gate = new RecordingGate();
+        var client = CreateClient(handler, cache, gate);
 
         var response = await client.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None);
 
         Assert.Equal("cached-itinerary", response.Itineraries[0].Id);
         Assert.Equal(0, handler.CallCount);
+        Assert.Equal(0, gate.Acquisitions);
+        Assert.Equal(1, gate.CacheHits);
         Assert.Contains("provider:flightapi:oneway:DUB:AMS:2026-05-15:1:premium economy", cache.RequestedKeys);
     }
 
@@ -72,6 +75,7 @@ public sealed class FlightApiClientTests
             new HttpClient(handler) { BaseAddress = new Uri("https://api.flightapi.io/") },
             Options.Create(new FlightApiOptions()),
             cache,
+            CreateGate(),
             NullLogger<FlightApiClient>.Instance);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -80,21 +84,77 @@ public sealed class FlightApiClientTests
         Assert.Equal("FlightApi:ApiKey is not configured.", error.Message);
     }
 
+    [Fact]
+    public async Task LiveSimpleOrderedAndAirportRequests_ShareTheSameFivePermitGate()
+    {
+        var cache = new RecordingProviderResponseCache();
+        var handler = new ConcurrentTrackingHttpMessageHandler(
+            """{"itineraries":[],"legs":[],"segments":[],"places":[],"carriers":[],"agents":[]}""");
+        using var gate = new FlightApiRequestGate(Options.Create(new FlightApiOptions { MaxConcurrentRequests = 5 }));
+        var client = CreateClient(handler, cache, gate);
+
+        var orderedEdges = Enumerable.Range(0, 8).Select(offset =>
+            client.SearchOneWayAsync(CreateSearchRequest() with { DepartureDate = new DateOnly(2026, 5, 15).AddDays(offset) }, CancellationToken.None));
+        await Task.WhenAll(orderedEdges.Cast<Task>().Concat(new Task[] {
+            client.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None),
+            client.SearchRoundTripAsync(new ProviderRoundTripSearchRequest("DUB", "AMS", new DateOnly(2026, 5, 15), new DateOnly(2026, 5, 20), 1, "economy"), CancellationToken.None),
+            client.SearchAirportsAsync("Dublin", CancellationToken.None)
+        }));
+
+        Assert.Equal(11, handler.CallCount);
+        Assert.InRange(handler.MaximumConcurrentCalls, 1, 5);
+    }
+
+    [Fact]
+    public async Task FailedAndCanceledRequests_ReleaseTheirPermit()
+    {
+        var failureGate = new RecordingGate();
+        var failureClient = CreateClient(new StatusHttpMessageHandler(HttpStatusCode.InternalServerError), new RecordingProviderResponseCache(), failureGate);
+        await Assert.ThrowsAsync<HttpRequestException>(() => failureClient.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None));
+        Assert.Equal((1, 1), (failureGate.Acquisitions, failureGate.Releases));
+
+        var cancellationGate = new RecordingGate();
+        var cancellationClient = CreateClient(new CancelingHttpMessageHandler(), new RecordingProviderResponseCache(), cancellationGate);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(30));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancellationClient.SearchOneWayAsync(CreateSearchRequest(), cancellation.Token));
+        Assert.Equal((1, 1), (cancellationGate.Acquisitions, cancellationGate.Releases));
+    }
+
+    [Fact]
+    public async Task ThrottledRequest_HonorsRetryAfterAndRetriesWithinCallerTimeout()
+    {
+        var gate = new RecordingGate();
+        var handler = new ThrottleThenSuccessHandler();
+        var client = CreateClient(handler, new RecordingProviderResponseCache(), gate);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+
+        await client.SearchOneWayAsync(CreateSearchRequest(), timeout.Token);
+
+        Assert.Equal(2, handler.CallCount);
+        Assert.Equal((2, 2, 1), (gate.Acquisitions, gate.Releases, gate.ThrottledResponses));
+    }
+
     private static ProviderSearchRequest CreateSearchRequest() =>
         new("DUB", "AMS", new DateOnly(2026, 5, 15), 1, "premium economy");
 
     private static FlightApiClient CreateClient(
         HttpMessageHandler handler,
-        IProviderResponseCache cache) =>
+        IProviderResponseCache cache,
+        IFlightApiRequestGate? gate = null) =>
         new(
             new HttpClient(handler) { BaseAddress = new Uri("https://api.flightapi.io/") },
             Options.Create(new FlightApiOptions
             {
                 ApiKey = "test-key",
-                Currency = "EUR"
+                Currency = "EUR",
+                MaxConcurrentRequests = 5
             }),
             cache,
+            gate ?? CreateGate(),
             NullLogger<FlightApiClient>.Instance);
+
+    private static IFlightApiRequestGate CreateGate() =>
+        new FlightApiRequestGate(Options.Create(new FlightApiOptions { MaxConcurrentRequests = 5 }));
 
     private sealed class RecordingProviderResponseCache : IProviderResponseCache
     {
@@ -152,6 +212,91 @@ public sealed class FlightApiClientTests
             {
                 Content = new StringContent(content, Encoding.UTF8, "application/json")
             });
+        }
+    }
+
+    private sealed class ConcurrentTrackingHttpMessageHandler(string content) : HttpMessageHandler
+    {
+        private int _callCount;
+        private int _concurrentCalls;
+        private int _maximumConcurrentCalls;
+
+        public int CallCount => Volatile.Read(ref _callCount);
+
+        public int MaximumConcurrentCalls => Volatile.Read(ref _maximumConcurrentCalls);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _callCount);
+            var concurrentCalls = Interlocked.Increment(ref _concurrentCalls);
+            UpdateMaximum(concurrentCalls);
+            try
+            {
+                await Task.Delay(40, cancellationToken);
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(content, Encoding.UTF8, "application/json")
+                };
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _concurrentCalls);
+            }
+        }
+
+        private void UpdateMaximum(int value)
+        {
+            while (true)
+            {
+                var currentMaximum = Volatile.Read(ref _maximumConcurrentCalls);
+                if (value <= currentMaximum || Interlocked.CompareExchange(ref _maximumConcurrentCalls, value, currentMaximum) == currentMaximum)
+                {
+                    return;
+                }
+            }
+        }
+    }
+
+    private sealed class RecordingGate : IFlightApiRequestGate
+    {
+        public int Acquisitions { get; private set; }
+        public int Releases { get; private set; }
+        public int CacheHits { get; private set; }
+        public int ThrottledResponses { get; private set; }
+        public ValueTask<IDisposable> AcquireAsync(CancellationToken cancellationToken) { cancellationToken.ThrowIfCancellationRequested(); Acquisitions++; return ValueTask.FromResult<IDisposable>(new Release(() => Releases++)); }
+        public void RecordCacheHit() => CacheHits++;
+        public void RecordLiveCall() { }
+        public void RecordThrottledResponse() => ThrottledResponses++;
+        private sealed class Release(Action action) : IDisposable { private Action? _action = action; public void Dispose() => Interlocked.Exchange(ref _action, null)?.Invoke(); }
+    }
+
+    private sealed class StatusHttpMessageHandler(HttpStatusCode statusCode) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(new HttpResponseMessage(statusCode));
+    }
+
+    private sealed class CancelingHttpMessageHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("Cancellation handler unexpectedly completed.");
+        }
+    }
+
+    private sealed class ThrottleThenSuccessHandler : HttpMessageHandler
+    {
+        public int CallCount { get; private set; }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            CallCount++;
+            if (CallCount == 1)
+            {
+                var throttled = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+                throttled.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.Zero);
+                return Task.FromResult(throttled);
+            }
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}", Encoding.UTF8, "application/json") });
         }
     }
 }

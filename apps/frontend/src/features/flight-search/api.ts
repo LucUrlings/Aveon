@@ -57,12 +57,12 @@ type ApiSearchFiltersMetadata = {
   airlines?: ApiSearchFilterOptionCount[] | null
   departureAirports?: ApiSearchFilterOptionCount[] | null
   arrivalAirports?: ApiSearchFilterOptionCount[] | null
-  durationMinutes?: ApiSearchRangeMetadata
-  departureTimeMinutes?: ApiSearchRangeMetadata
-  arrivalTimeMinutes?: ApiSearchRangeMetadata
-  returnDepartureTimeMinutes?: ApiSearchRangeMetadata
-  returnArrivalTimeMinutes?: ApiSearchRangeMetadata
-  stops?: ApiSearchStopFilterMetadata
+  durationMinutes?: ApiSearchRangeMetadata | null
+  departureTimeMinutes?: ApiSearchRangeMetadata | null
+  arrivalTimeMinutes?: ApiSearchRangeMetadata | null
+  returnDepartureTimeMinutes?: ApiSearchRangeMetadata | null
+  returnArrivalTimeMinutes?: ApiSearchRangeMetadata | null
+  stops?: ApiSearchStopFilterMetadata | null
 }
 type ApiSearchPagination = {
   page?: number | null
@@ -70,9 +70,9 @@ type ApiSearchPagination = {
   totalResults?: number | null
   totalPages?: number | null
 }
-type ApiSearchResponseWithFilters = ApiSearchResponse & {
-  filters?: ApiSearchFiltersMetadata
-  pagination?: ApiSearchPagination
+type ApiSearchResponseWithFilters = Omit<ApiSearchResponse, 'filters' | 'pagination'> & {
+  filters?: ApiSearchFiltersMetadata | null
+  pagination?: ApiSearchPagination | null
 }
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
@@ -181,9 +181,7 @@ const normalizePriceOption = (option: ApiSearchResultPriceOptionWithLinks): Sear
       return explicitLinks
     }
 
-    return option.deepLink
-      ? [{ label: 'View fare', url: normalizeBookingLink(option.deepLink) }]
-      : []
+    return []
     })(),
   }
 }
@@ -206,7 +204,7 @@ const normalizeResult = (result: ApiSearchResult): SearchResult | null => {
   }
 }
 
-const normalizeMetadata = (metadata: ApiSearchMetadata | undefined): SearchMetadata => ({
+const normalizeMetadata = (metadata: ApiSearchMetadata | null | undefined): SearchMetadata => ({
   searchCombinationCount: metadata?.searchCombinationCount ?? 0,
   providerResultCount: metadata?.providerResultCount ?? 0,
   returnedResultCount: metadata?.returnedResultCount ?? 0,
@@ -220,12 +218,12 @@ const normalizeFilterOptionCount = (option: ApiSearchFilterOptionCount): SearchF
   count: option.count ?? 0,
 })
 
-const normalizeRange = (range: ApiSearchRangeMetadata | undefined) => ({
+const normalizeRange = (range: ApiSearchRangeMetadata | null | undefined) => ({
   min: range?.min ?? 0,
   max: range?.max ?? 0,
 })
 
-const normalizeFilters = (filters: ApiSearchFiltersMetadata | undefined): SearchFiltersMetadata => ({
+const normalizeFilters = (filters: ApiSearchFiltersMetadata | null | undefined): SearchFiltersMetadata => ({
   providers: (filters?.providers ?? []).map(normalizeFilterOptionCount),
   airlines: (filters?.airlines ?? []).map(normalizeFilterOptionCount),
   departureAirports: (filters?.departureAirports ?? []).map(normalizeFilterOptionCount),
@@ -242,7 +240,7 @@ const normalizeFilters = (filters: ApiSearchFiltersMetadata | undefined): Search
   },
 })
 
-const normalizePagination = (pagination: ApiSearchPagination | undefined, resultCount: number): SearchPagination => ({
+const normalizePagination = (pagination: ApiSearchPagination | null | undefined, resultCount: number): SearchPagination => ({
   page: pagination?.page ?? 1,
   pageSize: pagination?.pageSize ?? resultCount,
   totalResults: pagination?.totalResults ?? resultCount,

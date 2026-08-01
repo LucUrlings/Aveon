@@ -6,6 +6,8 @@ Most flight tools ask travellers to commit to one route and one pair of dates be
 
 Production: [aveon.lucurlings.nl](https://aveon.lucurlings.nl)
 
+Product roadmap: [Multi-Destination Travel Search Product Plan](docs/multi-destination-search-plan.md)
+
 ## Features
 
 - One-way and return searches
@@ -68,7 +70,7 @@ apps/
 
 1. The frontend posts the selected airports, departure dates, return dates, passenger count, and cabin class.
 2. The backend validates and deduplicates the request, applies the current user's search limit, and creates a Redis-backed search session.
-3. Search combinations are processed in the background through a global provider-call limiter. Cached FlightAPI responses are reused when possible.
+3. Search combinations are processed in the background through one process-wide FlightAPI request gate. Cache lookup happens first, so cached responses do not consume one of the five live-request permits.
 4. The frontend polls the session and displays normalized, grouped results as provider calls complete.
 5. Results are filtered and paginated by the backend. The frontend requests the next page as the user scrolls.
 6. For return searches, the user first selects an outbound leg. The backend then returns only compatible inbound options for that selection.
@@ -84,7 +86,7 @@ See the in-product [How search works](https://aveon.lucurlings.nl/how-it-works) 
 
 - Search orchestration: [`SearchService.cs`](apps/backend/Features/Search/SearchService.cs)
 - Search API: [`SearchController.cs`](apps/backend/Features/Search/SearchController.cs)
-- Global provider concurrency: [`ProviderCallLimiter.cs`](apps/backend/Features/Search/ProviderCallLimiter.cs)
+- Global provider concurrency: [`FlightApiRequestGate.cs`](apps/backend/Infrastructure/Providers/FlightApi/FlightApiRequestGate.cs)
 - Guest and account limits: [`SearchLimitResolver.cs`](apps/backend/Features/Search/SearchLimitResolver.cs)
 - Redis session storage: [`RedisSearchSessionStore.cs`](apps/backend/Infrastructure/Caching/RedisSearchSessionStore.cs)
 - Provider response caching: [`RedisProviderResponseCache.cs`](apps/backend/Infrastructure/Caching/RedisProviderResponseCache.cs)
@@ -107,6 +109,12 @@ See the in-product [How search works](https://aveon.lucurlings.nl/how-it-works) 
 - SEO metadata: [`seo.ts`](apps/frontend/src/seo.ts)
 - Route definitions: [`router.ts`](apps/frontend/src/router.ts)
 - Generated API types: [`generated.ts`](apps/frontend/src/api/generated.ts)
+
+## FlightAPI deployment constraint
+
+All FlightAPI operations—including airport autocomplete, one-way, round-trip, advanced edge searches, and future Multi Trip enrichment—must issue live HTTP requests through the singleton `FlightApiRequestGate`. The configured allowance defaults to five concurrent requests across the whole backend process. Cache hits bypass the gate; retries reacquire one permit per live attempt and remain bounded by the caller cancellation/timeout.
+
+Aveon currently supports one backend application instance. Horizontal scaling is not safe until the process-local gate is replaced by a Redis-backed distributed lease or the provider allowance is divided explicitly between instances.
 
 ## Local Development
 

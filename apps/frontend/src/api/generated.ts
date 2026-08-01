@@ -43,6 +43,347 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/Auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RegisterRequest"];
+                    "text/json": components["schemas"]["RegisterRequest"];
+                    "application/*+json": components["schemas"]["RegisterRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CurrentUserResponse"];
+                        "application/json": components["schemas"]["CurrentUserResponse"];
+                        "text/json": components["schemas"]["CurrentUserResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/Auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["LoginRequest"];
+                    "text/json": components["schemas"]["LoginRequest"];
+                    "application/*+json": components["schemas"]["LoginRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CurrentUserResponse"];
+                        "application/json": components["schemas"]["CurrentUserResponse"];
+                        "text/json": components["schemas"]["CurrentUserResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/Auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/Auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CurrentUserResponse"];
+                        "application/json": components["schemas"]["CurrentUserResponse"];
+                        "text/json": components["schemas"]["CurrentUserResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/itinerary-searches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["OptimizedTripRequest"] | components["schemas"]["OrderedTripRequest"];
+                    "text/json": components["schemas"]["OptimizedTripRequest"] | components["schemas"]["OrderedTripRequest"];
+                    "application/*+json": components["schemas"]["OptimizedTripRequest"] | components["schemas"]["OrderedTripRequest"];
+                };
+            };
+            responses: {
+                /** @description Accepted */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ItinerarySearchSessionResponse"];
+                        "application/json": components["schemas"]["ItinerarySearchSessionResponse"];
+                        "text/json": components["schemas"]["ItinerarySearchSessionResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/itinerary-searches/{searchId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    Ranking?: string;
+                    Direct?: boolean;
+                    OneStop?: boolean;
+                    TwoPlusStops?: boolean;
+                    Airlines?: string;
+                    BookingSources?: string;
+                    DepartureAirports?: string;
+                    ArrivalAirports?: string;
+                    MaxPrice?: number;
+                    MaxDurationMinutes?: number;
+                    DepartureTime?: string;
+                    ArrivalTime?: string;
+                    BookingType?: string;
+                    MaxBookingCount?: number;
+                    AllowAirportSwitches?: boolean;
+                    Page?: number;
+                    PageSize?: number;
+                };
+                header?: never;
+                path: {
+                    searchId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ItinerarySearchSessionResponse"];
+                        "application/json": components["schemas"]["ItinerarySearchSessionResponse"];
+                        "text/json": components["schemas"]["ItinerarySearchSessionResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    searchId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/Search": {
         parameters: {
             query?: never;
@@ -117,6 +458,10 @@ export interface paths {
                     MaxDuration?: number;
                     DepartureTime?: string;
                     ArrivalTime?: string;
+                    ReturnDepartureTime?: string;
+                    ReturnArrivalTime?: string;
+                    OutboundLegId?: string;
+                    ReturnLegId?: string;
                     Page?: number;
                     PageSize?: number;
                     HasStopFilter?: boolean;
@@ -166,6 +511,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AirportGroupRequest: {
+            id?: string | null;
+            label?: string | null;
+            airportCodes?: string[] | null;
+        };
         AirportLookupResponse: {
             airports?: components["schemas"]["AirportOption"][] | null;
         };
@@ -174,6 +524,178 @@ export interface components {
             name?: string | null;
             displayLabel?: string | null;
         };
+        BookingOption: {
+            label?: string | null;
+            url?: string | null;
+            /** Format: double */
+            price?: number;
+            currency?: string | null;
+            provider?: string | null;
+        };
+        CurrentUserResponse: {
+            isAuthenticated?: boolean;
+            id?: string | null;
+            email?: string | null;
+            roles?: string[] | null;
+        };
+        DestinationRequest: {
+            group?: components["schemas"]["AirportGroupRequest"] | null;
+            stay?: components["schemas"]["StayRuleRequest"] | null;
+            airportContinuity?: string | null;
+        };
+        ItineraryFilterMetadata: {
+            airlines?: components["schemas"]["ItineraryFilterOption"][] | null;
+            bookingSources?: components["schemas"]["ItineraryFilterOption"][] | null;
+            departureAirports?: components["schemas"]["ItineraryFilterOption"][] | null;
+            arrivalAirports?: components["schemas"]["ItineraryFilterOption"][] | null;
+            /** Format: double */
+            minPrice?: number | null;
+            /** Format: double */
+            maxPrice?: number | null;
+            /** Format: int32 */
+            maxDurationMinutes?: number | null;
+            /** Format: int32 */
+            maxBookingCount?: number | null;
+            /** Format: int32 */
+            maxAirportSwitches?: number | null;
+        };
+        ItineraryFilterOption: {
+            value?: string | null;
+            label?: string | null;
+            /** Format: int32 */
+            count?: number;
+        };
+        ItineraryLeg: {
+            id?: string | null;
+            originAirport?: string | null;
+            destinationAirport?: string | null;
+            /** Format: date-time */
+            departureLocalTime?: string;
+            /** Format: date-time */
+            arrivalLocalTime?: string;
+            /** Format: int32 */
+            durationMinutes?: number;
+            /** Format: int32 */
+            stops?: number;
+            segments?: components["schemas"]["ItinerarySegment"][] | null;
+        };
+        ItineraryPagination: {
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            /** Format: int32 */
+            totalResults?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
+        ItineraryResult: {
+            id?: string | null;
+            bookingType?: string | null;
+            destinationOrder?: string[] | null;
+            legs?: components["schemas"]["ItineraryLeg"][] | null;
+            stays?: components["schemas"]["ItineraryStay"][] | null;
+            /** Format: double */
+            totalPrice?: number;
+            currency?: string | null;
+            /** Format: int32 */
+            totalFlightDurationMinutes?: number;
+            /** Format: int32 */
+            totalStops?: number;
+            /** Format: int32 */
+            bookingCount?: number;
+            /** Format: int32 */
+            airportSwitches?: number;
+            bookingOptions?: components["schemas"]["BookingOption"][] | null;
+            warnings?: components["schemas"]["ItineraryWarning"][] | null;
+            rankingBreakdown?: components["schemas"]["RankingBreakdown"] | null;
+        };
+        ItinerarySearchRequest: {
+            mode: string;
+            /** Format: int32 */
+            adults?: number;
+            cabinClass?: string | null;
+            ranking?: string | null;
+        };
+        ItinerarySearchSessionResponse: {
+            searchId?: string | null;
+            mode?: string | null;
+            status?: string | null;
+            phase?: string | null;
+            /** Format: int32 */
+            progress?: number;
+            coverage?: components["schemas"]["SearchCoverage"] | null;
+            results?: components["schemas"]["ItineraryResult"][] | null;
+            warnings?: components["schemas"]["ItineraryWarning"][] | null;
+            errorMessage?: string | null;
+            pagination?: components["schemas"]["ItineraryPagination"] | null;
+            filters?: components["schemas"]["ItineraryFilterMetadata"] | null;
+        };
+        ItinerarySegment: {
+            marketingCarrierName?: string | null;
+            marketingCarrierCode?: string | null;
+            flightNumber?: string | null;
+            originAirport?: string | null;
+            destinationAirport?: string | null;
+            /** Format: date-time */
+            departureLocalTime?: string;
+            /** Format: date-time */
+            arrivalLocalTime?: string;
+            /** Format: int32 */
+            durationMinutes?: number;
+        };
+        ItineraryStay: {
+            destinationId?: string | null;
+            /** Format: date */
+            arrivalDate?: string;
+            /** Format: date */
+            departureDate?: string;
+            /** Format: int32 */
+            nights?: number;
+        };
+        ItineraryWarning: {
+            code?: string | null;
+            message?: string | null;
+        };
+        LoginRequest: {
+            /** Format: email */
+            email: string;
+            password: string;
+        };
+        OptimizedTripRequest: {
+            start?: components["schemas"]["AirportGroupRequest"] | null;
+            destinations?: components["schemas"]["DestinationRequest"][] | null;
+            endpointMode?: string | null;
+            fixedEnd?: components["schemas"]["AirportGroupRequest"] | null;
+            /** Format: date */
+            startDate?: string;
+            /** Format: date */
+            endDate?: string;
+            defaultAirportContinuity?: string | null;
+        } & (Omit<components["schemas"]["ItinerarySearchRequest"], "mode"> & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "optimize";
+        });
+        OrderedLegRequest: {
+            id?: string | null;
+            from?: components["schemas"]["AirportGroupRequest"] | null;
+            to?: components["schemas"]["AirportGroupRequest"] | null;
+            /** Format: date */
+            departureDate?: string;
+            airportContinuityWithPrevious?: string | null;
+        };
+        OrderedTripRequest: {
+            legs?: components["schemas"]["OrderedLegRequest"][] | null;
+        } & (Omit<components["schemas"]["ItinerarySearchRequest"], "mode"> & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "ordered";
+        });
         ProblemDetails: {
             type?: string | null;
             title?: string | null;
@@ -183,6 +705,38 @@ export interface components {
             instance?: string | null;
         } & {
             [key: string]: unknown;
+        };
+        RankingBreakdown: {
+            /** Format: double */
+            score?: number;
+            /** Format: double */
+            totalPrice?: number;
+            /** Format: int32 */
+            additionalFlightMinutes?: number;
+            /** Format: int32 */
+            totalStops?: number;
+            /** Format: int32 */
+            additionalBookings?: number;
+            /** Format: int32 */
+            airportSwitches?: number;
+        };
+        RegisterRequest: {
+            /** Format: email */
+            email: string;
+            password: string;
+        };
+        SearchCoverage: {
+            mode?: string | null;
+            /** Format: int32 */
+            liveProviderCallsUsed?: number;
+            /** Format: int32 */
+            providerCallLimit?: number;
+            /** Format: int32 */
+            cacheHits?: number;
+            /** Format: int32 */
+            candidateStatesEvaluated?: number;
+            /** Format: int32 */
+            candidateStatesPruned?: number;
         };
         SearchFilterOptionCount: {
             value?: string | null;
@@ -194,10 +748,12 @@ export interface components {
             airlines?: components["schemas"]["SearchFilterOptionCount"][] | null;
             departureAirports?: components["schemas"]["SearchFilterOptionCount"][] | null;
             arrivalAirports?: components["schemas"]["SearchFilterOptionCount"][] | null;
-            durationMinutes?: components["schemas"]["SearchRangeMetadata"];
-            departureTimeMinutes?: components["schemas"]["SearchRangeMetadata"];
-            arrivalTimeMinutes?: components["schemas"]["SearchRangeMetadata"];
-            stops?: components["schemas"]["SearchStopFilterMetadata"];
+            durationMinutes?: components["schemas"]["SearchRangeMetadata"] | null;
+            departureTimeMinutes?: components["schemas"]["SearchRangeMetadata"] | null;
+            arrivalTimeMinutes?: components["schemas"]["SearchRangeMetadata"] | null;
+            returnDepartureTimeMinutes?: components["schemas"]["SearchRangeMetadata"] | null;
+            returnArrivalTimeMinutes?: components["schemas"]["SearchRangeMetadata"] | null;
+            stops?: components["schemas"]["SearchStopFilterMetadata"] | null;
         };
         SearchMetadata: {
             /** Format: int32 */
@@ -240,9 +796,9 @@ export interface components {
         };
         SearchResponse: {
             results?: components["schemas"]["SearchResult"][] | null;
-            metadata?: components["schemas"]["SearchMetadata"];
-            filters?: components["schemas"]["SearchFiltersMetadata"];
-            pagination?: components["schemas"]["SearchPagination"];
+            metadata?: components["schemas"]["SearchMetadata"] | null;
+            filters?: components["schemas"]["SearchFiltersMetadata"] | null;
+            pagination?: components["schemas"]["SearchPagination"] | null;
         };
         SearchResult: {
             id?: string | null;
@@ -252,7 +808,13 @@ export interface components {
             totalDurationMinutes?: number;
             priceOptions?: components["schemas"]["SearchResultPriceOption"][] | null;
         };
+        SearchResultBookingLink: {
+            label?: string | null;
+            url?: string | null;
+            price?: components["schemas"]["SearchResultPrice"] | null;
+        };
         SearchResultLeg: {
+            id?: string | null;
             originAirport?: string | null;
             destinationAirport?: string | null;
             /** Format: date-time */
@@ -271,8 +833,8 @@ export interface components {
         SearchResultPriceOption: {
             id?: string | null;
             provider?: string | null;
-            totalPrice?: components["schemas"]["SearchResultPrice"];
-            deepLink?: string | null;
+            totalPrice?: components["schemas"]["SearchResultPrice"] | null;
+            bookingLinks?: components["schemas"]["SearchResultBookingLink"][] | null;
         };
         SearchResultSegment: {
             marketingCarrierName?: string | null;
@@ -296,8 +858,14 @@ export interface components {
             completedCombinations?: number;
             /** Format: int32 */
             failedCombinations?: number;
-            response?: components["schemas"]["SearchResponse"];
+            response?: components["schemas"]["SearchResponse"] | null;
             errorMessage?: string | null;
+            stagedResults?: components["schemas"]["SearchStagedResults"] | null;
+        };
+        SearchStagedResults: {
+            outboundResults?: components["schemas"]["SearchResult"][] | null;
+            inboundResults?: components["schemas"]["SearchResult"][] | null;
+            roundTripResults?: components["schemas"]["SearchResult"][] | null;
         };
         SearchStopFilterMetadata: {
             /** Format: int32 */
@@ -306,6 +874,24 @@ export interface components {
             oneStop?: number;
             /** Format: int32 */
             twoPlusStop?: number;
+        };
+        StayRuleRequest: {
+            mode?: string | null;
+            /** Format: int32 */
+            nights?: number;
+        };
+        ValidationProblemDetails: {
+            type?: string | null;
+            title?: string | null;
+            /** Format: int32 */
+            status?: number | null;
+            detail?: string | null;
+            instance?: string | null;
+            errors?: {
+                [key: string]: string[];
+            } | null;
+        } & {
+            [key: string]: unknown;
         };
     };
     responses: never;

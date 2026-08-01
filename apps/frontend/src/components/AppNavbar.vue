@@ -56,6 +56,7 @@ const signOut = async () => {
 
       <div class="navbar-links">
         <RouterLink to="/" exact-active-class="active">Search</RouterLink>
+        <RouterLink to="/multi-destination" active-class="active">Multi-destination</RouterLink>
         <RouterLink to="/how-it-works" active-class="active">How it works</RouterLink>
         <RouterLink to="/about" active-class="active">About</RouterLink>
         <a href="https://github.com/LucUrlings/Aveon" target="_blank" rel="noreferrer">Source <span aria-hidden="true">↗</span></a>

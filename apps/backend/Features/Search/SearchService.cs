@@ -11,10 +11,8 @@ namespace backend.Features.Search;
 public sealed class SearchService(
     IServiceScopeFactory serviceScopeFactory,
     ISearchSessionStore searchSessionStore,
-    IProviderCallLimiter providerCallLimiter,
     ILogger<SearchService> logger) : ISearchService
 {
-    private const int MaxConcurrentProviderCalls = 5;
     private const int MaxMaterializedProviderCalls = 10_000;
     private const int MaxStoredFareOptionsPerDirection = 2_000;
     private const string ProviderName = "FlightApi";
@@ -107,20 +105,13 @@ public sealed class SearchService(
         SearchPlan searchPlan,
         SearchExecutionState executionState)
     {
-        // Keep one provider slot available for return recommendations while the
-        // outbound catalogue is still loading. Once the outbound phase finishes,
-        // the return phase may use the full provider concurrency budget.
-        using var outboundConcurrencyGate = new SemaphoreSlim(MaxConcurrentProviderCalls - 1);
-        using var returnConcurrencyGate = new SemaphoreSlim(1, MaxConcurrentProviderCalls);
-
         var outboundTasks = searchPlan.OutboundRequests.Select(candidate =>
             ExecuteOneWaySearchAsync(
                 searchId,
                 searchPlan.TotalProviderCalls,
                 candidate,
                 searchPlan.IsRoundTripSearch ? SearchLegDirection.Outbound : SearchLegDirection.OneWay,
-                executionState,
-                outboundConcurrencyGate))
+                executionState))
             .ToList();
 
         var returnTasks = new List<Task>();
@@ -130,23 +121,15 @@ public sealed class SearchService(
                 searchPlan.TotalProviderCalls,
                 candidate,
                 SearchLegDirection.Inbound,
-                executionState,
-                returnConcurrencyGate)));
+                executionState)));
         returnTasks.AddRange(searchPlan.RoundTripRequests.Select(candidate =>
             ExecuteRoundTripSearchAsync(
                 searchId,
                 searchPlan.TotalProviderCalls,
                 candidate,
-                executionState,
-                returnConcurrencyGate)));
+                executionState)));
 
-        await Task.WhenAll(outboundTasks);
-
-        // The outbound workers no longer consume provider capacity, so allow
-        // queued return searches to fan out without exceeding the global limit.
-        returnConcurrencyGate.Release(MaxConcurrentProviderCalls - 1);
-
-        await Task.WhenAll(returnTasks);
+        await Task.WhenAll(outboundTasks.Concat(returnTasks));
 
         var finalSession = executionState.BuildFinalSnapshot(searchId, searchPlan.TotalProviderCalls);
 
@@ -158,48 +141,32 @@ public sealed class SearchService(
         int totalProviderCalls,
         ProviderSearchRequest request,
         SearchLegDirection direction,
-        SearchExecutionState executionState,
-        SemaphoreSlim concurrencyGate)
+        SearchExecutionState executionState)
     {
-        await concurrencyGate.WaitAsync();
+        using var scope = serviceScopeFactory.CreateScope();
+        var flightSearchProvider = scope.ServiceProvider.GetRequiredService<IFlightSearchProvider>();
+
         try
         {
-            using var scope = serviceScopeFactory.CreateScope();
-            var flightSearchProvider = scope.ServiceProvider.GetRequiredService<IFlightSearchProvider>();
+            var providerResponse = await flightSearchProvider.SearchOneWayAsync(request, CancellationToken.None);
+            var mappedFareOptions = MapToSearchFareOptions(providerResponse, isRoundTrip: false)
+                .Take(MaxStoredFareOptionsPerDirection)
+                .ToList();
 
-            try
-            {
-                FlightApiOneWayResponse providerResponse;
-                using (await providerCallLimiter.AcquireAsync(CancellationToken.None))
-                {
-                    providerResponse = await flightSearchProvider.SearchOneWayAsync(request, CancellationToken.None);
-                }
-
-                var mappedFareOptions = MapToSearchFareOptions(providerResponse, isRoundTrip: false)
-                    .Take(MaxStoredFareOptionsPerDirection)
-                    .ToList();
-
-                var snapshot = executionState.BuildRunningSnapshot(searchId, totalProviderCalls, mappedFareOptions, direction);
-
-                await TrySetSearchSessionAsync(snapshot, "persisting an in-progress search session update");
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(
-                    ex,
-                    "FlightApi one-way search failed for {OriginAirport} -> {DestinationAirport} on {DepartureDate}",
-                    request.OriginAirport,
-                    request.DestinationAirport,
-                    request.DepartureDate);
-
-                var snapshot = executionState.BuildFailedProviderSnapshot(searchId, totalProviderCalls);
-
-                await TrySetSearchSessionAsync(snapshot, "persisting a failed provider search session update");
-            }
+            var snapshot = executionState.BuildRunningSnapshot(searchId, totalProviderCalls, mappedFareOptions, direction);
+            await TrySetSearchSessionAsync(snapshot, "persisting an in-progress search session update");
         }
-        finally
+        catch (Exception ex)
         {
-            concurrencyGate.Release();
+            logger.LogWarning(
+                ex,
+                "FlightApi one-way search failed for {OriginAirport} -> {DestinationAirport} on {DepartureDate}",
+                request.OriginAirport,
+                request.DestinationAirport,
+                request.DepartureDate);
+
+            var snapshot = executionState.BuildFailedProviderSnapshot(searchId, totalProviderCalls);
+            await TrySetSearchSessionAsync(snapshot, "persisting a failed provider search session update");
         }
     }
 
@@ -207,53 +174,37 @@ public sealed class SearchService(
         string searchId,
         int totalProviderCalls,
         ProviderRoundTripSearchRequest request,
-        SearchExecutionState executionState,
-        SemaphoreSlim concurrencyGate)
+        SearchExecutionState executionState)
     {
-        await concurrencyGate.WaitAsync();
+        using var scope = serviceScopeFactory.CreateScope();
+        var flightSearchProvider = scope.ServiceProvider.GetRequiredService<IFlightSearchProvider>();
+
         try
         {
-            using var scope = serviceScopeFactory.CreateScope();
-            var flightSearchProvider = scope.ServiceProvider.GetRequiredService<IFlightSearchProvider>();
+            var providerResponse = await flightSearchProvider.SearchRoundTripAsync(request, CancellationToken.None);
+            var mappedFareOptions = MapToSearchFareOptions(providerResponse, isRoundTrip: true)
+                .Take(MaxStoredFareOptionsPerDirection)
+                .ToList();
 
-            try
-            {
-                FlightApiOneWayResponse providerResponse;
-                using (await providerCallLimiter.AcquireAsync(CancellationToken.None))
-                {
-                    providerResponse = await flightSearchProvider.SearchRoundTripAsync(request, CancellationToken.None);
-                }
-
-                var mappedFareOptions = MapToSearchFareOptions(providerResponse, isRoundTrip: true)
-                    .Take(MaxStoredFareOptionsPerDirection)
-                    .ToList();
-
-                var snapshot = executionState.BuildRunningSnapshot(
-                    searchId,
-                    totalProviderCalls,
-                    mappedFareOptions,
-                    SearchLegDirection.RoundTrip);
-
-                await TrySetSearchSessionAsync(snapshot, "persisting an in-progress search session update");
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(
-                    ex,
-                    "FlightApi round-trip search failed for {OriginAirport} -> {DestinationAirport} on {DepartureDate} returning {ReturnDate}",
-                    request.OriginAirport,
-                    request.DestinationAirport,
-                    request.DepartureDate,
-                    request.ReturnDate);
-
-                var snapshot = executionState.BuildFailedProviderSnapshot(searchId, totalProviderCalls);
-
-                await TrySetSearchSessionAsync(snapshot, "persisting a failed provider search session update");
-            }
+            var snapshot = executionState.BuildRunningSnapshot(
+                searchId,
+                totalProviderCalls,
+                mappedFareOptions,
+                SearchLegDirection.RoundTrip);
+            await TrySetSearchSessionAsync(snapshot, "persisting an in-progress search session update");
         }
-        finally
+        catch (Exception ex)
         {
-            concurrencyGate.Release();
+            logger.LogWarning(
+                ex,
+                "FlightApi round-trip search failed for {OriginAirport} -> {DestinationAirport} on {DepartureDate} returning {ReturnDate}",
+                request.OriginAirport,
+                request.DestinationAirport,
+                request.DepartureDate,
+                request.ReturnDate);
+
+            var snapshot = executionState.BuildFailedProviderSnapshot(searchId, totalProviderCalls);
+            await TrySetSearchSessionAsync(snapshot, "persisting a failed provider search session update");
         }
     }
 

@@ -1,4 +1,6 @@
 using backend.Features.Airports;
+using backend.Features.ItinerarySearch;
+using backend.Features.ItinerarySearch.Models;
 using backend.Features.Search;
 using backend.Features.Search.Models;
 using backend.Infrastructure.Auth;
@@ -20,13 +22,32 @@ builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 // builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-builder.Services.Configure<FlightApiOptions>(
-    builder.Configuration.GetSection(FlightApiOptions.SectionName));
+builder.Services.AddSwaggerGen(options =>
+{
+    options.UseOneOfForPolymorphism();
+    options.UseAllOfToExtendReferenceSchemas();
+    options.SelectSubTypesUsing(baseType => baseType == typeof(ItinerarySearchRequest)
+        ? [typeof(OptimizedTripRequest), typeof(OrderedTripRequest)]
+        : []);
+    options.SelectDiscriminatorNameUsing(baseType => baseType == typeof(ItinerarySearchRequest) ? "mode" : null);
+    options.SelectDiscriminatorValueUsing(subType => subType == typeof(OptimizedTripRequest)
+        ? "optimize"
+        : subType == typeof(OrderedTripRequest) ? "ordered" : null);
+});
+builder.Services.AddOptions<FlightApiOptions>()
+    .Bind(builder.Configuration.GetSection(FlightApiOptions.SectionName))
+    .Validate(options => options.MaxConcurrentRequests > 0, "FlightApi:MaxConcurrentRequests must be positive.")
+    .Validate(options => options.MaxRetryAttempts > 0 && options.MaxRetryDelaySeconds > 0, "FlightAPI retry limits must be positive.")
+    .ValidateOnStart();
 builder.Services.Configure<RedisOptions>(
     builder.Configuration.GetSection(RedisOptions.SectionName));
 builder.Services.Configure<SearchOptions>(
     builder.Configuration.GetSection(SearchOptions.SectionName));
+builder.Services.AddOptions<MultiDestinationSearchOptions>()
+    .Bind(builder.Configuration.GetSection(MultiDestinationSearchOptions.SectionName))
+    .Validate(MultiDestinationSearchOptionsValidation.HasPositiveLimits, "Multi-destination search limits and provider budgets must be positive.")
+    .Validate(MultiDestinationSearchOptionsValidation.HasOrderedProviderBudgets, "Multi-destination provider-call limits must increase by role and remain under the hard limit.")
+    .ValidateOnStart();
 var databaseConnectionString = builder.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("Connection string 'Default' is not configured.");
 
@@ -60,7 +81,10 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 builder.Services.AddScoped<IAirportService, AirportService>();
 builder.Services.AddScoped<ISearchLimitResolver, SearchLimitResolver>();
-builder.Services.AddSingleton<IProviderCallLimiter, ProviderCallLimiter>();
+builder.Services.AddSingleton<IFlightApiRequestGate, FlightApiRequestGate>();
+builder.Services.AddSingleton<IItinerarySearchSessionStore, RedisItinerarySearchSessionStore>();
+builder.Services.AddSingleton<IOrderedItinerarySearchRunner, OrderedItinerarySearchRunner>();
+builder.Services.AddSingleton<IItinerarySearchService, ItinerarySearchService>();
 builder.Services.AddSingleton<ISearchSessionStore, RedisSearchSessionStore>();
 builder.Services.AddSingleton<ISearchService, SearchService>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(serviceProvider =>

@@ -6,7 +6,6 @@ using backend.Infrastructure.Providers.FlightApi;
 using backend.Infrastructure.Providers.FlightApi.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace backend.Tests;
@@ -271,7 +270,6 @@ public sealed class SearchServiceTests
         var service = new SearchService(
             scopeFactory,
             store,
-            new ProviderCallLimiter(Options.Create(new SearchOptions())),
             NullLogger<SearchService>.Instance);
 
         var request = new SearchRequest(
@@ -996,7 +994,6 @@ public sealed class SearchServiceTests
         services.AddLogging();
         services.AddSingleton<ISearchSessionStore>(store);
         services.AddSingleton<IFlightSearchProvider>(flightSearchProvider);
-        services.AddSingleton<IProviderCallLimiter>(new ProviderCallLimiter(Options.Create(new SearchOptions())));
         services.AddSingleton<ISearchService, SearchService>();
 
         var serviceProvider = services.BuildServiceProvider();

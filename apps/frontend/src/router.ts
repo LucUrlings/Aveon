@@ -34,6 +34,17 @@ export const router = createRouter({
       },
     },
     {
+      path: '/multi-destination',
+      name: 'multi-destination-search',
+      component: () => import('./pages/MultiDestinationSearchPage.vue'),
+      meta: {
+        seo: {
+          title: 'Multi-destination travel search · Aveon',
+          description: 'Build ordered routes or describe a multi-destination trip using reusable airport groups.',
+        },
+      },
+    },
+    {
       path: '/how-it-works',
       name: 'how-it-works',
       component: () => import('./pages/HowSearchWorksPage.vue'),
