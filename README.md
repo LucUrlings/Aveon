@@ -16,7 +16,7 @@ The multi-destination foundation, ordered-route search, feasibility engine, boun
 
 The former Milestone 5 investigated FlightAPI Multi Trip bundled fares. The configured FlightAPI subscription does not provide that API, so the experimental implementation was removed and the work is explicitly deferred. Current multi-destination results are assembled from independently bookable one-way fares.
 
-Multi-destination search remains independently deployable and is disabled by default through `MultiDestinationSearch:Enabled=false`. Simple one-way and return search does not depend on that flag.
+Multi-destination search is enabled by default and remains independently switchable through `MultiDestinationSearch:Enabled`. Set it to `false` for an immediate rollback without affecting simple one-way and return search.
 
 ## Features
 
@@ -36,7 +36,7 @@ Multi-destination search remains independently deployable and is disabled by def
 - Different search limits for guests, registered users, and administrators
 - Responsive and accessible search controls
 - Ordered multi-destination routes with multiple airports at every endpoint
-- Bounded trip optimization for unordered destinations, stay rules, endpoint modes, and airport continuity
+- Bounded trip optimization with optional destination reordering, stay rules, endpoint modes, and airport continuity
 - Complete-itinerary ranking, filtering, progressive coverage, and separate-booking warnings
 - Route-specific titles, descriptions, canonical URLs, structured data, `robots.txt`, and `sitemap.xml`
 
@@ -177,11 +177,11 @@ cd ../..
 
 Do not commit the API key to `appsettings.json`, `.env`, or source control.
 
-Multi-destination search is disabled by default. Enable it for local development with a user secret:
+Multi-destination search is enabled by default. To exercise the rollback state locally, disable it with a user secret:
 
 ```bash
 cd apps/backend
-dotnet user-secrets set "MultiDestinationSearch:Enabled" "true"
+dotnet user-secrets set "MultiDestinationSearch:Enabled" "false"
 cd ../..
 ```
 
@@ -195,6 +195,8 @@ This starts PostgreSQL and Redis through Docker Compose, then runs:
 
 - frontend: `http://localhost:5173`
 - backend and Swagger: `http://localhost:5210`
+
+The Vite development server proxies `/api` to `http://localhost:5210`, so frontend requests remain same-origin even when Vite selects a port other than `5173`. Override the target with `VITE_DEV_API_TARGET` when the backend runs elsewhere.
 
 The services can also be started separately:
 
@@ -238,11 +240,13 @@ Important settings:
 | `REDIS_SEARCH_SESSION_TTL_MINUTES` | Search-session lifetime | `30` |
 | `SEARCH_ANONYMOUS_MAX_SEARCH_COMBINATIONS` | Guest search limit | `15` |
 | `SEARCH_USER_MAX_SEARCH_COMBINATIONS` | Registered-user search limit | `100` |
-| `MULTI_DESTINATION_SEARCH_ENABLED` | Independent multi-destination feature flag | `false` |
+| `MULTI_DESTINATION_SEARCH_ENABLED` | Independent multi-destination feature flag | `true` |
 | `MULTI_DESTINATION_ANONYMOUS_MAX_PROVIDER_CALLS` | Guest multi-destination live-call budget | `25` |
 | `MULTI_DESTINATION_USER_MAX_PROVIDER_CALLS` | Registered-user multi-destination live-call budget | `100` |
 | `MULTI_DESTINATION_ADMIN_MAX_PROVIDER_CALLS` | Administrator multi-destination live-call budget | `250` |
 | `MULTI_DESTINATION_EXECUTION_TIMEOUT_MINUTES` | Ordered and optimized worker timeout | `10` |
+| `MULTI_DESTINATION_MAX_ACTIVE_STATES` | Maximum candidate paths retained in an optimizer frontier | `10000` |
+| `MULTI_DESTINATION_MAX_EVALUATED_STATES` | Maximum cumulative optimizer path evaluations | `100000` |
 
 `AVEON_PUBLIC_URL` must be an HTTP or HTTPS origin without a path. For the public deployment, use:
 
@@ -252,7 +256,7 @@ AVEON_PUBLIC_URL=https://aveon.lucurlings.nl
 
 Development cache lifetimes in `appsettings.Development.json` are intentionally longer than the production defaults.
 
-See [multi-destination rollout and rollback](docs/multi-destination-rollout.md) before enabling the feature. The feature remains disabled by default.
+See [multi-destination rollout and rollback](docs/multi-destination-rollout.md) before changing the feature state. The feature is enabled by default and can be disabled without affecting simple search.
 
 ## Observability and Analytics
 
@@ -308,7 +312,7 @@ Start it with:
 docker compose up -d
 ```
 
-To enable multi-destination search in a controlled deployment, set `MULTI_DESTINATION_SEARCH_ENABLED=true` only after following the [rollout checklist](docs/multi-destination-rollout.md). Rollback requires setting it back to `false`; it does not require a database migration or Redis deletion.
+Multi-destination search is enabled by default. Follow the [rollout and rollback checklist](docs/multi-destination-rollout.md) when changing its deployment state. Rollback requires setting `MULTI_DESTINATION_SEARCH_ENABLED=false`; it does not require a database migration or Redis deletion.
 
 The container entrypoint injects `AVEON_PUBLIC_URL` into the prebuilt HTML and writes `robots.txt` and `sitemap.xml` into `wwwroot` before ASP.NET starts. This keeps deployment-specific SEO URLs out of the backend application code.
 

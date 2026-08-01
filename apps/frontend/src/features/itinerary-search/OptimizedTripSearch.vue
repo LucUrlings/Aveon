@@ -13,12 +13,16 @@ import { trackItineraryEvent } from './analytics'
 
 let sequence = 1
 const isoDate = (offset: number) => { const date = new Date(); date.setDate(date.getDate() + offset); return date.toISOString().slice(0, 10) }
-const createDestination = (): OptimizedDestinationModel => { const number = sequence++; return { id: `optimized-destination-${number}`, label: `Destination ${number}`, airports: [], stayMode: 'minimumNights', nights: 2, continuity: 'inherit' } }
+const createDestination = (): OptimizedDestinationModel => { const number = sequence++; return { id: `optimized-destination-${number}`, label: 'Unordered destination', airports: [], stayMode: 'minimumNights', nights: 2, continuity: 'inherit' } }
 const startPicker = useAirportPicker([])
 const fixedEndPicker = useAirportPicker([])
-const startGroupLabel = ref('Starting point')
-const fixedEndGroupLabel = ref('Final stop')
+const airportGroupName = (airports: AirportOption[], fallback: string) => airports.length
+  ? airports.map(airport => airport.name ? `${airport.name} (${airport.code})` : airport.code).join(' / ').slice(0, 80)
+  : fallback
+const startGroupLabel = computed(() => airportGroupName(startPicker.airports.value, 'Starting point'))
+const fixedEndGroupLabel = computed(() => airportGroupName(fixedEndPicker.airports.value, 'Final stop'))
 const destinations = ref<OptimizedDestinationModel[]>([createDestination()])
+const preserveDestinationOrder = ref(true)
 const endpointMode = ref<'returnToStart' | 'openEnded' | 'fixedEnd'>('returnToStart')
 const startDate = ref(isoDate(1))
 const endDate = ref(isoDate(8))
@@ -83,6 +87,11 @@ const minimumCalendarDays = computed(() => {
     const offset = destinations.value.reduce((total, destination) => total + gap(destination), 0)
     return Number.isFinite(offset) ? offset + 1 : Number.POSITIVE_INFINITY
   }
+  if (preserveDestinationOrder.value) {
+    const final = destinations.value[destinations.value.length - 1]
+    const preceding = destinations.value.slice(0, -1).reduce((total, destination) => total + gap(destination), 0)
+    return preceding + final.nights + 1
+  }
   const candidates = destinations.value.map((final, finalIndex) => {
     const preceding = destinations.value.filter((_, index) => index !== finalIndex).reduce((total, destination) => total + gap(destination), 0)
     return preceding + final.nights + 1
@@ -99,7 +108,8 @@ const airportChoiceEstimate = computed(() => {
   const startChoices = Math.max(1, startPicker.airports.value.length)
   const destinationChoices = destinations.value.reduce((total, destination) => total * Math.max(1, destination.airports.length), 1)
   const endChoices = endpointMode.value === 'fixedEnd' ? Math.max(1, fixedEndPicker.airports.value.length) : startChoices
-  return factorial(destinations.value.length) * requiredLegCount.value * startChoices * destinationChoices * endChoices
+  const routeOrderChoices = preserveDestinationOrder.value ? 1 : factorial(destinations.value.length)
+  return routeOrderChoices * requiredLegCount.value * startChoices * destinationChoices * endChoices
 })
 const exceedsTripLimit = computed(() => availableCalendarDays.value > maxTripDays.value)
 const impossible = computed(() => availableCalendarDays.value < minimumCalendarDays.value || exceedsTripLimit.value)
@@ -206,7 +216,6 @@ const resume = async (searchId: string) => {
 
 const submit = async () => {
   error.value = ''
-  if (!startGroupLabel.value.trim() || destinations.value.some(destination => !destination.label.trim()) || (endpointMode.value === 'fixedEnd' && !fixedEndGroupLabel.value.trim())) { error.value = 'Give every airport group a name.'; trackItineraryEvent('validation_failure', { mode: 'optimize', stage: 'group_names' }); return }
   if (startPicker.airports.value.length === 0 || destinations.value.some(destination => destination.airports.length === 0)) { error.value = 'Add at least one airport to the start and every destination.'; trackItineraryEvent('validation_failure', { mode: 'optimize', stage: 'airport_groups' }); return }
   if (endpointMode.value === 'fixedEnd' && fixedEndPicker.airports.value.length === 0) { error.value = 'Add at least one airport to the fixed ending group.'; trackItineraryEvent('validation_failure', { mode: 'optimize', stage: 'fixed_end' }); return }
   if (impossible.value) { error.value = feasibilityMessage.value; trackItineraryEvent('validation_failure', { mode: 'optimize', stage: 'date_window' }); return }
@@ -219,6 +228,7 @@ const submit = async () => {
     startDate: startDate.value,
     endDate: endDate.value,
     defaultAirportContinuity: defaultContinuity.value,
+    preserveDestinationOrder: preserveDestinationOrder.value,
     adults: adults.value,
     cabinClass: cabinClass.value,
     ranking: ranking.value,
@@ -315,8 +325,8 @@ onMounted(async () => {
 <template>
   <section aria-label="Optimize my trip form">
     <form class="optimized-form" @input="formDirty = true" @submit.prevent="submit">
-      <label>Starting group name<input v-model="startGroupLabel" required maxlength="80" /></label>
-      <AirportGroupPicker v-model:input="startPicker.input.value" v-model:airports="startPicker.airports.value" label="Starting airport group" input-aria-label="Add a starting airport or city" suggestions-aria-label="Starting airport suggestions" suggestion-id-prefix="optimized-start" :suggestions="startPicker.suggestions.value" :max-airports="maxAirportsPerGroup" @add-airport="startPicker.addAirport" @remove-airport="startPicker.removeAirport" @confirm-input="startPicker.confirmInput" />
+      <div class="mode-introduction"><strong>Optimize dates, airports, and flights</strong><p>{{ preserveDestinationOrder ? 'Destinations are visited in the order shown below. Aveon still finds the best dates and airport combinations for your stay rules.' : 'Destination cards are unordered. Aveon compares possible visit orders, dates, airport combinations, and stay schedules.' }}</p></div>
+      <AirportGroupPicker v-model:input="startPicker.input.value" v-model:airports="startPicker.airports.value" label="Starting airport group" input-aria-label="Add a starting airport or city" suggestions-aria-label="Starting airport suggestions" suggestion-id-prefix="optimized-start" :suggestions="startPicker.suggestions.value" :suggestions-loading="startPicker.suggestionsLoading.value" :suggestions-error="startPicker.suggestionsError.value" :has-searched-suggestions="startPicker.hasSearchedSuggestions.value" :max-airports="maxAirportsPerGroup" @add-airport="startPicker.addAirport" @remove-airport="startPicker.removeAirport" @confirm-input="startPicker.confirmInput" />
       <div class="endpoint-dates">
         <label>Finish trip
           <select v-model="endpointMode" aria-label="Trip endpoint mode">
@@ -326,10 +336,10 @@ onMounted(async () => {
         <label>Start date<input v-model="startDate" type="date" required /></label>
         <label>End date<input v-model="endDate" type="date" :min="startDate" :max="maxEndDate" required /></label>
       </div>
-      <label v-if="endpointMode === 'fixedEnd'">Fixed ending group name<input v-model="fixedEndGroupLabel" required maxlength="80" /></label>
-      <AirportGroupPicker v-if="endpointMode === 'fixedEnd'" v-model:input="fixedEndPicker.input.value" v-model:airports="fixedEndPicker.airports.value" label="Fixed ending airport group" input-aria-label="Add a fixed ending airport or city" suggestions-aria-label="Fixed ending airport suggestions" suggestion-id-prefix="optimized-fixed-end" :suggestions="fixedEndPicker.suggestions.value" :max-airports="maxAirportsPerGroup" @add-airport="fixedEndPicker.addAirport" @remove-airport="fixedEndPicker.removeAirport" @confirm-input="fixedEndPicker.confirmInput" />
-      <OptimizedDestinationEditor v-for="(destination, index) in destinations" :key="destination.id" :model-value="destination" :index="index" :removable="destinations.length > 1" :max-airports="maxAirportsPerGroup" @update:model-value="updateDestination(index, $event)" @remove="removeDestination(index)" />
-      <button type="button" class="secondary-action" :disabled="destinations.length >= maxOptimizedDestinations" @click="addDestination">Add another destination</button>
+      <AirportGroupPicker v-if="endpointMode === 'fixedEnd'" v-model:input="fixedEndPicker.input.value" v-model:airports="fixedEndPicker.airports.value" label="Fixed ending airport group" input-aria-label="Add a fixed ending airport or city" suggestions-aria-label="Fixed ending airport suggestions" suggestion-id-prefix="optimized-fixed-end" :suggestions="fixedEndPicker.suggestions.value" :suggestions-loading="fixedEndPicker.suggestionsLoading.value" :suggestions-error="fixedEndPicker.suggestionsError.value" :has-searched-suggestions="fixedEndPicker.hasSearchedSuggestions.value" :max-airports="maxAirportsPerGroup" @add-airport="fixedEndPicker.addAirport" @remove-airport="fixedEndPicker.removeAirport" @confirm-input="fixedEndPicker.confirmInput" />
+      <label class="order-choice"><input v-model="preserveDestinationOrder" type="checkbox" /><span><strong>Keep destinations in the order shown</strong><small>Untick this to let Aveon rearrange them while looking for a better trip.</small></span></label>
+      <OptimizedDestinationEditor v-for="(destination, index) in destinations" :key="destination.id" :model-value="destination" :index="index" :removable="destinations.length > 1" :max-airports="maxAirportsPerGroup" :preserve-order="preserveDestinationOrder" @update:model-value="updateDestination(index, $event)" @remove="removeDestination(index)" />
+      <button type="button" class="secondary-action" :disabled="destinations.length >= maxOptimizedDestinations" @click="addDestination">{{ preserveDestinationOrder ? 'Add next destination' : 'Add another unordered destination' }}</button>
       <div class="trip-options">
         <label>Airport continuity<select v-model="defaultContinuity"><option value="sameAirport">Use the same airport</option><option value="allowSwitch">Allow airport changes</option></select></label>
         <label>Travellers<input v-model.number="adults" type="number" min="1" max="9" /></label>
@@ -405,6 +415,12 @@ onMounted(async () => {
 
 <style scoped>
 .optimized-form { display: grid; gap: 16px; }
+.mode-introduction { padding: 14px 16px; border-radius: 10px; background: var(--brand-soft); color: var(--ink-strong); }
+.mode-introduction p { margin: 5px 0 0; color: var(--muted); }
+.order-choice { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; }
+.order-choice input { width: auto; margin-top: 3px; accent-color: var(--brand); }
+.order-choice span { display: grid; gap: 3px; color: var(--ink-strong); }
+.order-choice small { color: var(--muted); }
 .endpoint-dates, .trip-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .trip-options { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 label { display: grid; gap: 5px; color: var(--muted); font-size: .9rem; }
@@ -415,7 +431,7 @@ input, select { width: 100%; box-sizing: border-box; padding: 9px; border: 1px s
 .feasibility { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 16px; padding: 14px; border-radius: 10px; background: var(--brand-soft); color: var(--ink-strong); }
 .feasibility strong, .feasibility p { grid-column: 1 / -1; }.feasibility span { font-size: .9rem; }.feasibility p { margin: 0; color: #b42318; }.feasibility--invalid { background: #fff1f0; }
 .form-error { color: #b42318; }.authoritative-feasibility { margin-top: 18px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }.authoritative-feasibility p { margin-bottom: 0; }
-.search-progress, .results-section { margin-top: 20px; }.search-progress { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-raised); }.progress-heading, .results-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }.progress-heading h2, .results-heading h2 { margin: 2px 0 0; }.eyebrow { margin: 0; color: var(--brand-strong); font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }.search-progress progress { width: 100%; accent-color: var(--brand); }.coverage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; }.coverage-grid div { padding: 10px; border-radius: 8px; background: var(--surface); }.coverage-grid dt { color: var(--muted); font-size: .78rem; }.coverage-grid dd { margin: 3px 0 0; font-weight: 700; }.session-warnings { padding: 12px; border-left: 4px solid #d98b00; border-radius: 8px; background: #fff8e8; color: #714500; }.session-warnings p { margin: 5px 0 0; }.progress-actions { display: flex; gap: 8px; }
+.search-progress, .results-section { margin-top: 20px; }.search-progress { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-raised); }.progress-heading, .results-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }.progress-heading h2, .results-heading h2 { margin: 2px 0 0; }.eyebrow { margin: 0; color: var(--brand-strong); font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }.search-progress progress { width: 100%; height: 8px; overflow: hidden; appearance: none; border: 0; border-radius: 999px; background: #e8ecf4; pointer-events: none; }.search-progress progress::-webkit-progress-bar { border-radius: 999px; background: #e8ecf4; }.search-progress progress::-webkit-progress-value { border-radius: 999px; background: linear-gradient(90deg, var(--brand), var(--accent)); }.search-progress progress::-moz-progress-bar { border-radius: 999px; background: linear-gradient(90deg, var(--brand), var(--accent)); }.coverage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; }.coverage-grid div { padding: 10px; border-radius: 8px; background: var(--surface); }.coverage-grid dt { color: var(--muted); font-size: .78rem; }.coverage-grid dd { margin: 3px 0 0; font-weight: 700; }.session-warnings { padding: 12px; border-left: 4px solid #d98b00; border-radius: 8px; background: #fff8e8; color: #714500; }.session-warnings p { margin: 5px 0 0; }.progress-actions { display: flex; gap: 8px; }
 .results-section { display: grid; gap: 16px; }.results-heading span { color: var(--muted); }.ranking-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }.ranking-tabs button { display: grid; gap: 4px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--ink-strong); text-align: left; cursor: pointer; }.ranking-tabs button.active { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); background: var(--brand-soft); }.ranking-tabs span { overflow: hidden; color: var(--muted); font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }.results-layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 16px; align-items: start; }.result-list { display: grid; gap: 14px; min-width: 0; }.empty-state { padding: 32px 20px; border: 1px dashed var(--border); border-radius: var(--radius-md); text-align: center; }.empty-state p { margin-bottom: 0; color: var(--muted); }.load-more-sentinel { display: flex; justify-content: center; min-height: 48px; }
 @media (max-width: 800px) { .endpoint-dates, .trip-options, .feasibility, .coverage-grid { grid-template-columns: 1fr 1fr; }.results-layout { grid-template-columns: 1fr; }.results-layout :deep(.filters) { grid-template-columns: repeat(2, minmax(0, 1fr)); }.results-layout :deep(.filters h2) { grid-column: 1 / -1; } }
 @media (max-width: 560px) { .endpoint-dates, .trip-options, .feasibility, .coverage-grid, .ranking-tabs, .results-layout :deep(.filters) { grid-template-columns: 1fr; }.progress-heading, .results-heading { flex-direction: column; }.ranking-tabs span { white-space: normal; } }

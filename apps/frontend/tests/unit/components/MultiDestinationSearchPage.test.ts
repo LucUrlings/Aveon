@@ -29,16 +29,16 @@ describe('MultiDestinationSearchPage', () => {
     expect(wrapper.get('[role="tabpanel"]').attributes('aria-labelledby')).toBe('multi-destination-tab-ordered')
   })
 
-  it('uses two shared airport-group pickers for every dynamic ordered leg', async () => {
+  it('adds only one new airport picker for each connected ordered destination', async () => {
     const wrapper = mount(MultiDestinationSearchPage)
     await wrapper.findAll('[role="tab"]')[1].trigger('click')
 
     expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(2)
     await wrapper.get('button.secondary-action').trigger('click')
-    expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(4)
+    expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(3)
     expect(wrapper.findAll('fieldset.ordered-leg')).toHaveLength(2)
 
-    await wrapper.get('[aria-label="Remove flight 2"]').trigger('click')
+    await wrapper.get('[aria-label="Remove destination 2"]').trigger('click')
     expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(2)
   })
 

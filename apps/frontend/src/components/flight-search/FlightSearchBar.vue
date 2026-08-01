@@ -12,6 +12,12 @@ const props = defineProps<{
   loading: boolean
   originSuggestions: AirportOption[]
   destinationSuggestions: AirportOption[]
+  originSuggestionsLoading?: boolean
+  destinationSuggestionsLoading?: boolean
+  originSuggestionsError?: string | null
+  destinationSuggestionsError?: string | null
+  originHasSearchedSuggestions?: boolean
+  destinationHasSearchedSuggestions?: boolean
   cabinOptions: Array<{ label: string; value: string }>
 }>()
 
@@ -74,6 +80,9 @@ const emit = defineEmits<{
               suggestions-aria-label="Origin airport suggestions"
               suggestion-id-prefix="origin"
               :suggestions="originSuggestions"
+              :suggestions-loading="originSuggestionsLoading"
+              :suggestions-error="originSuggestionsError"
+              :has-searched-suggestions="originHasSearchedSuggestions"
               @confirm-input="emit('confirmOriginInput')"
               @remove-airport="emit('removeOriginAirport', $event)"
               @add-airport="emit('addOriginAirport', $event)"
@@ -120,6 +129,9 @@ const emit = defineEmits<{
               suggestions-aria-label="Destination airport suggestions"
               suggestion-id-prefix="destination"
               :suggestions="destinationSuggestions"
+              :suggestions-loading="destinationSuggestionsLoading"
+              :suggestions-error="destinationSuggestionsError"
+              :has-searched-suggestions="destinationHasSearchedSuggestions"
               @confirm-input="emit('confirmDestinationInput')"
               @remove-airport="emit('removeDestinationAirport', $event)"
               @add-airport="emit('addDestinationAirport', $event)"

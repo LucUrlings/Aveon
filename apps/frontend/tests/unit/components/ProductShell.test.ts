@@ -86,6 +86,8 @@ describe('product shell', () => {
     expect(wrapper.get('.mode-grid').text()).toContain('One-way and return')
     expect(wrapper.get('.mode-grid').text()).toContain('Ordered or optimized')
     expect(wrapper.get('.home-explainer').text()).toContain('metasearch product, not a booking engine')
+    expect(wrapper.findAll('.journey-route-segment')).toHaveLength(2)
+    expect(wrapper.find('.journey-line').exists()).toBe(false)
   })
 
   it('explains progressive searches and staged return combinations', () => {

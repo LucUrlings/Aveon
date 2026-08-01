@@ -151,23 +151,46 @@ public sealed class OptimizedItinerarySearchRunnerTests
     }
 
     [Fact]
-    public async Task ProviderStateAndResultLimits_AreNeverExceeded()
+    public async Task FrontierAndResultLimits_PruneRetainedCandidatesWithoutStoppingEvaluation()
     {
         var options = new MultiDestinationSearchOptions
         {
             MaxActiveStates = 1,
-            MaxCandidatesPerState = 1,
-            MaxStoredResults = 1
+            MaxEvaluatedStates = 10,
+            MaxCandidatesPerState = 10,
+            MaxStoredResults = 10
         };
         var provider = new FixtureProvider(request => Response(request, 50, 60));
         var request = OneDestinationRequest() with { Start = Group("start", "DUB", "SNN", "ORK") };
 
-        var session = await RunAsync("limits", request, provider, providerCallLimit: 1, options: options);
+        var session = await RunAsync("limits", request, provider, providerCallLimit: 3, options: options);
 
-        Assert.InRange(provider.Requests.Count, 0, 1);
-        Assert.InRange(session.Results.Count, 0, 1);
-        Assert.InRange(session.Coverage.CandidateStatesEvaluated, 0, 1);
+        Assert.Equal(3, provider.Requests.Count);
+        Assert.Single(session.Results);
+        Assert.True(session.Coverage.CandidateStatesEvaluated > options.MaxActiveStates);
+        Assert.Contains(session.Warnings, warning => warning.Code == "frontierStateLimitReached");
+        Assert.DoesNotContain(session.Warnings, warning => warning.Code == "stateEvaluationBudgetReached");
         Assert.Equal("bounded", session.Coverage.Mode);
+    }
+
+    [Fact]
+    public async Task CumulativeEvaluationBudget_StopsOnlyAfterItsSeparateLimit()
+    {
+        var options = new MultiDestinationSearchOptions
+        {
+            MaxActiveStates = 2,
+            MaxEvaluatedStates = 2,
+            MaxCandidatesPerState = 10,
+            MaxStoredResults = 10
+        };
+        var provider = new FixtureProvider(request => Response(request, 50, 60));
+        var request = OneDestinationRequest() with { Start = Group("start", "DUB", "SNN", "ORK") };
+
+        var session = await RunAsync("evaluation-limit", request, provider, providerCallLimit: 3, options: options);
+
+        Assert.Contains(session.Warnings, warning => warning.Code == "stateEvaluationBudgetReached");
+        Assert.Equal("bounded", session.Coverage.Mode);
+        Assert.True(session.Coverage.CandidateStatesEvaluated >= options.MaxEvaluatedStates);
     }
 
     [Fact]

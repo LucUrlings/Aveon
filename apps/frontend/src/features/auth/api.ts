@@ -8,11 +8,7 @@ type ApiCurrentUser = {
 }
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
-const apiBaseUrl = configuredApiBaseUrl
-  ? configuredApiBaseUrl.replace(/\/$/, '')
-  : import.meta.env.DEV
-    ? 'http://localhost:5210'
-    : ''
+const apiBaseUrl = configuredApiBaseUrl ? configuredApiBaseUrl.replace(/\/$/, '') : ''
 
 const normalizeCurrentUser = (user: ApiCurrentUser): CurrentUser => ({
   isAuthenticated: user.isAuthenticated ?? false,

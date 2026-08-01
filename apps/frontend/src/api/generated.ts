@@ -760,6 +760,7 @@ export interface components {
             startDate?: string;
             /** Format: date */
             endDate?: string;
+            preserveDestinationOrder?: boolean;
             defaultAirportContinuity?: string | null;
         } & (Omit<components["schemas"]["ItinerarySearchRequest"], "mode"> & {
             /**

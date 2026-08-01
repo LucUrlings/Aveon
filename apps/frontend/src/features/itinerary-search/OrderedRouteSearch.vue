@@ -12,7 +12,7 @@ const nextDate = () => {
   const date = new Date(); date.setDate(date.getDate() + sequence)
   return date.toISOString().slice(0, 10)
 }
-const createLeg = (): OrderedLegModel => { const number = sequence++; return { id: `ordered-leg-${number}`, fromLabel: `Departure group ${number}`, toLabel: `Arrival group ${number}`, from: [], to: [], departureDate: nextDate(), continuity: 'sameAirport' } }
+const createLeg = (): OrderedLegModel => { const number = sequence++; return { id: `ordered-leg-${number}`, fromLabel: 'Starting airport group', toLabel: `Destination ${number}`, from: [], to: [], departureDate: nextDate(), continuity: 'sameAirport' } }
 const legs = ref<OrderedLegModel[]>([createLeg()])
 const adults = ref(1)
 const cabinClass = ref('economy')
@@ -36,9 +36,21 @@ const recordSessionAnalytics = (next: ItinerarySearchSession) => {
   if (next.coverage.mode === 'bounded') trackItineraryEvent('bounded_coverage', { mode: 'ordered', provider_call_limit: next.coverage.providerCallLimit, live_provider_calls: next.coverage.liveProviderCallsUsed })
 }
 
-const updateLeg = (index: number, leg: OrderedLegModel) => { legs.value[index] = leg }
-const addLeg = () => { if (legs.value.length < maxOrderedLegs.value) legs.value = [...legs.value, createLeg()] }
-const removeLeg = (index: number) => { legs.value = legs.value.filter((_, position) => position !== index) }
+const reconnectRoute = (route: OrderedLegModel[]) => route.map((leg, index) => index === 0 ? leg : ({ ...leg, from: [...route[index - 1].to], fromLabel: route[index - 1].toLabel }))
+const updateLeg = (index: number, leg: OrderedLegModel) => {
+  const route = [...legs.value]
+  route[index] = leg
+  legs.value = reconnectRoute(route)
+}
+const addLeg = () => {
+  if (legs.value.length >= maxOrderedLegs.value) return
+  legs.value = reconnectRoute([...legs.value, createLeg()])
+}
+const removeLeg = (index: number) => {
+  const route = [...legs.value]
+  if (index === 0 && route[1]) route[1] = { ...route[1], from: [...route[0].from], fromLabel: route[0].fromLabel }
+  legs.value = reconnectRoute(route.filter((_, position) => position !== index))
+}
 const group = (id: string, label: string, airports: OrderedLegModel['from']) => ({ id, label: label.trim(), airportCodes: airports.map(airport => airport.code) })
 
 const refresh = async (poll = false) => {
@@ -55,7 +67,6 @@ const refresh = async (poll = false) => {
 
 const submit = async () => {
   error.value = ''
-  if (legs.value.some(leg => !leg.fromLabel.trim() || !leg.toLabel.trim())) { error.value = 'Give every airport group a name.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'group_names' }); return }
   if (legs.value.some(leg => !leg.departureDate || leg.from.length === 0 || leg.to.length === 0)) { error.value = 'Add a date and at least one airport to both ends of every flight.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'route_fields' }); return }
   submitting.value = true
   controller?.abort(); controller = new AbortController()
@@ -86,8 +97,9 @@ onMounted(async () => {
 <template>
   <section aria-label="Build my route form">
     <form class="ordered-form" @input="formDirty = true" @submit.prevent="submit">
+      <div class="mode-introduction"><strong>Keep this exact route order</strong><p>Enter each stop once. Every new destination automatically continues from the one above it; Aveon searches the airport combinations and dates without rearranging your stops.</p></div>
       <OrderedLegEditor v-for="(leg, index) in legs" :key="leg.id" :model-value="leg" :index="index" :removable="legs.length > 1" :max-airports="maxAirportsPerGroup" @update:model-value="updateLeg(index, $event)" @remove="removeLeg(index)" />
-      <button type="button" class="secondary-action" :disabled="legs.length >= maxOrderedLegs" @click="addLeg">Add another flight</button>
+      <button type="button" class="secondary-action" :disabled="legs.length >= maxOrderedLegs" @click="addLeg">Add next destination</button>
       <div class="trip-options">
         <label>Travellers<input v-model.number="adults" type="number" min="1" max="9" /></label>
         <label>Cabin<select v-model="cabinClass"><option value="economy">Economy</option><option value="premium_economy">Premium economy</option><option value="business">Business</option><option value="first">First</option></select></label>
@@ -121,6 +133,8 @@ onMounted(async () => {
 
 <style scoped>
 .ordered-form { display: grid; gap: 16px; }
+.mode-introduction { padding: 14px 16px; border-radius: 10px; background: var(--brand-soft); color: var(--ink-strong); }
+.mode-introduction p { margin: 5px 0 0; color: var(--muted); }
 .secondary-action, .primary-action { justify-self: start; padding: 10px 14px; border-radius: 8px; cursor: pointer; }
 .secondary-action { border: 1px solid var(--border); background: var(--surface); color: var(--ink-strong); }
 .primary-action { border: 0; background: var(--brand); color: white; font-weight: 700; }

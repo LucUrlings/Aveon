@@ -9,6 +9,7 @@ export default defineConfig(({ command, mode }) => {
   const environment = loadEnv(mode, workspaceRoot, '')
   const configuredPublicUrl = environment.AVEON_PUBLIC_URL?.trim()
   const publicUrl = configuredPublicUrl || (command === 'serve' ? 'http://localhost:5173' : null)
+  const developmentApiTarget = environment.VITE_DEV_API_TARGET?.trim() || 'http://localhost:5210'
   const publicDirectory = fileURLToPath(new URL('./public', import.meta.url))
 
   if (publicUrl) generateSeoFiles(publicDirectory, publicUrl)
@@ -23,5 +24,13 @@ export default defineConfig(({ command, mode }) => {
         transformIndexHtml: (html) => publicUrl ? replacePublicUrlPlaceholders(html, publicUrl) : html,
       },
     ],
+    server: {
+      proxy: {
+        '/api': {
+          target: developmentApiTarget,
+          changeOrigin: true,
+        },
+      },
+    },
   }
 })

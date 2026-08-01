@@ -19,7 +19,7 @@ const moveMode = (current: typeof modes[number], direction: number) => {
     <header>
       <p class="eyebrow">Multi-destination</p>
       <h1>Build a complete journey</h1>
-      <p>Build an exact sequence of dated flights, or let Aveon compare destination orders and stay schedules within clear search limits.</p>
+      <p>Choose whether to keep a route in the exact order you enter it, or give Aveon an unordered set of places and let it compare possible journeys.</p>
       <p class="scope-note">Current results use separate one-way bookings. Bounded optimization shows the best complete trips found within its allowance and cannot guarantee the global cheapest route.</p>
     </header>
 

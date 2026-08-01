@@ -21,4 +21,11 @@ describe('itinerary search api', () => {
     expect(url.searchParams.get('arrivalTime')).toBe('900-1200')
     expect(url.searchParams.get('airlines')).toBe('EI,KL')
   })
+
+  it('explains a disabled deployment instead of exposing a raw 404', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 404 }))
+    const { getItinerarySearchCapabilities } = await import('../../../src/features/itinerary-search/api')
+
+    await expect(getItinerarySearchCapabilities()).rejects.toThrow('not enabled on this deployment')
+  })
 })

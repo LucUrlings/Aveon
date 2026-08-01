@@ -19,10 +19,21 @@
       <div class="journey-visual" aria-label="Example flexible journey from Dublin through Amsterdam and Paris">
         <div class="visual-orbit visual-orbit--one"></div>
         <div class="visual-orbit visual-orbit--two"></div>
+        <svg class="journey-route" viewBox="0 0 500 470" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="journey-route-gradient" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#4f46e5" />
+              <stop offset="1" stop-color="#0891b2" />
+            </linearGradient>
+            <marker id="journey-route-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+              <path d="M 0 0 L 8 4 L 0 8 Z" fill="#0891b2" />
+            </marker>
+          </defs>
+          <path class="journey-route-segment" d="M 220 120 C 228 154, 252 179, 278 202" />
+          <path class="journey-route-segment" d="M 374 282 C 358 320, 310 350, 266 366" />
+        </svg>
         <article class="journey-card journey-card--start"><span>Start group</span><strong>Dublin</strong><small>DUB · SNN · ORK</small></article>
-        <div class="journey-line journey-line--one" aria-hidden="true"></div>
         <article class="journey-card journey-card--middle"><span>Flexible stop</span><strong>Amsterdam</strong><small>Stay 2+ nights</small></article>
-        <div class="journey-line journey-line--two" aria-hidden="true"></div>
         <article class="journey-card journey-card--end"><span>Next destination</span><strong>Paris</strong><small>CDG · ORY</small></article>
       </div>
     </section>

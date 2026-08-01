@@ -98,6 +98,7 @@ const progressPercentage = computed(() => {
   border-radius: 999px;
   background: #e8ecf4;
   overflow: hidden;
+  pointer-events: none;
 }
 
 .progress-bar-fill {

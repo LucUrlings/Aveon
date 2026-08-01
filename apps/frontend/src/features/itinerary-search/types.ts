@@ -3,7 +3,7 @@ export type OrderedLegRequest = { id: string; from: AirportGroupRequest; to: Air
 export type DestinationRequest = { group: AirportGroupRequest; stay: { mode: 'minimumNights' | 'exactNights'; nights: number }; airportContinuity: 'inherit' | 'sameAirport' | 'allowSwitch' }
 
 export type OrderedTripRequest = { mode: 'ordered'; legs: OrderedLegRequest[]; adults: number; cabinClass: string; ranking: Ranking }
-export type OptimizedTripRequest = { mode: 'optimize'; start: AirportGroupRequest; destinations: DestinationRequest[]; endpointMode: string; fixedEnd: AirportGroupRequest | null; startDate: string; endDate: string; defaultAirportContinuity: string; adults: number; cabinClass: string; ranking: Ranking }
+export type OptimizedTripRequest = { mode: 'optimize'; start: AirportGroupRequest; destinations: DestinationRequest[]; endpointMode: string; fixedEnd: AirportGroupRequest | null; startDate: string; endDate: string; defaultAirportContinuity: string; preserveDestinationOrder: boolean; adults: number; cabinClass: string; ranking: Ranking }
 export type ItinerarySearchRequest = OptimizedTripRequest | OrderedTripRequest
 export type Ranking = 'recommended' | 'cheapest' | 'fastest'
 export type ItinerarySearchCapabilities = { providerCallLimit: number; maxOptimizedDestinations: number; maxAirportsPerGroup: number; maxTripDays: number; maxOrderedLegs: number }

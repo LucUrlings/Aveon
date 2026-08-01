@@ -76,11 +76,7 @@ type ApiSearchResponseWithFilters = Omit<ApiSearchResponse, 'filters' | 'paginat
 }
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
-const apiBaseUrl = configuredApiBaseUrl
-  ? configuredApiBaseUrl.replace(/\/$/, '')
-  : import.meta.env.DEV
-    ? 'http://localhost:5210'
-    : ''
+const apiBaseUrl = configuredApiBaseUrl ? configuredApiBaseUrl.replace(/\/$/, '') : ''
 
 const normalizeAirportOption = (airport: ApiAirportOption): AirportOption => ({
   code: airport.code ?? '',

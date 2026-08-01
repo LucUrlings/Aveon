@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AirportGroupPicker from '../../components/flight-search/AirportGroupPicker.vue'
 import { useAirportPicker } from '../flight-search/useAirportPicker'
 import type { AirportOption } from '../flight-search/types'
@@ -13,18 +13,20 @@ export type OptimizedDestinationModel = {
   continuity: 'inherit' | 'sameAirport' | 'allowSwitch'
 }
 
-const props = defineProps<{ modelValue: OptimizedDestinationModel; index: number; removable: boolean; maxAirports: number }>()
+const props = defineProps<{ modelValue: OptimizedDestinationModel; index: number; removable: boolean; maxAirports: number; preserveOrder: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: OptimizedDestinationModel]; remove: [] }>()
 const picker = useAirportPicker(props.modelValue.airports)
-const label = ref(props.modelValue.label)
 const stayMode = ref(props.modelValue.stayMode)
 const nights = ref(props.modelValue.nights)
 const continuity = ref(props.modelValue.continuity)
+const airportGroupName = computed(() => picker.airports.value.length
+  ? picker.airports.value.map(airport => airport.name ? `${airport.name} (${airport.code})` : airport.code).join(' / ')
+  : 'Unordered destination')
 
-watch([picker.airports, label, stayMode, nights, continuity], () => {
+watch([picker.airports, stayMode, nights, continuity], () => {
   emit('update:modelValue', {
     ...props.modelValue,
-    label: label.value.trim(),
+    label: airportGroupName.value.slice(0, 80),
     airports: picker.airports.value,
     stayMode: stayMode.value,
     nights: Math.max(0, Number(nights.value) || 0),
@@ -35,10 +37,10 @@ watch([picker.airports, label, stayMode, nights, continuity], () => {
 
 <template>
   <fieldset class="optimized-destination">
-    <legend>Destination {{ index + 1 }}</legend>
+    <legend>{{ airportGroupName }}</legend>
     <button v-if="removable" type="button" class="remove-destination" :aria-label="`Remove destination ${index + 1}`" @click="emit('remove')">Remove</button>
-    <label class="group-name">Group name<input v-model="label" :aria-label="`Destination ${index + 1} group name`" required maxlength="80" /></label>
-    <AirportGroupPicker v-model:input="picker.input.value" v-model:airports="picker.airports.value" label="Destination airport group" :input-aria-label="`Destination ${index + 1}: add an airport or city`" :suggestions-aria-label="`Destination ${index + 1} airport suggestions`" :suggestion-id-prefix="`${modelValue.id}-airports`" :suggestions="picker.suggestions.value" :max-airports="maxAirports" @add-airport="picker.addAirport" @remove-airport="picker.removeAirport" @confirm-input="picker.confirmInput" />
+    <p class="unordered-note">{{ preserveOrder ? 'This card follows the destination above it.' : 'This card is not a route position. Aveon decides when to visit it.' }}</p>
+    <AirportGroupPicker v-model:input="picker.input.value" v-model:airports="picker.airports.value" label="Airport options for this destination" :input-aria-label="`Unordered destination option ${index + 1}: add an airport or city`" :suggestions-aria-label="`Unordered destination option ${index + 1} airport suggestions`" :suggestion-id-prefix="`${modelValue.id}-airports`" :suggestions="picker.suggestions.value" :suggestions-loading="picker.suggestionsLoading.value" :suggestions-error="picker.suggestionsError.value" :has-searched-suggestions="picker.hasSearchedSuggestions.value" :max-airports="maxAirports" @add-airport="picker.addAirport" @remove-airport="picker.removeAirport" @confirm-input="picker.confirmInput" />
     <div class="destination-rules">
       <label>Stay rule
         <select v-model="stayMode" :aria-label="`Destination ${index + 1} stay rule`">
@@ -62,7 +64,7 @@ watch([picker.airports, label, stayMode, nights, continuity], () => {
 .optimized-destination { position: relative; min-width: 0; margin: 0; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); }
 legend { padding: 0 8px; font-weight: 700; color: var(--ink-strong); }
 .remove-destination { position: absolute; top: 10px; right: 12px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
-.group-name { display: grid; gap: 5px; margin-bottom: 12px; color: var(--muted); font-size: .9rem; }
+.unordered-note { margin: 0 0 12px; color: var(--muted); font-size: .86rem; }
 .destination-rules { display: grid; grid-template-columns: 1fr .65fr 1.3fr; gap: 12px; margin-top: 14px; }
 .destination-rules label { display: grid; gap: 5px; color: var(--muted); font-size: .9rem; }
 input, select { width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink-strong); }

@@ -100,6 +100,7 @@ describe('flight search api', () => {
     expect(airports).toEqual([
       { code: 'DUB', name: null, displayLabel: 'Dublin Airport' },
     ])
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/airports?query=dub')
     expect(session.response.results[0].legs[0].segments[0]).toEqual({
       marketingCarrierName: 'Unknown airline',
       marketingCarrierCode: '',
@@ -237,7 +238,7 @@ describe('flight search api', () => {
       expect.objectContaining({ credentials: 'include' }),
     )
 
-    const requestUrl = new URL(fetchMock.mock.calls[0][0] as string)
+    const requestUrl = new URL(fetchMock.mock.calls[0][0] as string, window.location.origin)
     expect(requestUrl.searchParams.get('direct')).toBe('true')
     expect(requestUrl.searchParams.get('oneStop')).toBe('false')
     expect(requestUrl.searchParams.get('providers')).toBe('FlightApi:KLM')

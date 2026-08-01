@@ -22,7 +22,8 @@ public sealed record OptimizedTripRequest(
     string DefaultAirportContinuity,
     int Adults,
     string CabinClass,
-    string Ranking) : ItinerarySearchRequest(Adults, CabinClass, Ranking);
+    string Ranking,
+    bool PreserveDestinationOrder = true) : ItinerarySearchRequest(Adults, CabinClass, Ranking);
 
 public sealed record OrderedTripRequest(
     List<OrderedLegRequest> Legs,

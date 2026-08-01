@@ -36,7 +36,7 @@ public sealed class OptimizedItinerarySearchRunner(
             for (var index = 0; index < schedulePlan.Schedules.Count; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (execution.StateLimitReached) break;
+                if (execution.EvaluationLimitReached) break;
 
                 var complete = await SearchScheduleAsync(execution, schedulePlan.Schedules[index], cancellationToken);
                 execution.AddResults(complete);
@@ -97,13 +97,13 @@ public sealed class OptimizedItinerarySearchRunner(
         for (var legIndex = 0; legIndex < schedule.Legs.Count; legIndex++)
         {
             var abstractLeg = schedule.Legs[legIndex];
-            var next = new List<OptimizerPath>();
+            var next = new PriorityQueue<OptimizerPath, decimal>();
             var frontier = new PriorityQueue<OptimizerPath, decimal>();
             foreach (var path in paths) frontier.Enqueue(path, Priority(path, execution.Request.Ranking));
             while (frontier.TryDequeue(out var path, out _))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (execution.StateLimitReached) break;
+                if (execution.EvaluationLimitReached) break;
 
                 var origins = Origins(execution.Request, abstractLeg, path);
                 var destinations = Group(execution.Request, abstractLeg.ToGroupId).AirportCodes;
@@ -129,16 +129,16 @@ public sealed class OptimizedItinerarySearchRunner(
                             }
 
                             if (!execution.TryEvaluateState()) break;
-                            next.Add(path.Add(fare));
+                            RetainCandidate(next, path.Add(fare), execution);
                         }
 
-                        if (execution.StateLimitReached) break;
+                        if (execution.EvaluationLimitReached) break;
                     }
-                    if (execution.StateLimitReached) break;
+                    if (execution.EvaluationLimitReached) break;
                 }
             }
 
-            paths = ParetoPrune(next, legIndex, execution).ToList();
+            paths = ParetoPrune(next.UnorderedItems.Select(item => item.Element).ToList(), legIndex, execution).ToList();
             if (paths.Count == 0) return [];
         }
 
@@ -258,6 +258,31 @@ public sealed class OptimizedItinerarySearchRunner(
         }
     }
 
+    private static void RetainCandidate(
+        PriorityQueue<OptimizerPath, decimal> frontier,
+        OptimizerPath candidate,
+        OptimizerExecution execution)
+    {
+        var priority = Priority(candidate, execution.Request.Ranking);
+        if (frontier.Count < execution.Options.MaxActiveStates)
+        {
+            frontier.Enqueue(candidate, -priority);
+            return;
+        }
+
+        execution.RecordFrontierLimit();
+        frontier.TryPeek(out _, out var worstPriority);
+        if (priority >= -worstPriority)
+        {
+            execution.Prune();
+            return;
+        }
+
+        frontier.Dequeue();
+        execution.Prune();
+        frontier.Enqueue(candidate, -priority);
+    }
+
     private static bool Dominates(OptimizerPath left, OptimizerPath right) =>
         left.Price <= right.Price && left.Duration <= right.Duration &&
         (left.Price < right.Price || left.Duration < right.Duration);
@@ -353,7 +378,8 @@ public sealed class OptimizedItinerarySearchRunner(
         public MultiDestinationSearchOptions Options { get; } = options;
         public List<ItineraryResult> Results { get; private set; } = [];
         public int ProviderFailures { get; private set; }
-        public bool StateLimitReached { get; private set; }
+        public bool FrontierLimitReached { get; private set; }
+        public bool EvaluationLimitReached { get; private set; }
 
         public bool TryGetEdge(string key, out FlightApiOneWayResponse response) => _edges.TryGetValue(key, out response!);
         public void StoreEdge(string key, FlightApiOneWayResponse response) => _edges[key] = response;
@@ -362,6 +388,7 @@ public sealed class OptimizedItinerarySearchRunner(
         public void MarkTimedOut() => _timedOut = true;
         public void MarkUnexpectedFailure() => _unexpectedFailure = true;
         public void Prune(int count = 1) => _pruned += count;
+        public void RecordFrontierLimit() => FrontierLimitReached = true;
 
         public bool TryReserveLiveCall()
         {
@@ -376,9 +403,9 @@ public sealed class OptimizedItinerarySearchRunner(
 
         public bool TryEvaluateState()
         {
-            if (_evaluated >= Options.MaxActiveStates)
+            if (_evaluated >= Options.MaxEvaluatedStates)
             {
-                StateLimitReached = true;
+                EvaluationLimitReached = true;
                 return false;
             }
             _evaluated++;
@@ -422,10 +449,11 @@ public sealed class OptimizedItinerarySearchRunner(
 
         public ItinerarySearchSessionResponse Snapshot(string status, string phase, int progress)
         {
-            var bounded = SchedulePlan.Feasibility.Bounded || _providerBudgetReached || StateLimitReached || _timedOut || ProviderFailures > 0 || _unexpectedFailure;
+            var bounded = SchedulePlan.Feasibility.Bounded || _providerBudgetReached || FrontierLimitReached || EvaluationLimitReached || _timedOut || ProviderFailures > 0 || _unexpectedFailure;
             var warnings = new List<ItineraryWarning>();
             if (_providerBudgetReached) warnings.Add(new("providerBudgetReached", $"The optimizer reached its {ProviderCallLimit}-call live provider budget and continued with cached edges."));
-            if (StateLimitReached) warnings.Add(new("stateBudgetReached", $"The optimizer reached its {Options.MaxActiveStates}-state limit."));
+            if (FrontierLimitReached) warnings.Add(new("frontierStateLimitReached", $"The optimizer limited a candidate frontier to its best {Options.MaxActiveStates} retained states and continued evaluating alternatives."));
+            if (EvaluationLimitReached) warnings.Add(new("stateEvaluationBudgetReached", $"The optimizer reached its cumulative {Options.MaxEvaluatedStates}-state evaluation budget."));
             if (ProviderFailures > 0) warnings.Add(new("providerCallsFailed", $"{ProviderFailures} flight-edge searches failed; complete itineraries from successful edges are still shown."));
             if (_timedOut) warnings.Add(new("executionTimeout", "The optimizer reached its execution timeout; complete itineraries found so far are shown."));
             if (_unexpectedFailure) warnings.Add(new("optimizerFailure", "The optimizer stopped unexpectedly; complete itineraries found so far are shown."));
@@ -436,7 +464,7 @@ public sealed class OptimizedItinerarySearchRunner(
                 status,
                 phase,
                 progress,
-                new(bounded ? "bounded" : "exhaustive", _liveCalls, ProviderCallLimit, _cacheHits, Math.Min(SchedulePlan.CandidateStatesEvaluated + _evaluated, Options.MaxActiveStates), _pruned),
+                new(bounded ? "bounded" : "exhaustive", _liveCalls, ProviderCallLimit, _cacheHits, SchedulePlan.CandidateStatesEvaluated + _evaluated, _pruned),
                 Results,
                 warnings,
                 status == "failed" ? "The optimizer could not produce a complete itinerary." : null,

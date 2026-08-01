@@ -48,6 +48,18 @@ public sealed class OptimizedScheduleGeneratorTests
     }
 
     [Fact]
+    public void DestinationOrder_CanBePreservedOrOptimized()
+    {
+        var preserved = _generator.Generate(Request("returnToStart", new DateOnly(2026, 9, 7)));
+        var rearranged = _generator.Generate(Request("returnToStart", new DateOnly(2026, 9, 7)) with { PreserveDestinationOrder = false });
+
+        Assert.Equal(1, preserved.Feasibility.RouteOrderCount);
+        Assert.All(preserved.Schedules, schedule => Assert.Equal(["a", "b"], schedule.DestinationOrder));
+        Assert.Equal(2, rearranged.Feasibility.RouteOrderCount);
+        Assert.Contains(rearranged.Schedules, schedule => schedule.DestinationOrder.SequenceEqual(["b", "a"]));
+    }
+
+    [Fact]
     public void ExactStays_NeverAbsorbSpareNights()
     {
         var request = Request("openEnded", new DateOnly(2026, 9, 7)) with

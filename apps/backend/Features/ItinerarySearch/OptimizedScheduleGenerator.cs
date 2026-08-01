@@ -9,7 +9,9 @@ public sealed class OptimizedScheduleGenerator(IOptions<MultiDestinationSearchOp
 
     public OptimizedSchedulePlan Generate(OptimizedTripRequest request)
     {
-        var routeOrders = Permutations(request.Destinations).ToList();
+        var routeOrders = request.PreserveDestinationOrder
+            ? [new List<DestinationRequest>(request.Destinations)]
+            : Permutations(request.Destinations).ToList();
         var minimumDays = routeOrders
             .Select(route => MinimumRemainingOffset(route, 0, request.EndpointMode))
             .Where(offset => offset < Impossible)

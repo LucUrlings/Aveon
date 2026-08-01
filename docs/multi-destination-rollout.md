@@ -1,8 +1,8 @@
 # Multi-destination rollout and rollback
 
-Multi-destination search is controlled independently from simple search by `MultiDestinationSearch:Enabled`. Docker Compose maps this to `MULTI_DESTINATION_SEARCH_ENABLED`, which defaults to `false`. Disabling it makes every `/api/v1/itinerary-searches` endpoint return `404` while the existing one-way and return endpoints continue operating normally.
+Multi-destination search is controlled independently from simple search by `MultiDestinationSearch:Enabled`. Docker Compose maps this to `MULTI_DESTINATION_SEARCH_ENABLED`, which defaults to `true`. Disabling it makes every `/api/v1/itinerary-searches` endpoint return `404` while the existing one-way and return endpoints continue operating normally; the frontend presents this as an unavailable-feature message.
 
-## Before enabling
+## Before changing deployment state
 
 1. Deploy exactly one backend instance. The FlightAPI request gate is process-local and horizontal scaling is prohibited until a distributed gate is implemented.
 2. Run the backend and frontend suites and a production frontend build.

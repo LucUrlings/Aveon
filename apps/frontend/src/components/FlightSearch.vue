@@ -38,6 +38,12 @@ const cabinClass = ref('economy')
 
 const originSuggestions = originPicker.suggestions
 const destinationSuggestions = destinationPicker.suggestions
+const originSuggestionsLoading = originPicker.suggestionsLoading
+const destinationSuggestionsLoading = destinationPicker.suggestionsLoading
+const originSuggestionsError = originPicker.suggestionsError
+const destinationSuggestionsError = destinationPicker.suggestionsError
+const originHasSearchedSuggestions = originPicker.hasSearchedSuggestions
+const destinationHasSearchedSuggestions = destinationPicker.hasSearchedSuggestions
 
 const expandedResultIds = ref<string[]>([])
 const isSearchCollapsed = ref(false)
@@ -647,6 +653,12 @@ const swapLocations = () => {
         :loading="loading"
         :origin-suggestions="originSuggestions"
         :destination-suggestions="destinationSuggestions"
+        :origin-suggestions-loading="originSuggestionsLoading"
+        :destination-suggestions-loading="destinationSuggestionsLoading"
+        :origin-suggestions-error="originSuggestionsError"
+        :destination-suggestions-error="destinationSuggestionsError"
+        :origin-has-searched-suggestions="originHasSearchedSuggestions"
+        :destination-has-searched-suggestions="destinationHasSearchedSuggestions"
         :cabin-options="cabinOptions"
         @submit="searchFlights"
         @toggle-collapse="isSearchCollapsed = !isSearchCollapsed"

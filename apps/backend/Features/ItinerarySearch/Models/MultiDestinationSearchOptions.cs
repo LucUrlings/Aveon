@@ -3,7 +3,7 @@ namespace backend.Features.ItinerarySearch.Models;
 public record MultiDestinationSearchOptions
 {
     public const string SectionName = "MultiDestinationSearch";
-    public bool Enabled { get; init; }
+    public bool Enabled { get; init; } = true;
     public int SessionTtlMinutes { get; init; } = 30;
     public int MaxOptimizedDestinations { get; init; } = 5;
     public int MaxAirportsPerGroup { get; init; } = 5;
@@ -14,6 +14,7 @@ public record MultiDestinationSearchOptions
     public int AdminMaxProviderCalls { get; init; } = 250;
     public int HardMaxProviderCalls { get; init; } = 500;
     public int MaxActiveStates { get; init; } = 10_000;
+    public int MaxEvaluatedStates { get; init; } = 100_000;
     public int MaxCandidatesPerState { get; init; } = 25;
     public int MaxStoredResults { get; init; } = 100;
     public int ExecutionTimeoutMinutes { get; init; } = 10;
@@ -32,6 +33,7 @@ public static class MultiDestinationSearchOptionsValidation
         options.AdminMaxProviderCalls > 0 &&
         options.HardMaxProviderCalls > 0 &&
         options.MaxActiveStates > 0 &&
+        options.MaxEvaluatedStates >= options.MaxActiveStates &&
         options.MaxCandidatesPerState > 0 &&
         options.MaxStoredResults > 0 &&
         options.ExecutionTimeoutMinutes > 0;

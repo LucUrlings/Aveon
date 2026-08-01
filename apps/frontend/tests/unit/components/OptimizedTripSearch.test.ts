@@ -75,7 +75,6 @@ describe('OptimizedTripSearch', () => {
     pickers[0].vm.$emit('update:airports', [airport('DUB')])
     pickers[1].vm.$emit('update:airports', [airport('LHR')])
     pickers[2].vm.$emit('update:airports', [airport('AMS')])
-    await wrapper.get('[aria-label="Destination 1 group name"]').setValue('Netherlands')
     await wrapper.get('[aria-label="Destination 1 stay rule"]').setValue('exactNights')
     await wrapper.get('[aria-label="Destination 1 nights"]').setValue(2)
     await wrapper.get('form').trigger('submit')
@@ -83,11 +82,52 @@ describe('OptimizedTripSearch', () => {
 
     expect(startSearch).toHaveBeenCalledOnce()
     expect(startSearch.mock.calls[0][0]).toMatchObject({
-      mode: 'optimize', endpointMode: 'fixedEnd',
-      start: { label: 'Starting point', airportCodes: ['DUB'] }, fixedEnd: { label: 'Final stop', airportCodes: ['LHR'] },
-      destinations: [{ group: { label: 'Netherlands', airportCodes: ['AMS'] }, stay: { mode: 'exactNights', nights: 2 } }],
+      mode: 'optimize', endpointMode: 'fixedEnd', preserveDestinationOrder: true,
+      start: { label: 'DUB Airport (DUB)', airportCodes: ['DUB'] }, fixedEnd: { label: 'LHR Airport (LHR)', airportCodes: ['LHR'] },
+      destinations: [{ group: { label: 'AMS Airport (AMS)', airportCodes: ['AMS'] }, stay: { mode: 'exactNights', nights: 2 } }],
     })
     expect(wrapper.get('.authoritative-feasibility').text()).toContain('2 valid abstract schedules')
+  })
+
+  it('keeps the shown order by default and can allow destination reordering', async () => {
+    const wrapper = mount(OptimizedTripSearch)
+    const orderCheckbox = wrapper.get('.order-choice input[type="checkbox"]')
+
+    expect((orderCheckbox.element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.get('.mode-introduction').text()).toContain('order shown')
+    await orderCheckbox.setValue(false)
+
+    expect(wrapper.get('.mode-introduction').text()).toContain('cards are unordered')
+    expect(wrapper.get('button.secondary-action').text()).toBe('Add another unordered destination')
+  })
+
+  it('serializes DUB through an AMS/EIN group, WAW, and BGY', async () => {
+    const wrapper = mount(OptimizedTripSearch)
+    const addDestination = wrapper.get('button.secondary-action')
+    await addDestination.trigger('click')
+    await addDestination.trigger('click')
+
+    const pickers = wrapper.findAllComponents(AirportGroupPicker)
+    expect(pickers).toHaveLength(4)
+    pickers[0].vm.$emit('update:airports', [airport('DUB')])
+    pickers[1].vm.$emit('update:airports', [airport('AMS'), airport('EIN')])
+    pickers[2].vm.$emit('update:airports', [airport('WAW')])
+    pickers[3].vm.$emit('update:airports', [airport('BGY')])
+    await wrapper.vm.$nextTick()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(startSearch).toHaveBeenCalledOnce()
+    expect(startSearch.mock.calls[0][0]).toMatchObject({
+      mode: 'optimize',
+      endpointMode: 'returnToStart',
+      start: { airportCodes: ['DUB'] },
+      destinations: [
+        { group: { airportCodes: ['AMS', 'EIN'] } },
+        { group: { airportCodes: ['WAW'] } },
+        { group: { airportCodes: ['BGY'] } },
+      ],
+    })
   })
 
   it('uses server-provided destination, airport, and trip-length limits', async () => {

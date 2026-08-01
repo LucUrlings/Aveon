@@ -14,7 +14,7 @@ The finished product will provide three search experiences:
 
 1. **Simple search** keeps the existing one-way and return flow.
 2. **Build my route** accepts an ordered list of exact flight legs. Every endpoint may contain multiple acceptable airports.
-3. **Optimize my trip** accepts an unordered list of destination groups and determines the order, travel dates, airports, and flights that best satisfy the user's constraints.
+3. **Optimize my trip** accepts destination groups and determines the travel dates, airports, and flights that best satisfy the user's constraints. By default it preserves the order shown; the traveller can allow it to compare alternate destination orders.
 
 The multi-destination result page shows **separate-ticket itineraries** assembled by Aveon from independently bookable one-way fares. The result contract keeps a booking-type field so a future provider can add other booking models without changing the public shape.
 
@@ -130,7 +130,7 @@ The form contains:
 1. Starting destination group and its accepted airports.
 2. Endpoint mode and, when required, a fixed ending group.
 3. Exact trip start and end dates.
-4. An ordered form list of destination cards, even though the optimizer treats their route order as unordered.
+4. A form list of destination cards with “Keep destinations in the order shown” enabled by default; disabling it lets the optimizer compare alternate route orders.
 5. A stay mode and night count for every destination.
 6. Trip-wide airport-continuity default and per-destination overrides under advanced controls.
 7. Passengers and cabin class.
@@ -383,7 +383,8 @@ For `sameAirport`, outgoing edges must originate at `current arrival airport`. F
 - Maintain a Pareto frontier for equivalent state keys across price and flight duration.
 - Remove dominated states.
 - Keep at most 25 non-dominated candidates per state key by default.
-- Keep at most 10,000 active states per search by default.
+- Keep at most 10,000 candidate paths in any active frontier by default.
+- Continue after frontier pruning until a separate cumulative 100,000-state evaluation budget is reached by default.
 - Stop issuing live provider calls at the role-based call budget.
 - Continue optimization using already cached edges after the live-call budget is reached.
 - Persist a bounded snapshot whenever a complete itinerary is added or progress materially changes.
@@ -417,6 +418,7 @@ MultiDestinationSearch:UserMaxProviderCalls = 100
 MultiDestinationSearch:AdminMaxProviderCalls = 250
 MultiDestinationSearch:HardMaxProviderCalls = 500
 MultiDestinationSearch:MaxActiveStates = 10000
+MultiDestinationSearch:MaxEvaluatedStates = 100000
 MultiDestinationSearch:MaxCandidatesPerState = 25
 MultiDestinationSearch:MaxStoredResults = 100
 MultiDestinationSearch:ExecutionTimeoutMinutes = 10
@@ -630,7 +632,7 @@ The multi-destination search initiative is complete when all of the following ar
 - The existing simple one-way and return experience still works.
 - A traveller can construct and search an ordered route with multiple airports at every endpoint.
 - Simple search, ordered routes, and optimized trips use the same accessible airport-group selection control.
-- A traveller can submit unordered destinations with exact dates, minimum or exact stays, all three endpoint modes, and configurable airport continuity.
+- A traveller can preserve the destination order shown or allow reordering, with exact dates, minimum or exact stays, all three endpoint modes, and configurable airport continuity.
 - Aveon progressively returns complete ranked itineraries without materializing an unbounded combination set.
 - Every itinerary is transparent about bookings, airport switches, unmodelled transfers, coverage, and risk.
 - Search work is bounded by configured provider-call, memory, result, concurrency, and execution-time limits.

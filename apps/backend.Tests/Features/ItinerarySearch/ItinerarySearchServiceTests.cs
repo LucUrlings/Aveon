@@ -20,6 +20,7 @@ public sealed class ItinerarySearchServiceTests
         yield return [new MultiDestinationSearchOptions { AdminMaxProviderCalls = 0 }];
         yield return [new MultiDestinationSearchOptions { HardMaxProviderCalls = 0 }];
         yield return [new MultiDestinationSearchOptions { MaxActiveStates = 0 }];
+        yield return [new MultiDestinationSearchOptions { MaxActiveStates = 10, MaxEvaluatedStates = 9 }];
         yield return [new MultiDestinationSearchOptions { MaxCandidatesPerState = 0 }];
         yield return [new MultiDestinationSearchOptions { MaxStoredResults = 0 }];
         yield return [new MultiDestinationSearchOptions { ExecutionTimeoutMinutes = 0 }];
