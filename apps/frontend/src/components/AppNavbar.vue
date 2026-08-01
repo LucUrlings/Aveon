@@ -46,7 +46,7 @@ const signOut = async () => {
 <template>
   <header class="site-header">
     <nav class="navbar" aria-label="Main navigation">
-      <RouterLink class="navbar-brand" to="/" aria-label="Aveon flight search">
+      <RouterLink class="navbar-brand" to="/" aria-label="Aveon home">
         <span class="navbar-logo" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 15.5 20 5l-5.3 14-3.1-5.2L4 15.5Z" /></svg>
         </span>
@@ -55,7 +55,8 @@ const signOut = async () => {
       </RouterLink>
 
       <div class="navbar-links">
-        <RouterLink to="/" exact-active-class="active">Search</RouterLink>
+        <RouterLink to="/" exact-active-class="active">Home</RouterLink>
+        <RouterLink to="/search" active-class="active">Search</RouterLink>
         <RouterLink to="/multi-destination" active-class="active">Multi-destination</RouterLink>
         <RouterLink to="/how-it-works" active-class="active">How it works</RouterLink>
         <RouterLink to="/about" active-class="active">About</RouterLink>

@@ -8,7 +8,7 @@
           Aveon searches a wider space than a traditional flight form, without making you wait for every
           possible combination. Here is what happens after you press search.
         </p>
-        <RouterLink class="guide-action" to="/">Try a search</RouterLink>
+        <RouterLink class="guide-action" to="/search">Try a search</RouterLink>
       </div>
 
       <div class="search-equation" aria-label="Search combination example">
@@ -144,7 +144,7 @@
         <h2>Aveon helps you discover. It does not sell the ticket.</h2>
       </div>
       <p>Prices and availability originate with flight providers and can change before booking. Aveon sends you to the relevant provider to complete each purchase.</p>
-      <RouterLink to="/">Search flights <span aria-hidden="true">→</span></RouterLink>
+      <RouterLink to="/search">Search flights <span aria-hidden="true">→</span></RouterLink>
     </section>
   </main>
 </template>

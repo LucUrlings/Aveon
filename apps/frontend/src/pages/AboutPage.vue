@@ -15,7 +15,7 @@ const websiteUrl = 'https://lucurlings.nl'
           into journeys you can genuinely compare.
         </p>
         <div class="about-actions">
-          <RouterLink class="about-primary-action" to="/">Start searching</RouterLink>
+          <RouterLink class="about-primary-action" to="/search">Start searching</RouterLink>
           <a class="about-secondary-action" :href="githubUrl" target="_blank" rel="noreferrer">View the source <span aria-hidden="true">↗</span></a>
         </div>
       </div>

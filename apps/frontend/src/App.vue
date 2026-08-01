@@ -10,13 +10,13 @@ import AppNavbar from './components/AppNavbar.vue'
 
     <footer class="app-footer">
       <div class="app-footer-inner">
-        <RouterLink class="footer-brand" to="/" aria-label="Aveon search">
+        <RouterLink class="footer-brand" to="/" aria-label="Aveon home">
           <span class="footer-brand-mark">A</span>
           <span>Aveon</span>
         </RouterLink>
         <p>Flexible flight discovery across airports and dates.</p>
         <nav aria-label="Footer navigation">
-          <RouterLink to="/">Search</RouterLink>
+          <RouterLink to="/search">Search</RouterLink>
           <RouterLink to="/how-it-works">How it works</RouterLink>
           <RouterLink to="/about">About</RouterLink>
           <a href="https://github.com/LucUrlings/Aveon" target="_blank" rel="noreferrer">GitHub</a>

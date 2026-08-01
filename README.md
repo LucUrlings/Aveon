@@ -6,6 +6,8 @@ Most flight tools ask travellers to commit to one route and one pair of dates be
 
 Production: [aveon.lucurlings.nl](https://aveon.lucurlings.nl)
 
+The root URL is the product overview. Use `/search` for flexible one-way and return search, or `/multi-destination` for ordered and optimized journeys. Existing shared root URLs containing search criteria are redirected to `/search` with their state intact.
+
 Product roadmap: [Multi-Destination Travel Search Product Plan](docs/multi-destination-search-plan.md)
 
 ## Implementation Status
@@ -123,6 +125,7 @@ See the in-product [How search works](https://aveon.lucurlings.nl/how-it-works) 
 
 ### Frontend
 
+- Product landing page: [`HomePage.vue`](apps/frontend/src/pages/HomePage.vue)
 - Search-page composition: [`FlightSearch.vue`](apps/frontend/src/components/FlightSearch.vue)
 - Search execution, polling, cancellation, and pagination: [`useSearchSession.ts`](apps/frontend/src/features/flight-search/useSearchSession.ts)
 - URL hydration and synchronization: [`useSearchRouteState.ts`](apps/frontend/src/features/flight-search/useSearchRouteState.ts)

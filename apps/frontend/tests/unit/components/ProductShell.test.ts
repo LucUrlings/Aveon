@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import AboutPage from '../../../src/pages/AboutPage.vue'
 import AppNavbar from '../../../src/components/AppNavbar.vue'
+import HomePage from '../../../src/pages/HomePage.vue'
 import HowSearchWorksPage from '../../../src/pages/HowSearchWorksPage.vue'
 import App from '../../../src/App.vue'
 
@@ -51,6 +52,8 @@ describe('product shell', () => {
     await flushPromises()
 
     expect(wrapper.get('.navbar-brand').attributes('href')).toBe('/')
+    expect(wrapper.get('.navbar-links a[href="/"]').text()).toBe('Home')
+    expect(wrapper.get('.navbar-links a[href="/search"]').text()).toBe('Search')
     expect(wrapper.get('.navbar-links').text()).toContain('Search')
     expect(wrapper.get('.navbar-links').text()).toContain('How it works')
     expect(wrapper.get('.navbar-links').text()).toContain('About')
@@ -69,7 +72,20 @@ describe('product shell', () => {
     expect(wrapper.text()).toContain('Multi-destination routes')
     expect(wrapper.get('a[href="https://github.com/LucUrlings/Aveon"]').attributes('rel')).toBe('noreferrer')
     expect(wrapper.get('a[href="https://lucurlings.nl"]').attributes('target')).toBe('_blank')
-    expect(wrapper.get('.about-primary-action').attributes('href')).toBe('/')
+    expect(wrapper.get('.about-primary-action').attributes('href')).toBe('/search')
+  })
+
+  it('presents the index as a product landing page with both search modes', () => {
+    const wrapper = mount(HomePage, {
+      global: { stubs: { RouterLink: routerLinkStub } },
+    })
+
+    expect(wrapper.get('h1').text()).toContain('Search the journey you mean')
+    expect(wrapper.get('.hero-actions a[href="/search"]').text()).toContain('Search flights')
+    expect(wrapper.get('.hero-actions a[href="/multi-destination"]').text()).toContain('Plan multiple destinations')
+    expect(wrapper.get('.mode-grid').text()).toContain('One-way and return')
+    expect(wrapper.get('.mode-grid').text()).toContain('Ordered or optimized')
+    expect(wrapper.get('.home-explainer').text()).toContain('metasearch product, not a booking engine')
   })
 
   it('explains progressive searches and staged return combinations', () => {
@@ -83,5 +99,6 @@ describe('product shell', () => {
     expect(wrapper.get('.fare-type-grid').text()).toContain('Real combination')
     expect(wrapper.get('.fare-type-grid').text()).toContain('Synthetic combination')
     expect(wrapper.text()).toContain('cannot guarantee the global cheapest route')
+    expect(wrapper.get('.guide-action').attributes('href')).toBe('/search')
   })
 })

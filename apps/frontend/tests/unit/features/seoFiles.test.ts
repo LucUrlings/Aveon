@@ -27,6 +27,7 @@ describe('frontend SEO file generation', () => {
       .toContain('Sitemap: https://preview.example/sitemap.xml')
     const sitemap = readFileSync(join(directory, 'sitemap.xml'), 'utf8')
     expect(sitemap).toContain('<loc>https://preview.example/</loc>')
+    expect(sitemap).toContain('<loc>https://preview.example/search</loc>')
     expect(sitemap).toContain('<loc>https://preview.example/about</loc>')
     expect(sitemap).toContain('<loc>https://preview.example/multi-destination</loc>')
   })

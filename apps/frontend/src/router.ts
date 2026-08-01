@@ -1,5 +1,6 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type LocationQuery } from 'vue-router'
 import FlightSearch from './components/FlightSearch.vue'
+import HomePage from './pages/HomePage.vue'
 import { applyPageMetadata, type PageMetadata } from './seo'
 
 declare module 'vue-router' {
@@ -8,17 +9,33 @@ declare module 'vue-router' {
   }
 }
 
+const legacySearchQueryKeys = new Set(['origins', 'destinations', 'dates'])
+
+export const isLegacyRootSearch = (path: string, query: LocationQuery) =>
+  path === '/' && Object.keys(query).some((key) => legacySearchQueryKeys.has(key))
+
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
       path: '/',
+      name: 'home',
+      component: HomePage,
+      meta: {
+        seo: {
+          title: 'Aveon · Flexible and multi-destination flight discovery',
+          description: 'Search flexible airports and dates, build an exact route, or optimize a bounded multi-destination journey with transparent results.',
+        },
+      },
+    },
+    {
+      path: '/search',
       name: 'search',
       component: FlightSearch,
       meta: {
         seo: {
-          title: 'Aveon · Flexible flight search across airports and dates',
-          description: 'Search flights across multiple nearby airports and flexible dates at once. Compare outbound flights, then discover compatible return options.',
+          title: 'Search flexible flights · Aveon',
+          description: 'Search flights across multiple nearby airports and flexible dates, compare outbound options, and discover compatible returns.',
         },
       },
     },
@@ -61,6 +78,11 @@ export const router = createRouter({
     },
   ],
   scrollBehavior: () => ({ top: 0 }),
+})
+
+router.beforeEach((to) => {
+  if (!isLegacyRootSearch(to.path, to.query)) return true
+  return { path: '/search', query: to.query, replace: true }
 })
 
 router.afterEach((to) => {

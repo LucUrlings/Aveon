@@ -39,13 +39,14 @@ const setStructuredData = (metadata: PageMetadata, url: string) => {
     document.head.append(script)
   }
 
+  const isSearchApplication = metadata.path === '/search'
   script.textContent = JSON.stringify({
     '@context': 'https://schema.org',
-    '@type': metadata.path === '/' ? 'WebApplication' : 'WebPage',
+    '@type': isSearchApplication ? 'WebApplication' : metadata.path === '/' ? 'WebSite' : 'WebPage',
     name: metadata.title,
     description: metadata.description,
     url,
-    ...(metadata.path === '/' ? {
+    ...(isSearchApplication ? {
       applicationCategory: 'TravelApplication',
       operatingSystem: 'Any',
       browserRequirements: 'Requires JavaScript',

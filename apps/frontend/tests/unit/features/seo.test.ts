@@ -31,11 +31,28 @@ describe('applyPageMetadata', () => {
     })
   })
 
-  it('identifies the search page as a travel web application', () => {
+  it('identifies the index as the Aveon website', () => {
     applyPageMetadata({
       title: 'Aveon',
-      description: 'Flexible flight search.',
+      description: 'Flexible flight discovery.',
       path: '/',
+    }, 'https://flights.example')
+
+    const structuredData = JSON.parse(
+      document.querySelector<HTMLScriptElement>('script[data-aveon-structured-data]')?.textContent ?? '{}',
+    )
+    expect(structuredData).toMatchObject({
+      '@type': 'WebSite',
+      name: 'Aveon',
+      url: 'https://flights.example/',
+    })
+  })
+
+  it('identifies the search route as a travel web application', () => {
+    applyPageMetadata({
+      title: 'Search flexible flights · Aveon',
+      description: 'Flexible flight search.',
+      path: '/search',
     }, 'https://flights.example')
 
     const structuredData = JSON.parse(
