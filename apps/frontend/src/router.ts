@@ -40,7 +40,7 @@ export const router = createRouter({
       meta: {
         seo: {
           title: 'Multi-destination travel search · Aveon',
-          description: 'Build ordered routes or describe a multi-destination trip using reusable airport groups.',
+          description: 'Build an exact multi-destination route or optimize destination order and stays within transparent search limits.',
         },
       },
     },

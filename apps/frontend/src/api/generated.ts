@@ -221,6 +221,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/itinerary-searches/configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ItinerarySearchCapabilitiesResponse"];
+                        "application/json": components["schemas"]["ItinerarySearchCapabilitiesResponse"];
+                        "text/json": components["schemas"]["ItinerarySearchCapabilitiesResponse"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/itinerary-searches": {
         parameters: {
             query?: never;
@@ -511,6 +559,33 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AbstractItinerarySchedule: {
+            id?: string | null;
+            destinationOrder?: string[] | null;
+            legs?: components["schemas"]["AbstractScheduleLeg"][] | null;
+            stays?: components["schemas"]["AbstractScheduleStay"][] | null;
+        };
+        AbstractScheduleLeg: {
+            id?: string | null;
+            fromGroupId?: string | null;
+            toGroupId?: string | null;
+            /** Format: date */
+            departureDate?: string;
+            /** Format: date */
+            requiredArrivalDate?: string | null;
+        };
+        AbstractScheduleStay: {
+            destinationId?: string | null;
+            /** Format: date */
+            arrivalDate?: string;
+            /** Format: date */
+            departureDate?: string;
+            /** Format: int32 */
+            nights?: number;
+            mode?: string | null;
+            /** Format: int32 */
+            requiredNights?: number;
+        };
         AirportGroupRequest: {
             id?: string | null;
             label?: string | null;
@@ -610,6 +685,18 @@ export interface components {
             warnings?: components["schemas"]["ItineraryWarning"][] | null;
             rankingBreakdown?: components["schemas"]["RankingBreakdown"] | null;
         };
+        ItinerarySearchCapabilitiesResponse: {
+            /** Format: int32 */
+            providerCallLimit?: number;
+            /** Format: int32 */
+            maxOptimizedDestinations?: number;
+            /** Format: int32 */
+            maxAirportsPerGroup?: number;
+            /** Format: int32 */
+            maxTripDays?: number;
+            /** Format: int32 */
+            maxOrderedLegs?: number;
+        };
         ItinerarySearchRequest: {
             mode: string;
             /** Format: int32 */
@@ -630,6 +717,8 @@ export interface components {
             errorMessage?: string | null;
             pagination?: components["schemas"]["ItineraryPagination"] | null;
             filters?: components["schemas"]["ItineraryFilterMetadata"] | null;
+            feasibility?: components["schemas"]["OptimizerFeasibility"] | null;
+            abstractSchedules?: components["schemas"]["AbstractItinerarySchedule"][] | null;
         };
         ItinerarySegment: {
             marketingCarrierName?: string | null;
@@ -679,6 +768,19 @@ export interface components {
              */
             mode: "optimize";
         });
+        OptimizerFeasibility: {
+            /** Format: int32 */
+            requiredLegCount?: number;
+            /** Format: int32 */
+            minimumCalendarDays?: number;
+            /** Format: int32 */
+            availableCalendarDays?: number;
+            /** Format: int32 */
+            routeOrderCount?: number;
+            /** Format: int32 */
+            generatedScheduleCount?: number;
+            bounded?: boolean;
+        };
         OrderedLegRequest: {
             id?: string | null;
             from?: components["schemas"]["AirportGroupRequest"] | null;

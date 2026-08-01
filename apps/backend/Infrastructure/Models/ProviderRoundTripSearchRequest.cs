@@ -6,5 +6,6 @@ public record ProviderRoundTripSearchRequest(
     DateOnly DepartureDate,
     DateOnly ReturnDate,
     int Adults,
-    string CabinClass
+    string CabinClass,
+    string Currency = "EUR"
 );

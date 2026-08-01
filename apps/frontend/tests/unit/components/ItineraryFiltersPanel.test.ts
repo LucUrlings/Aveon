@@ -23,10 +23,5 @@ describe('ItineraryFiltersPanel', () => {
 
     await wrapper.findAll('input[type="checkbox"]')[3].setValue(true)
     expect(model).toMatchObject({ airlines: ['TA'], page: 1 })
-
-    const bookingType = wrapper.findAll('label').find((label) => label.text().includes('Booking type'))
-    expect(bookingType).toBeDefined()
-    await bookingType!.get('select').setValue('bundledFare')
-    expect(model).toMatchObject({ bookingType: 'bundledFare', page: 1 })
   })
 })

@@ -129,6 +129,15 @@
       </div>
     </section>
 
+    <section class="fare-types" aria-labelledby="multi-destination-title">
+      <div class="section-heading">
+        <p class="guide-eyebrow">Multi-destination travel</p>
+        <h2 id="multi-destination-title">Choose the route, or ask Aveon to compare it.</h2>
+        <p><strong>Build my route</strong> searches the dated flight sequence you enter. <strong>Optimize my trip</strong> compares valid destination orders and stay schedules, returning complete itineraries progressively.</p>
+        <p>The optimizer is deliberately bounded by provider calls, candidate states, retained results, and execution time. “Bounded” coverage means Aveon found useful complete trips within those limits and cannot guarantee the global cheapest route. Current multi-destination flights are booked separately.</p>
+      </div>
+    </section>
+
     <section class="guide-note">
       <div>
         <p class="guide-eyebrow">Good to know</p>

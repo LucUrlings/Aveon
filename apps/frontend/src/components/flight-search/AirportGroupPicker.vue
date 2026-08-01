@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { AirportOption } from '../../features/flight-search/types'
 
 const props = defineProps<{
@@ -8,6 +8,7 @@ const props = defineProps<{
   suggestionsAriaLabel: string
   suggestionIdPrefix: string
   suggestions: AirportOption[]
+  maxAirports?: number
 }>()
 
 const input = defineModel<string>('input', { required: true })
@@ -21,6 +22,11 @@ const emit = defineEmits<{
 
 const activeIndex = ref(-1)
 const suggestionsId = `${props.suggestionIdPrefix}-suggestions`
+const atLimit = computed(() => props.maxAirports !== undefined && airports.value.length >= props.maxAirports)
+
+const addAirport = (airport: AirportOption) => {
+  if (!atLimit.value) emit('addAirport', airport)
+}
 
 watch(() => props.suggestions, () => { activeIndex.value = -1 })
 
@@ -42,7 +48,7 @@ const handleKeydown = (event: KeyboardEvent) => {
 
   event.preventDefault()
   const suggestion = props.suggestions[activeIndex.value]
-  if (suggestion) emit('addAirport', suggestion)
+  if (suggestion) addAirport(suggestion)
   else emit('confirmInput')
 }
 </script>
@@ -50,6 +56,7 @@ const handleKeydown = (event: KeyboardEvent) => {
 <template>
   <div class="field airport-group-field">
     <span>{{ label }}</span>
+    <small v-if="maxAirports" class="airport-limit">Up to {{ maxAirports }} airport{{ maxAirports === 1 ? '' : 's' }}</small>
     <div class="airport-picker">
       <div class="chip-row">
         <button
@@ -71,6 +78,7 @@ const handleKeydown = (event: KeyboardEvent) => {
         :aria-expanded="suggestions.length > 0"
         :aria-controls="suggestionsId"
         :aria-activedescendant="activeIndex >= 0 ? `${suggestionIdPrefix}-suggestion-${suggestions[activeIndex]?.code}` : undefined"
+        :disabled="atLimit"
         placeholder="Add airport or city"
         @keydown="handleKeydown"
       />
@@ -84,7 +92,7 @@ const handleKeydown = (event: KeyboardEvent) => {
             tabindex="-1"
             :aria-selected="activeIndex === suggestions.indexOf(airport)"
             @mouseenter="activeIndex = suggestions.indexOf(airport)"
-            @click="emit('addAirport', airport)"
+            @click="addAirport(airport)"
           >
             {{ airport.displayLabel }}
           </button>

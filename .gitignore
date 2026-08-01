@@ -6,6 +6,7 @@ apps/frontend/public/robots.txt
 apps/frontend/public/sitemap.xml
 .env
 .env.*
+!.env.example
 
 # Logs
 npm-debug.log*

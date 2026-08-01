@@ -14,12 +14,19 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       AVEON_PUBLIC_URL: ${AVEON_PUBLIC_URL:-}
       FlightApi__ApiKey: ${FLIGHTAPI_API_KEY}
+      FlightApi__MaxConcurrentRequests: ${FLIGHTAPI_MAX_CONCURRENT_REQUESTS:-5}
       Redis__ConnectionString: aveon-redis:6379
       Redis__FlightApiOneWayTtlMinutes: ${REDIS_FLIGHT_API_ONE_WAY_TTL_MINUTES:-30}
       Redis__AirportDataTtlMinutes: ${REDIS_AIRPORT_DATA_TTL_MINUTES:-10080}
       Redis__SearchSessionTtlMinutes: ${REDIS_SEARCH_SESSION_TTL_MINUTES:-30}
       Search__AnonymousMaxSearchCombinations: ${SEARCH_ANONYMOUS_MAX_SEARCH_COMBINATIONS:-15}
       Search__UserMaxSearchCombinations: ${SEARCH_USER_MAX_SEARCH_COMBINATIONS:-100}
+      Search__ExecutionTimeoutMinutes: ${SEARCH_EXECUTION_TIMEOUT_MINUTES:-10}
+      MultiDestinationSearch__Enabled: ${MULTI_DESTINATION_SEARCH_ENABLED:-false}
+      MultiDestinationSearch__AnonymousMaxProviderCalls: ${MULTI_DESTINATION_ANONYMOUS_MAX_PROVIDER_CALLS:-25}
+      MultiDestinationSearch__UserMaxProviderCalls: ${MULTI_DESTINATION_USER_MAX_PROVIDER_CALLS:-100}
+      MultiDestinationSearch__AdminMaxProviderCalls: ${MULTI_DESTINATION_ADMIN_MAX_PROVIDER_CALLS:-250}
+      MultiDestinationSearch__ExecutionTimeoutMinutes: ${MULTI_DESTINATION_EXECUTION_TIMEOUT_MINUTES:-10}
       ConnectionStrings__Default: Host=aveon-postgres;Port=5432;Database=${POSTGRES_DB:-aveon};Username=${POSTGRES_USER:-aveon};Password=${POSTGRES_PASSWORD:-aveon_dev_password}
     networks:
       - aveon-network

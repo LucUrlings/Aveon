@@ -1,6 +1,6 @@
 # Multi-Destination Travel Search Product Plan
 
-Status: Milestone 0 complete; Milestone 1 implementation complete with Playwright mobile acceptance pending
+Status: Milestones 0–4 and 6 complete; FlightAPI Multi Trip deferred
 Last updated: 2026-08-01  
 Owner: Aveon
 
@@ -16,10 +16,7 @@ The finished product will provide three search experiences:
 2. **Build my route** accepts an ordered list of exact flight legs. Every endpoint may contain multiple acceptable airports.
 3. **Optimize my trip** accepts an unordered list of destination groups and determines the order, travel dates, airports, and flights that best satisfy the user's constraints.
 
-The advanced result page will compare:
-
-- **Bundled itineraries**, when a provider offers the complete route through one fare and booking link.
-- **Separate-ticket itineraries**, assembled by Aveon from independently bookable one-way fares.
+The multi-destination result page shows **separate-ticket itineraries** assembled by Aveon from independently bookable one-way fares. The result contract keeps a booking-type field so a future provider can add other booking models without changing the public shape.
 
 Every complete itinerary will show its total price, flight duration, calendar schedule, stops, airport choices, booking count, booking links, ranking explanation, and relevant risk warnings.
 
@@ -155,7 +152,6 @@ Before submission, the form displays:
 - Consecutive legs may enforce the same-airport rule or allow an airport switch.
 - The user may finish anywhere.
 - Version one supports up to eight separately priced legs.
-- Provider-bundled pricing is attempted only for leg counts supported by the provider capability.
 
 ### 3.4 Progressive result page
 
@@ -164,8 +160,7 @@ The result page renders while the session is running and shows phases:
 1. Validating trip constraints.
 2. Searching flight edges.
 3. Building complete itineraries.
-4. Checking bundled fares.
-5. Finalizing rankings.
+4. Finalizing rankings.
 
 Only complete itineraries appear in the main results. Partial paths may be summarized in progress information but are never presented as bookable results.
 
@@ -177,11 +172,11 @@ Each itinerary card contains:
 - Total fare and per-leg fare.
 - Total flight duration and total stops.
 - Accepted-airport choices actually used.
-- `Bundled fare` or `Separate tickets` badge.
+- `Separate tickets` badge.
 - Number of transactions required.
 - Airport-change and separate-ticket warnings.
 - Expandable score explanation.
-- One booking link for a bundle or one booking link per separate fare.
+- One booking link per separate fare.
 
 The page supports recommended, cheapest, and fastest tabs with the leading price and duration visible for immediate comparison.
 
@@ -191,8 +186,8 @@ Multi-destination results expose the same core refinement vocabulary as simple s
 - Maximum duration uses total in-air itinerary duration.
 - Departure time and airport apply to the first leg; arrival time and airport apply to the final leg.
 - Airline selections require every flight segment to use a selected airline.
-- Booking-source selections require every booking in a separate-ticket itinerary, or the single bundled booking, to use a selected source.
-- Booking type, maximum booking count, and whether airport switches are allowed are additional advanced-only filters.
+- Booking-source selections require every booking in an itinerary to use a selected source.
+- Maximum booking count and whether airport switches are allowed are additional multi-destination-only filters.
 
 Filtering never changes the routes evaluated by the optimizer. It refines the retained complete itineraries and therefore does not change the reported search coverage.
 
@@ -251,11 +246,13 @@ IDs supplied by the client are correlation identifiers only. The backend trims l
 
 ```text
 POST   /api/v1/itinerary-searches
+GET    /api/v1/itinerary-searches/configuration
 GET    /api/v1/itinerary-searches/{searchId}
 DELETE /api/v1/itinerary-searches/{searchId}
 ```
 
 - `POST` accepts either optimized or ordered input and returns a running session immediately.
+- `GET configuration` returns the authenticated caller's provider-call allowance and current multi-destination input limits for accurate preliminary UI feedback.
 - `GET` accepts page, page size, ranking, and result filters. It returns progress, coverage, warnings, and complete itineraries.
 - `DELETE` requests cancellation, stops scheduling new provider calls, and marks the session canceled. Completed provider calls may still populate the shared provider cache.
 - Search sessions remain in Redis and use the configured search-session TTL.
@@ -285,7 +282,7 @@ SearchCoverage
 
 ItineraryResult
   id
-  bookingType: bundled | separateTickets
+  bookingType: separateTickets in the current provider implementation; extensible for future providers
   destinationOrder
   legs
   stays
@@ -299,7 +296,7 @@ ItineraryResult
   rankingBreakdown
 ```
 
-Result pagination defaults to 25 complete itineraries and is capped at 100 per response. The session retains at most 100 complete itineraries in total, selected from the union of the best candidates for each ranking mode and booking type.
+Result pagination defaults to 25 complete itineraries and is capped at 100 per response. The session retains at most 100 complete itineraries in total, selected from the union of the best candidates for each ranking mode.
 
 ## 5. Search engine design
 
@@ -311,18 +308,13 @@ Create a new `ItinerarySearch` backend feature with these responsibilities:
 - Feasible schedule generation.
 - Provider edge acquisition.
 - Itinerary optimization.
-- Optional bundled-fare enrichment.
 - Progressive session snapshots.
 - Filtering, ranking, pagination, and cancellation.
 
-The provider layer exposes capabilities rather than FlightAPI-specific concepts:
+The provider layer exposes one-way edge searches used by both ordered and optimized routes:
 
 ```text
 SearchOneWayEdgeAsync(request)
-SearchBundledItineraryAsync(request)
-ProviderCapabilities
-  maxBundledLegs
-  supportsBundledItineraries
 ```
 
 ### 5.2 One-way edge identity and cache
@@ -337,7 +329,7 @@ departure date
 passenger composition
 cabin class
 currency
-market or locale inputs that affect price
+documented locale inputs that affect price, when the provider request actually supports them
 ```
 
 The existing Redis provider cache is extended to store these normalized edge responses. Cache keys never include secrets. Concurrent requests for the same missing edge are coalesced so only one live provider call is made.
@@ -403,9 +395,9 @@ If every feasible transition in the accepted input space was evaluated using all
 
 [FlightAPI currently advertises](https://www.flightapi.io/) a plan allowance of five concurrent requests. This is a concurrency limit, not a documented five-requests-per-second rate limit.
 
-- Use one singleton provider request gate with `FlightApi:MaxConcurrentRequests = 5`.
+- Use one singleton provider request gate with `FlightApi:MaxConcurrentRequests`, defaulting to `5` while allowing a higher positive value when the FlightAPI subscription is upgraded.
 - Enforce the gate inside the FlightAPI provider boundary immediately before a real HTTP request, not independently in each search service.
-- Apply the same five-request allowance to airport lookup, one-way, round-trip, ordered-route, optimized-route, and Multi Trip calls combined.
+- Apply the same configured allowance to airport lookup, one-way, round-trip, ordered-route, and optimized-route calls combined.
 - Acquire exactly one permit for each live HTTP request and release it after the response has been consumed or failed.
 - Perform cache lookup and identical-request coalescing before acquiring a permit. Cache hits do not consume provider concurrency.
 - Per-search worker pools and provider-call budgets may schedule work, but they never create additional provider concurrency allowances.
@@ -432,26 +424,9 @@ MultiDestinationSearch:ExecutionTimeoutMinutes = 10
 
 All live provider calls still pass through the shared FlightAPI concurrency gate. Per-search budgets control total work, while the shared gate controls combined concurrent pressure across every active simple and multi-destination search. No role can exceed the hard provider-call, concurrency, memory, result, or execution-time safety limits.
 
-## 6. FlightAPI Multi Trip integration
+## 6. Provider scope
 
-Aveon's optimizer remains the source of truth. FlightAPI Multi Trip is optional enrichment for already discovered exact routes.
-
-The current [FlightAPI Multi Trip documentation](https://www.flightapi.io/documentation/multi-trip-api/) states that Multi Trip accepts exact airport codes and dates for three to five flights. The integration must begin with contract tests against real three, four, and five-leg responses because the published parameter table and sample are not fully consistent.
-
-Rules:
-
-- Place the integration behind `FlightApi:EnableMultiTrip`.
-- Default the feature off until real response fixtures for supported leg counts are captured and sanitized.
-- Attempt bundled pricing only for complete routes within the verified provider capability.
-- Deduplicate exact airport and date sequences before calling the endpoint.
-- Enrich at most the top three eligible route sequences per search by default.
-- Count every Multi Trip call against a separate bundled-call budget.
-- Cache Multi Trip responses using a normalized key containing the ordered legs, passengers, cabin, currency, and market.
-- Map bundled fares into the common `ItineraryResult` contract.
-- Never remove separate-ticket results when bundled pricing fails.
-- Mark malformed, incomplete, or linkless provider fares unusable without failing the overall session.
-
-The final result view merges and ranks bundled and separate-ticket itineraries while preserving their different booking and risk semantics.
+Aveon's optimizer remains the source of truth and currently assembles complete routes from independently priced one-way FlightAPI responses. Provider-bundled itinerary APIs are outside the implemented scope. The common result contract remains extensible so a future provider can introduce another booking type without coupling the optimizer to FlightAPI-specific concepts.
 
 ## 7. Delivery milestones
 
@@ -506,14 +481,14 @@ Acceptance gate:
 - Cheapest and fastest select the correct itinerary from deterministic provider fixtures.
 - Ordered results support the shared complete-itinerary filters and advanced booking-risk filters.
 - The UI works with keyboard navigation and at mobile width.
-- Concurrent simple and ordered searches share the same five FlightAPI permits.
+- Concurrent simple and ordered searches share the same FlightAPI permits (five by default).
 
 ### Milestone 2: Optimizer feasibility and scheduling
 
-- [ ] Implement endpoint modes and stay rules.
-- [ ] Implement preliminary frontend feasibility feedback.
-- [ ] Implement authoritative backend schedule generation and pruning.
-- [ ] Add endpoint, night, overnight-arrival, and one-leg-per-day tests.
+- [x] Implement endpoint modes and stay rules.
+- [x] Implement preliminary frontend feasibility feedback.
+- [x] Implement authoritative backend schedule generation and pruning.
+- [x] Add endpoint, night, overnight-arrival, and one-leg-per-day tests.
 
 Acceptance gate:
 
@@ -524,10 +499,10 @@ Acceptance gate:
 
 ### Milestone 3: Priced unordered optimization
 
-- [ ] Implement the bounded time-aware graph search.
-- [ ] Integrate edge caching, request coalescing, global concurrency, and role budgets.
-- [ ] Persist progressive complete itineraries and coverage metrics.
-- [ ] Implement cancellation and execution timeout throughout the worker pipeline.
+- [x] Implement the bounded time-aware graph search.
+- [x] Integrate edge caching, request coalescing, global concurrency, and role budgets.
+- [x] Persist progressive complete itineraries and coverage metrics.
+- [x] Implement cancellation and execution timeout throughout the worker pipeline.
 
 Acceptance gate:
 
@@ -536,17 +511,17 @@ Acceptance gate:
 - Fixed-end and return-to-start modes terminate only at the required endpoint.
 - No search exceeds configured call, state, result, concurrency, or time limits.
 - Partial provider failure yields partial complete results and a `partial` status rather than discarding successful work.
-- Concurrent simple, ordered, and optimized searches share the same five FlightAPI permits.
+- Concurrent simple, ordered, and optimized searches share the same FlightAPI permits (five by default).
 
 ### Milestone 4: Optimizer frontend
 
 - [x] Add the Multi-destination entry point and dedicated route.
-- [ ] Add destination cards, stay controls, endpoint controls, and airport-continuity overrides.
-- [ ] Use `AirportGroupPicker` for every optimizer airport group, matching simple-search and ordered-route behavior.
-- [ ] Add progressive phase and coverage UI.
-- [ ] Add itinerary timeline cards and ranking comparison tabs.
-- [ ] Reuse the ordered-result filter model and UI for optimized results, applying stop, airline, and booking-source selections across every itinerary leg.
-- [ ] Add multi-destination-only booking type, maximum booking count, and airport-switch filters, plus infinite pagination, retry, cancellation, and empty states.
+- [x] Add destination cards, stay controls, endpoint controls, and airport-continuity overrides.
+- [x] Use `AirportGroupPicker` for every optimizer airport group, matching simple-search and ordered-route behavior.
+- [x] Add progressive phase and coverage UI.
+- [x] Add itinerary timeline cards and ranking comparison tabs.
+- [x] Reuse the ordered-result filter model and UI for optimized results, applying stop, airline, and booking-source selections across every itinerary leg.
+- [x] Add multi-destination-only maximum booking count and airport-switch filters, plus infinite pagination, retry, cancellation, and empty states.
 
 Acceptance gate:
 
@@ -556,29 +531,13 @@ Acceptance gate:
 - Reloading a running session resumes polling when the session still exists.
 - Desktop and mobile layouts pass the established accessibility and responsive checks.
 
-### Milestone 5: Bundled Multi Trip fares
-
-- [ ] Verify and document the real FlightAPI contract for each supported leg count.
-- [ ] Add provider capability, request mapping, cache keys, response mapping, and fixtures.
-- [ ] Route every Multi Trip provider request through the shared FlightAPI gate.
-- [ ] Enrich shortlisted routes under the bundled-call budget.
-- [ ] Merge bundled and separate-ticket results without losing provenance.
-
-Acceptance gate:
-
-- A valid bundled response produces one booking action and correct total pricing.
-- A matching separate-ticket itinerary remains independently visible.
-- Unsupported leg counts skip enrichment without error.
-- Multi Trip timeout, malformed data, duplicate IDs, missing prices, and missing links cannot fail the itinerary session.
-- Concurrent Multi Trip enrichment and all other FlightAPI operations never exceed five combined live requests.
-
 ### Milestone 6: Hardening and release
 
-- [ ] Add structured metrics and logs without secrets or booking tokens.
-- [ ] Add load tests at all configured input limits.
-- [ ] Add feature-flag rollout and rollback documentation.
-- [ ] Update README, How Search Works, About, metadata, and user-facing terminology.
-- [ ] Add analytics events for form abandonment, validation failure, completed search, bounded coverage, result selection, and booking click.
+- [x] Add structured metrics and logs without secrets or booking tokens.
+- [x] Add load tests at all configured input limits.
+- [x] Add feature-flag rollout and rollback documentation.
+- [x] Update README, How Search Works, About, metadata, and user-facing terminology.
+- [x] Add analytics events for form abandonment, validation failure, completed search, bounded coverage, result selection, and booking click.
 
 Acceptance gate:
 
@@ -604,9 +563,8 @@ Acceptance gate:
 - Cache-key normalization and concurrent edge coalescing.
 - Mixed-operation enforcement of the single shared provider concurrency gate.
 - Permit release after success, failure, cancellation, timeout, and `429` retry.
-- Mixed cache-miss traffic from simple search, multi-destination search, and airport autocomplete never exceeds five concurrent live FlightAPI requests.
+- Mixed cache-miss traffic from simple search, multi-destination search, and airport autocomplete never exceeds the configured concurrent live FlightAPI request limit; with the default configuration, assert a maximum of five.
 - Cancellation and partial provider failure.
-- Multi Trip mapping using sanitized fixtures.
 
 ### Backend integration tests
 
@@ -627,11 +585,10 @@ Acceptance gate:
 - Request serialization and session hydration.
 - Polling cancellation and stale-response protection.
 - Progressive phases and bounded-coverage explanation.
-- Bundled versus separate-ticket rendering.
 - Booking and airport-switch warnings.
 - Ranking, filtering, and pagination.
 - Shared `AirportGroupPicker` behavior in simple search, ordered routes, and optimized trips.
-- Shared filter-contract and component behavior for ordered and optimized results, including all-leg matching and booking type, maximum booking count, and airport-switch controls.
+- Shared filter-contract and component behavior for ordered and optimized results, including all-leg matching, maximum booking count, and airport-switch controls.
 - Keyboard, screen-reader, reduced-motion, timezone, and mobile behavior.
 
 ### Performance tests
@@ -644,14 +601,12 @@ Acceptance gate:
 
 ## 9. Release strategy
 
-1. Ship contracts and ordered search behind `MultiDestinationSearch:Enabled=false`.
-2. Enable ordered search for administrators.
-3. Enable unordered optimization for administrators after deterministic and load tests pass.
-4. Enable multi-destination search for registered users with bounded provider limits.
-5. Enable a smaller anonymous budget only after production metrics show sustainable cache and provider usage.
-6. Enable FlightAPI Multi Trip independently after its live contract is verified.
+1. Ship ordered and optimized search behind `MultiDestinationSearch:Enabled=false`.
+2. Enable the flag in a restricted staging deployment after deterministic and maximum-input tests pass.
+3. Exercise anonymous, registered-user, and administrator budgets while monitoring bounded coverage, failures, duration, retained results, and provider pressure.
+4. Enable the public production deployment only after metrics show sustainable cache use, provider concurrency, memory, and latency.
 
-Rollback consists of disabling the relevant feature flag. No existing simple-search contract or persisted user record depends on multi-destination search.
+The application flag is global; audience-specific staging requires deployment-layer access control. Rollback consists of disabling the flag. No existing simple-search contract or persisted user record depends on multi-destination search. The operational procedure is documented in [`multi-destination-rollout.md`](multi-destination-rollout.md).
 
 ## 10. Explicitly deferred work
 
@@ -666,20 +621,20 @@ The following are not required for the first completed version:
 - Saved trips, collaboration, notifications, or price tracking.
 - Children and infant passenger inputs beyond the current supported passenger model.
 - A guarantee of the global cheapest route for a bounded search.
+- FlightAPI Multi Trip bundled fares. Live 3-, 4-, and 5-leg checks on 2026-08-01 were rejected because the configured account lacks the required STANDARD or PLUS subscription. No Multi Trip runtime code or configuration is retained; reconsider only if a supported subscription or another bundled-fare provider becomes available.
 
 ## 11. Final definition of done
 
-The advanced travel search initiative is complete when all of the following are true:
+The multi-destination search initiative is complete when all of the following are true:
 
 - The existing simple one-way and return experience still works.
 - A traveller can construct and search an ordered route with multiple airports at every endpoint.
 - Simple search, ordered routes, and optimized trips use the same accessible airport-group selection control.
 - A traveller can submit unordered destinations with exact dates, minimum or exact stays, all three endpoint modes, and configurable airport continuity.
 - Aveon progressively returns complete ranked itineraries without materializing an unbounded combination set.
-- Results compare bundled fares with independently combined one-way fares whenever provider capabilities allow it.
 - Every itinerary is transparent about bookings, airport switches, unmodelled transfers, coverage, and risk.
 - Search work is bounded by configured provider-call, memory, result, concurrency, and execution-time limits.
-- All simple-search, multi-destination, bundled-pricing, and airport-lookup/autocomplete traffic shares one authoritative five-request FlightAPI concurrency gate at the provider boundary; cache hits consume no permits and no request can acquire two.
+- All simple-search, multi-destination, and airport-lookup/autocomplete traffic shares one authoritative configurable FlightAPI concurrency gate at the provider boundary (five permits by default); cache hits consume no permits and no request can acquire two.
 - Cancellation, partial failure, stale requests, pagination, mobile layout, accessibility, and timezone behavior are covered by automated tests.
-- Production rollout and rollback are controlled by independent feature flags.
+- Production rollout and rollback are controlled by a feature flag independent from simple search.
 - User-facing documentation accurately explains what Aveon searches, what it optimizes, and what it cannot guarantee.

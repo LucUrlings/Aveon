@@ -5,7 +5,7 @@ namespace backend.Features.ItinerarySearch;
 
 internal static class FlightApiOrderedFareMapper
 {
-    public static List<OrderedFareCandidate> Map(FlightApiOneWayResponse response, string requestedLegId)
+    public static List<OrderedFareCandidate> Map(FlightApiOneWayResponse response, string requestedLegId, string currency = "EUR")
     {
         var legs = response.Legs.GroupBy(value => value.Id).ToDictionary(group => group.Key, group => group.First());
         var segments = response.Segments.GroupBy(value => value.Id).ToDictionary(group => group.Key, group => group.First());
@@ -38,14 +38,14 @@ internal static class FlightApiOrderedFareMapper
             {
                 if (pricing.Items.Count == 0)
                 {
-                    Add(mapped, itinerary.Id, pricing.Id, pricing.Price?.Amount, itinerary.DeepLink, "FlightApi", leg);
+                    Add(mapped, itinerary.Id, pricing.Id, pricing.Price?.Amount, itinerary.DeepLink, "FlightApi", currency, leg);
                     continue;
                 }
 
                 foreach (var item in pricing.Items)
                 {
                     var agent = item.AgentId is not null && agents.TryGetValue(item.AgentId, out var found) ? found.Name : null;
-                    Add(mapped, itinerary.Id, $"{pricing.Id}:{item.AgentId}", item.Price?.Amount ?? pricing.Price?.Amount, item.Url ?? itinerary.DeepLink, string.IsNullOrWhiteSpace(agent) ? "FlightApi" : $"FlightApi:{agent}", leg);
+                    Add(mapped, itinerary.Id, $"{pricing.Id}:{item.AgentId}", item.Price?.Amount ?? pricing.Price?.Amount, item.Url ?? itinerary.DeepLink, string.IsNullOrWhiteSpace(agent) ? "FlightApi" : $"FlightApi:{agent}", currency, leg);
                 }
             }
         }
@@ -53,12 +53,12 @@ internal static class FlightApiOrderedFareMapper
         return mapped;
     }
 
-    private static void Add(List<OrderedFareCandidate> target, string itineraryId, string priceId, decimal? price, string? link, string provider, ItineraryLeg leg)
+    private static void Add(List<OrderedFareCandidate> target, string itineraryId, string priceId, decimal? price, string? link, string provider, string currency, ItineraryLeg leg)
     {
         var url = Link(link);
         var amount = price is > 0 ? price : TicketPrice(url);
         if (amount is not > 0 || string.IsNullOrWhiteSpace(url)) return;
-        target.Add(new($"{itineraryId}:{priceId}", leg, amount.Value, "EUR", new BookingOption("Book this flight", url, amount.Value, "EUR", provider)));
+        target.Add(new($"{itineraryId}:{priceId}", leg, amount.Value, currency, new BookingOption("Book this flight", url, amount.Value, currency, provider)));
     }
 
     private static ItinerarySegment MapSegment(FlightApiSegment segment, IReadOnlyDictionary<int, FlightApiPlace> places, IReadOnlyDictionary<int, FlightApiCarrier> carriers)

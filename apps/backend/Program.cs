@@ -41,8 +41,10 @@ builder.Services.AddOptions<FlightApiOptions>()
     .ValidateOnStart();
 builder.Services.Configure<RedisOptions>(
     builder.Configuration.GetSection(RedisOptions.SectionName));
-builder.Services.Configure<SearchOptions>(
-    builder.Configuration.GetSection(SearchOptions.SectionName));
+builder.Services.AddOptions<SearchOptions>()
+    .Bind(builder.Configuration.GetSection(SearchOptions.SectionName))
+    .Validate(options => options.ExecutionTimeoutMinutes > 0, "Search:ExecutionTimeoutMinutes must be positive.")
+    .ValidateOnStart();
 builder.Services.AddOptions<MultiDestinationSearchOptions>()
     .Bind(builder.Configuration.GetSection(MultiDestinationSearchOptions.SectionName))
     .Validate(MultiDestinationSearchOptionsValidation.HasPositiveLimits, "Multi-destination search limits and provider budgets must be positive.")
@@ -82,8 +84,11 @@ builder.Services.ConfigureApplicationCookie(options =>
 builder.Services.AddScoped<IAirportService, AirportService>();
 builder.Services.AddScoped<ISearchLimitResolver, SearchLimitResolver>();
 builder.Services.AddSingleton<IFlightApiRequestGate, FlightApiRequestGate>();
+builder.Services.AddSingleton<IProviderRequestCoalescer, ProviderRequestCoalescer>();
 builder.Services.AddSingleton<IItinerarySearchSessionStore, RedisItinerarySearchSessionStore>();
 builder.Services.AddSingleton<IOrderedItinerarySearchRunner, OrderedItinerarySearchRunner>();
+builder.Services.AddSingleton<IOptimizedScheduleGenerator, OptimizedScheduleGenerator>();
+builder.Services.AddSingleton<IOptimizedItinerarySearchRunner, OptimizedItinerarySearchRunner>();
 builder.Services.AddSingleton<IItinerarySearchService, ItinerarySearchService>();
 builder.Services.AddSingleton<ISearchSessionStore, RedisSearchSessionStore>();
 builder.Services.AddSingleton<ISearchService, SearchService>();

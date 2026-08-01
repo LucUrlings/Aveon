@@ -9,6 +9,21 @@ namespace backend.Features.ItinerarySearch;
 [Route("api/v1/itinerary-searches")]
 public sealed class ItinerarySearchController(IItinerarySearchService service, IOptions<MultiDestinationSearchOptions> options) : ControllerBase
 {
+    [HttpGet("configuration")]
+    [ProducesResponseType<ItinerarySearchCapabilitiesResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<ItinerarySearchCapabilitiesResponse> Configuration()
+    {
+        if (!options.Value.Enabled) return NotFound();
+        var configured = options.Value;
+        return Ok(new ItinerarySearchCapabilitiesResponse(
+            ResolveProviderCallLimit(),
+            configured.MaxOptimizedDestinations,
+            configured.MaxAirportsPerGroup,
+            configured.MaxTripDays,
+            configured.MaxOrderedLegs));
+    }
+
     [HttpPost]
     [ProducesResponseType<ItinerarySearchSessionResponse>(StatusCodes.Status202Accepted)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -19,6 +34,7 @@ public sealed class ItinerarySearchController(IItinerarySearchService service, I
         try { return Accepted(await service.StartAsync(request, ResolveProviderCallLimit(), cancellationToken)); }
         catch (ItineraryValidationException exception)
         {
+            ItinerarySearchTelemetry.RecordValidationFailure(request is OptimizedTripRequest ? "optimize" : "ordered");
             return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]> { [exception.Field] = [exception.Message] }));
         }
     }

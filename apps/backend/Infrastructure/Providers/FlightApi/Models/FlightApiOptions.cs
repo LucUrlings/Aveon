@@ -15,4 +15,5 @@ public record FlightApiOptions
     public string ApiKey { get; init; } = string.Empty;
 
     public string Currency { get; init; } = "EUR";
+
 }

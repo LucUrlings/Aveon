@@ -31,6 +31,7 @@ const websiteUrl = 'https://lucurlings.nl'
             <li><span>Flexible travel dates</span><b>✓</b></li>
             <li><span>Real + synthetic returns</span><b>✓</b></li>
             <li><span>Progressive results</span><b>✓</b></li>
+            <li><span>Multi-destination routes</span><b>✓</b></li>
           </ul>
         </div>
       </aside>
@@ -44,7 +45,7 @@ const websiteUrl = 'https://lucurlings.nl'
       <div class="process-grid">
         <article><span class="process-number">01</span><h3>Describe your flexibility</h3><p>Choose several origin and destination airports, then select a date range or specific dates.</p></article>
         <article><span class="process-number">02</span><h3>Compare progressively</h3><p>Results arrive as providers finish, so useful flights appear without making the whole page wait.</p></article>
-        <article><span class="process-number">03</span><h3>Build the right trip</h3><p>Select an outbound, review compatible returns, filter the shortlist and continue to the fare provider.</p></article>
+        <article><span class="process-number">03</span><h3>Build the right trip</h3><p>Select an outbound, compare compatible returns, or build and optimize a bounded multi-destination journey before continuing to each fare provider.</p></article>
       </div>
     </section>
 

@@ -5,13 +5,16 @@ using backend.Infrastructure.Providers.FlightApi;
 using backend.Infrastructure.Providers.FlightApi.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace backend.Features.Search;
 
 public sealed class SearchService(
     IServiceScopeFactory serviceScopeFactory,
     ISearchSessionStore searchSessionStore,
-    ILogger<SearchService> logger) : ISearchService
+    ILogger<SearchService> logger,
+    IOptions<SearchOptions>? options = null,
+    IOptions<FlightApiOptions>? flightApiOptions = null) : ISearchService
 {
     private const int MaxMaterializedProviderCalls = 10_000;
     private const int MaxStoredFareOptionsPerDirection = 2_000;
@@ -20,6 +23,8 @@ public sealed class SearchService(
     private const string StatusCompleted = "completed";
     private const string StatusFailed = "failed";
     private static readonly SearchResultsQuery EmptyQuery = new();
+    private readonly TimeSpan _executionTimeout = TimeSpan.FromMinutes(Math.Max(options?.Value.ExecutionTimeoutMinutes ?? 10, 1));
+    private readonly string _currency = flightApiOptions?.Value.Currency ?? "EUR";
 
     public async Task<SearchSessionResponse> StartSearchAsync(
         SearchRequest request,
@@ -29,7 +34,7 @@ public sealed class SearchService(
         ValidateRequest(request);
         var plannedProviderCallCount = CountProviderCalls(request);
         ValidateProviderCallCount(plannedProviderCallCount, searchLimit);
-        var searchPlan = BuildSearchPlan(request);
+        var searchPlan = BuildSearchPlan(request, _currency);
         var searchId = Guid.NewGuid().ToString("N");
 
         var initialSession = new SearchSessionResponse(
@@ -74,10 +79,25 @@ public sealed class SearchService(
     private async Task RunSearchSafelyAsync(string searchId, SearchPlan searchPlan)
     {
         var executionState = new SearchExecutionState(searchPlan.IsRoundTripSearch);
+        using var execution = new CancellationTokenSource(_executionTimeout);
 
         try
         {
-            await RunSearchAsync(searchId, searchPlan, executionState);
+            await RunSearchAsync(searchId, searchPlan, executionState, execution.Token);
+        }
+        catch (OperationCanceledException) when (execution.IsCancellationRequested)
+        {
+            var snapshot = executionState.Capture();
+            var timedOutSession = BuildSessionSnapshot(
+                searchId,
+                StatusFailed,
+                searchPlan.TotalProviderCalls,
+                snapshot.CompletedCombinations,
+                Math.Max(snapshot.FailedCombinations, searchPlan.TotalProviderCalls - snapshot.CompletedCombinations),
+                snapshot.FareOptions,
+                "Search exceeded its execution timeout.",
+                snapshot.StagedFareOptions);
+            await TrySetSearchSessionAsync(timedOutSession, "persisting timed-out search session");
         }
         catch (Exception ex)
         {
@@ -103,7 +123,8 @@ public sealed class SearchService(
     private async Task RunSearchAsync(
         string searchId,
         SearchPlan searchPlan,
-        SearchExecutionState executionState)
+        SearchExecutionState executionState,
+        CancellationToken cancellationToken)
     {
         var outboundTasks = searchPlan.OutboundRequests.Select(candidate =>
             ExecuteOneWaySearchAsync(
@@ -111,7 +132,8 @@ public sealed class SearchService(
                 searchPlan.TotalProviderCalls,
                 candidate,
                 searchPlan.IsRoundTripSearch ? SearchLegDirection.Outbound : SearchLegDirection.OneWay,
-                executionState))
+                executionState,
+                cancellationToken))
             .ToList();
 
         var returnTasks = new List<Task>();
@@ -121,13 +143,15 @@ public sealed class SearchService(
                 searchPlan.TotalProviderCalls,
                 candidate,
                 SearchLegDirection.Inbound,
-                executionState)));
+                executionState,
+                cancellationToken)));
         returnTasks.AddRange(searchPlan.RoundTripRequests.Select(candidate =>
             ExecuteRoundTripSearchAsync(
                 searchId,
                 searchPlan.TotalProviderCalls,
                 candidate,
-                executionState)));
+                executionState,
+                cancellationToken)));
 
         await Task.WhenAll(outboundTasks.Concat(returnTasks));
 
@@ -141,14 +165,15 @@ public sealed class SearchService(
         int totalProviderCalls,
         ProviderSearchRequest request,
         SearchLegDirection direction,
-        SearchExecutionState executionState)
+        SearchExecutionState executionState,
+        CancellationToken cancellationToken)
     {
         using var scope = serviceScopeFactory.CreateScope();
         var flightSearchProvider = scope.ServiceProvider.GetRequiredService<IFlightSearchProvider>();
 
         try
         {
-            var providerResponse = await flightSearchProvider.SearchOneWayAsync(request, CancellationToken.None);
+            var providerResponse = await flightSearchProvider.SearchOneWayAsync(request, cancellationToken);
             var mappedFareOptions = MapToSearchFareOptions(providerResponse, isRoundTrip: false)
                 .Take(MaxStoredFareOptionsPerDirection)
                 .ToList();
@@ -156,6 +181,7 @@ public sealed class SearchService(
             var snapshot = executionState.BuildRunningSnapshot(searchId, totalProviderCalls, mappedFareOptions, direction);
             await TrySetSearchSessionAsync(snapshot, "persisting an in-progress search session update");
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             logger.LogWarning(
@@ -174,14 +200,15 @@ public sealed class SearchService(
         string searchId,
         int totalProviderCalls,
         ProviderRoundTripSearchRequest request,
-        SearchExecutionState executionState)
+        SearchExecutionState executionState,
+        CancellationToken cancellationToken)
     {
         using var scope = serviceScopeFactory.CreateScope();
         var flightSearchProvider = scope.ServiceProvider.GetRequiredService<IFlightSearchProvider>();
 
         try
         {
-            var providerResponse = await flightSearchProvider.SearchRoundTripAsync(request, CancellationToken.None);
+            var providerResponse = await flightSearchProvider.SearchRoundTripAsync(request, cancellationToken);
             var mappedFareOptions = MapToSearchFareOptions(providerResponse, isRoundTrip: true)
                 .Take(MaxStoredFareOptionsPerDirection)
                 .ToList();
@@ -193,6 +220,7 @@ public sealed class SearchService(
                 SearchLegDirection.RoundTrip);
             await TrySetSearchSessionAsync(snapshot, "persisting an in-progress search session update");
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             logger.LogWarning(
@@ -634,9 +662,9 @@ public sealed class SearchService(
             (routeCount * validRoundTripDatePairCount);
     }
 
-    private static SearchPlan BuildSearchPlan(SearchRequest request)
+    private static SearchPlan BuildSearchPlan(SearchRequest request, string currency)
     {
-        var outboundRequests = ExpandOneWaySearches(request).ToList();
+        var outboundRequests = ExpandOneWaySearches(request, currency).ToList();
         if (!request.GetReturnDates().Any())
         {
             return new SearchPlan(
@@ -646,8 +674,8 @@ public sealed class SearchService(
                 RoundTripRequests: []);
         }
 
-        var inboundRequests = ExpandInboundSearches(request).ToList();
-        var roundTripRequests = ExpandRoundTripSearches(request).ToList();
+        var inboundRequests = ExpandInboundSearches(request, currency).ToList();
+        var roundTripRequests = ExpandRoundTripSearches(request, currency).ToList();
 
         return new SearchPlan(
             IsRoundTripSearch: true,
@@ -656,7 +684,7 @@ public sealed class SearchService(
             RoundTripRequests: roundTripRequests);
     }
 
-    private static IEnumerable<ProviderSearchRequest> ExpandOneWaySearches(SearchRequest request)
+    private static IEnumerable<ProviderSearchRequest> ExpandOneWaySearches(SearchRequest request, string currency)
     {
         foreach (var origin in request.OriginAirports.Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -674,13 +702,14 @@ public sealed class SearchService(
                         destination.ToUpperInvariant(),
                         departureDate,
                         request.Adults,
-                        request.CabinClass);
+                        request.CabinClass,
+                        currency);
                 }
             }
         }
     }
 
-    private static IEnumerable<ProviderSearchRequest> ExpandInboundSearches(SearchRequest request)
+    private static IEnumerable<ProviderSearchRequest> ExpandInboundSearches(SearchRequest request, string currency)
     {
         foreach (var destination in request.DestinationAirports.Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -698,13 +727,14 @@ public sealed class SearchService(
                         origin.ToUpperInvariant(),
                         returnDate,
                         request.Adults,
-                        request.CabinClass);
+                        request.CabinClass,
+                        currency);
                 }
             }
         }
     }
 
-    private static IEnumerable<ProviderRoundTripSearchRequest> ExpandRoundTripSearches(SearchRequest request)
+    private static IEnumerable<ProviderRoundTripSearchRequest> ExpandRoundTripSearches(SearchRequest request, string currency)
     {
         foreach (var origin in request.OriginAirports.Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -730,7 +760,8 @@ public sealed class SearchService(
                             departureDate,
                             returnDate,
                             request.Adults,
-                            request.CabinClass);
+                            request.CabinClass,
+                            currency);
                     }
                 }
             }

@@ -1,17 +1,18 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { getItinerarySearch, startItinerarySearch } from './api'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { getItinerarySearch, getItinerarySearchCapabilities, startItinerarySearch } from './api'
 import ItineraryFiltersPanel from './ItineraryFiltersPanel.vue'
 import ItineraryResultCard from './ItineraryResultCard.vue'
 import OrderedLegEditor, { type OrderedLegModel } from './OrderedLegEditor.vue'
 import type { ItineraryResultsQuery, ItinerarySearchSession, OrderedTripRequest, Ranking } from './types'
+import { trackItineraryEvent } from './analytics'
 
 let sequence = 1
 const nextDate = () => {
   const date = new Date(); date.setDate(date.getDate() + sequence)
   return date.toISOString().slice(0, 10)
 }
-const createLeg = (): OrderedLegModel => ({ id: `ordered-leg-${sequence++}`, from: [], to: [], departureDate: nextDate(), continuity: 'sameAirport' })
+const createLeg = (): OrderedLegModel => { const number = sequence++; return { id: `ordered-leg-${number}`, fromLabel: `Departure group ${number}`, toLabel: `Arrival group ${number}`, from: [], to: [], departureDate: nextDate(), continuity: 'sameAirport' } }
 const legs = ref<OrderedLegModel[]>([createLeg()])
 const adults = ref(1)
 const cabinClass = ref('economy')
@@ -20,20 +21,32 @@ const session = ref<ItinerarySearchSession | null>(null)
 const query = ref<ItineraryResultsQuery>({ ranking: 'recommended', pageSize: 25, allowAirportSwitches: true })
 const error = ref('')
 const submitting = ref(false)
+const maxOrderedLegs = ref(8)
+const maxAirportsPerGroup = ref(5)
+const formDirty = ref(false)
+const searchStarted = ref(false)
+const reportedSessions = new Set<string>()
 let timer: number | undefined
 let controller: AbortController | null = null
 const isRunning = computed(() => session.value?.status === 'running')
+const recordSessionAnalytics = (next: ItinerarySearchSession) => {
+  if (next.status === 'running' || reportedSessions.has(next.searchId)) return
+  reportedSessions.add(next.searchId)
+  trackItineraryEvent('completed_search', { mode: 'ordered', status: next.status, coverage: next.coverage.mode, result_count: next.pagination?.totalResults ?? next.results.length })
+  if (next.coverage.mode === 'bounded') trackItineraryEvent('bounded_coverage', { mode: 'ordered', provider_call_limit: next.coverage.providerCallLimit, live_provider_calls: next.coverage.liveProviderCallsUsed })
+}
 
 const updateLeg = (index: number, leg: OrderedLegModel) => { legs.value[index] = leg }
-const addLeg = () => { legs.value = [...legs.value, createLeg()] }
+const addLeg = () => { if (legs.value.length < maxOrderedLegs.value) legs.value = [...legs.value, createLeg()] }
 const removeLeg = (index: number) => { legs.value = legs.value.filter((_, position) => position !== index) }
-const group = (id: string, airports: OrderedLegModel['from']) => ({ id, label: airports.map(airport => airport.displayLabel).join(', '), airportCodes: airports.map(airport => airport.code) })
+const group = (id: string, label: string, airports: OrderedLegModel['from']) => ({ id, label: label.trim(), airportCodes: airports.map(airport => airport.code) })
 
 const refresh = async (poll = false) => {
   if (!session.value?.searchId) return
   controller?.abort(); controller = new AbortController()
   try {
     session.value = await getItinerarySearch(session.value.searchId, query.value, controller.signal)
+    recordSessionAnalytics(session.value)
     if (poll && session.value.status === 'running') timer = window.setTimeout(() => refresh(true), 700)
   } catch (reason) {
     if (!(reason instanceof Error && reason.name === 'AbortError')) error.value = reason instanceof Error ? reason.message : 'Could not load results.'
@@ -42,30 +55,39 @@ const refresh = async (poll = false) => {
 
 const submit = async () => {
   error.value = ''
-  if (legs.value.some(leg => !leg.departureDate || leg.from.length === 0 || leg.to.length === 0)) { error.value = 'Add a date and at least one airport to both ends of every flight.'; return }
+  if (legs.value.some(leg => !leg.fromLabel.trim() || !leg.toLabel.trim())) { error.value = 'Give every airport group a name.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'group_names' }); return }
+  if (legs.value.some(leg => !leg.departureDate || leg.from.length === 0 || leg.to.length === 0)) { error.value = 'Add a date and at least one airport to both ends of every flight.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'route_fields' }); return }
   submitting.value = true
   controller?.abort(); controller = new AbortController()
   const request: OrderedTripRequest = {
     mode: 'ordered', adults: adults.value, cabinClass: cabinClass.value, ranking: ranking.value,
-    legs: legs.value.map((leg, index) => ({ id: leg.id, from: group(`${leg.id}-from`, leg.from), to: group(`${leg.id}-to`, leg.to), departureDate: leg.departureDate, airportContinuityWithPrevious: index === 0 ? 'sameAirport' : leg.continuity })),
+    legs: legs.value.map((leg, index) => ({ id: leg.id, from: group(`${leg.id}-from`, leg.fromLabel, leg.from), to: group(`${leg.id}-to`, leg.toLabel, leg.to), departureDate: leg.departureDate, airportContinuityWithPrevious: index === 0 ? 'sameAirport' : leg.continuity })),
   }
   try {
     session.value = await startItinerarySearch(request, controller.signal)
+    searchStarted.value = true
     query.value = { ...query.value, ranking: ranking.value }
     timer = window.setTimeout(() => refresh(true), 100)
-  } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Could not start the search.' }
+  } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Could not start the search.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'server' }) }
   finally { submitting.value = false }
 }
 
 watch(query, () => { if (session.value?.searchId) refresh(false) }, { deep: true })
-onBeforeUnmount(() => { if (timer) window.clearTimeout(timer); controller?.abort() })
+onBeforeUnmount(() => { if (formDirty.value && !searchStarted.value) trackItineraryEvent('form_abandonment', { mode: 'ordered' }); if (timer) window.clearTimeout(timer); controller?.abort() })
+onMounted(async () => {
+  try {
+    const capabilities = await getItinerarySearchCapabilities()
+    if (capabilities.maxOrderedLegs > 0) maxOrderedLegs.value = capabilities.maxOrderedLegs
+    if (capabilities.maxAirportsPerGroup > 0) maxAirportsPerGroup.value = capabilities.maxAirportsPerGroup
+  } catch { /* Backend validation remains authoritative if capabilities are temporarily unavailable. */ }
+})
 </script>
 
 <template>
   <section aria-label="Build my route form">
-    <form class="ordered-form" @submit.prevent="submit">
-      <OrderedLegEditor v-for="(leg, index) in legs" :key="leg.id" :model-value="leg" :index="index" :removable="legs.length > 1" @update:model-value="updateLeg(index, $event)" @remove="removeLeg(index)" />
-      <button type="button" class="secondary-action" @click="addLeg">Add another flight</button>
+    <form class="ordered-form" @input="formDirty = true" @submit.prevent="submit">
+      <OrderedLegEditor v-for="(leg, index) in legs" :key="leg.id" :model-value="leg" :index="index" :removable="legs.length > 1" :max-airports="maxAirportsPerGroup" @update:model-value="updateLeg(index, $event)" @remove="removeLeg(index)" />
+      <button type="button" class="secondary-action" :disabled="legs.length >= maxOrderedLegs" @click="addLeg">Add another flight</button>
       <div class="trip-options">
         <label>Travellers<input v-model.number="adults" type="number" min="1" max="9" /></label>
         <label>Cabin<select v-model="cabinClass"><option value="economy">Economy</option><option value="premium_economy">Premium economy</option><option value="business">Business</option><option value="first">First</option></select></label>

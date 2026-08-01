@@ -1,25 +1,47 @@
 using backend.Features.ItinerarySearch.Models;
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace backend.Features.ItinerarySearch;
 
 public sealed class ItinerarySearchService(
     IItinerarySearchSessionStore store,
     IOrderedItinerarySearchRunner orderedRunner,
-    Microsoft.Extensions.Options.IOptions<MultiDestinationSearchOptions> options) : IItinerarySearchService
+    IOptimizedScheduleGenerator optimizedScheduleGenerator,
+    IOptimizedItinerarySearchRunner optimizedRunner,
+    Microsoft.Extensions.Options.IOptions<MultiDestinationSearchOptions> options,
+    ILogger<ItinerarySearchService>? logger = null) : IItinerarySearchService
 {
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _executions = new();
+    private readonly ILogger<ItinerarySearchService> _logger = logger ?? NullLogger<ItinerarySearchService>.Instance;
 
     public async Task<ItinerarySearchSessionResponse> StartAsync(ItinerarySearchRequest request, int providerCallLimit, CancellationToken cancellationToken)
     {
         ValidateShape(request);
         request = Normalize(request);
         Validate(request, options.Value);
+        var schedulePlan = request is OptimizedTripRequest optimizedForPlan ? optimizedScheduleGenerator.Generate(optimizedForPlan) : null;
         var searchId = Guid.NewGuid().ToString("N");
         var mode = request is OptimizedTripRequest ? "optimize" : "ordered";
         var effectiveLimit = Math.Clamp(providerCallLimit, 1, options.Value.HardMaxProviderCalls);
-        var session = new ItinerarySearchSessionResponse(searchId, mode, "running", "validating", 0, new SearchCoverage(ProviderCallLimit: effectiveLimit), [], []);
+        var session = new ItinerarySearchSessionResponse(
+            searchId,
+            mode,
+            "running",
+            "validating",
+            0,
+            new SearchCoverage(ProviderCallLimit: effectiveLimit),
+            [],
+            [],
+            Feasibility: schedulePlan?.Feasibility,
+            AbstractSchedules: schedulePlan?.Schedules);
         await store.SetAsync(session, cancellationToken);
+        ItinerarySearchTelemetry.RecordStarted(mode);
+        _logger.LogInformation(
+            "Multi-destination search {SearchId} started in {SearchMode} mode with provider call limit {ProviderCallLimit}",
+            searchId,
+            mode,
+            effectiveLimit);
         if (request is OrderedTripRequest ordered)
         {
             var execution = new CancellationTokenSource(TimeSpan.FromMinutes(options.Value.ExecutionTimeoutMinutes));
@@ -27,6 +49,23 @@ public sealed class ItinerarySearchService(
             _ = Task.Run(async () =>
             {
                 try { await orderedRunner.RunAsync(searchId, ordered, effectiveLimit, execution.Token); }
+                finally
+                {
+                    _executions.TryRemove(searchId, out _);
+                    execution.Dispose();
+                }
+            }, CancellationToken.None);
+        }
+        else if (request is OptimizedTripRequest optimized && schedulePlan is not null)
+        {
+            var execution = new CancellationTokenSource(TimeSpan.FromMinutes(options.Value.ExecutionTimeoutMinutes));
+            _executions[searchId] = execution;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await optimizedRunner.RunAsync(searchId, optimized, schedulePlan, effectiveLimit, execution.Token);
+                }
                 finally
                 {
                     _executions.TryRemove(searchId, out _);
@@ -49,6 +88,8 @@ public sealed class ItinerarySearchService(
         if (_executions.TryGetValue(searchId, out var execution)) execution.Cancel();
         session = session with { Status = "canceled", Phase = "canceled" };
         await store.SetAsync(session, cancellationToken);
+        ItinerarySearchTelemetry.RecordCanceled(session.Mode);
+        _logger.LogInformation("Multi-destination search {SearchId} canceled in {SearchMode} mode", searchId, session.Mode);
         return session;
     }
     private static void Validate(ItinerarySearchRequest request, MultiDestinationSearchOptions limits)
@@ -79,7 +120,8 @@ public sealed class ItinerarySearchService(
         if (optimized.DefaultAirportContinuity is not ("sameAirport" or "allowSwitch")) throw Invalid("defaultAirportContinuity", "Unsupported airport continuity.");
         var destinationIds = optimized.Destinations.Select(destination => destination.Group.Id).ToList();
         if (destinationIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != destinationIds.Count) throw Invalid("destinations", "Destination IDs must be unique.");
-        if (optimized.FixedEnd is not null && destinationIds.Contains(optimized.FixedEnd.Id, StringComparer.OrdinalIgnoreCase)) throw Invalid("fixedEnd", "Must not duplicate an unordered destination.");
+        if (optimized.FixedEnd is not null && optimized.Destinations.Any(destination => SameAirportGroup(destination.Group, optimized.FixedEnd)))
+            throw Invalid("fixedEnd", "Must not duplicate an unordered destination airport group.");
         foreach (var destination in optimized.Destinations)
         {
             ValidateGroup(destination.Group, "destinations.group", limits);
@@ -97,6 +139,10 @@ public sealed class ItinerarySearchService(
     }
     private static ItineraryValidationException Invalid(string field, string message) => new(field, message);
 
+    private static bool SameAirportGroup(AirportGroupRequest left, AirportGroupRequest right) =>
+        left.AirportCodes.Count == right.AirportCodes.Count &&
+        left.AirportCodes.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(right.AirportCodes);
+
     private static void ValidateShape(ItinerarySearchRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.CabinClass)) throw Invalid("cabinClass", "Required.");
@@ -105,12 +151,26 @@ public sealed class ItinerarySearchService(
         {
             if (ordered.Legs is null) throw Invalid("legs", "Required.");
             if (ordered.Legs.Any(leg => leg is null || leg.From is null || leg.To is null)) throw Invalid("legs", "Every leg requires from and to airport groups.");
+            foreach (var leg in ordered.Legs)
+            {
+                ValidateGroupShape(leg.From, "legs.from");
+                ValidateGroupShape(leg.To, "legs.to");
+            }
         }
         if (request is OptimizedTripRequest optimized)
         {
             if (optimized.Start is null) throw Invalid("start", "Required.");
             if (optimized.Destinations is null || optimized.Destinations.Any(destination => destination is null || destination.Group is null || destination.Stay is null)) throw Invalid("destinations", "Every destination requires a group and stay rule.");
+            ValidateGroupShape(optimized.Start, "start");
+            if (optimized.FixedEnd is not null) ValidateGroupShape(optimized.FixedEnd, "fixedEnd");
+            foreach (var destination in optimized.Destinations) ValidateGroupShape(destination.Group, "destinations.group");
         }
+    }
+
+    private static void ValidateGroupShape(AirportGroupRequest group, string field)
+    {
+        if (group.AirportCodes is null) throw Invalid($"{field}.airportCodes", "Required.");
+        if (group.AirportCodes.Any(code => code is null)) throw Invalid($"{field}.airportCodes", "Airport codes cannot be null.");
     }
 
     private static ItinerarySearchRequest Normalize(ItinerarySearchRequest request) => request switch
@@ -136,6 +196,9 @@ public sealed class ItinerarySearchService(
     {
         Id = group.Id.Trim(),
         Label = group.Label.Trim(),
-        AirportCodes = group.AirportCodes.Select(code => code.Trim().ToUpperInvariant()).ToList()
+        AirportCodes = group.AirportCodes
+            .Select(code => code.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()
     };
 }

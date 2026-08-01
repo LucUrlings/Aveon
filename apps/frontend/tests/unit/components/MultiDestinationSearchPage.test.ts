@@ -16,6 +16,19 @@ describe('MultiDestinationSearchPage', () => {
     expect(wrapper.get('[aria-label="Build my route form"]').exists()).toBe(true)
   })
 
+  it('exposes keyboard-operable tabs with associated tab panels', async () => {
+    const wrapper = mount(MultiDestinationSearchPage)
+    const optimize = wrapper.get('#multi-destination-tab-optimize')
+
+    expect(optimize.attributes('aria-controls')).toBe('multi-destination-panel-optimize')
+    expect(wrapper.get('[role="tabpanel"]').attributes('aria-labelledby')).toBe('multi-destination-tab-optimize')
+    await optimize.trigger('keydown', { key: 'ArrowRight' })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('#multi-destination-tab-ordered').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[role="tabpanel"]').attributes('aria-labelledby')).toBe('multi-destination-tab-ordered')
+  })
+
   it('uses two shared airport-group pickers for every dynamic ordered leg', async () => {
     const wrapper = mount(MultiDestinationSearchPage)
     await wrapper.findAll('[role="tab"]')[1].trigger('click')
@@ -27,5 +40,18 @@ describe('MultiDestinationSearchPage', () => {
 
     await wrapper.get('[aria-label="Remove flight 2"]').trigger('click')
     expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(2)
+  })
+
+  it('caps the ordered route builder at eight legs', async () => {
+    const wrapper = mount(MultiDestinationSearchPage)
+    await wrapper.findAll('[role="tab"]')[1].trigger('click')
+    const add = wrapper.get('button.secondary-action')
+
+    for (let index = 1; index < 8; index += 1) await add.trigger('click')
+
+    expect(wrapper.findAll('fieldset.ordered-leg')).toHaveLength(8)
+    expect(add.attributes('disabled')).toBeDefined()
+    await add.trigger('click')
+    expect(wrapper.findAll('fieldset.ordered-leg')).toHaveLength(8)
   })
 })

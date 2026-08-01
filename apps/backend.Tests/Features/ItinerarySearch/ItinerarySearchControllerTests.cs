@@ -32,7 +32,7 @@ public sealed class ItinerarySearchControllerTests
     public async Task StartGetAndDelete_ExposeStableSessionLifecycle()
     {
         var controller = CreateController(enabled: true);
-        var started = Assert.IsType<AcceptedResult>((await controller.Start(ItinerarySearchServiceTests.CreateOptimizedRequest(), CancellationToken.None)).Result);
+        var started = Assert.IsType<AcceptedResult>((await controller.Start(ItinerarySearchServiceTests.CreateOrderedRequest(), CancellationToken.None)).Result);
         var session = Assert.IsType<ItinerarySearchSessionResponse>(started.Value);
         Assert.IsType<OkObjectResult>((await controller.Get(session.SearchId, new ItineraryResultsQuery(), CancellationToken.None)).Result);
         Assert.IsType<NoContentResult>(await controller.Cancel(session.SearchId, CancellationToken.None));
@@ -54,9 +54,24 @@ public sealed class ItinerarySearchControllerTests
         Assert.Equal(222, service.ProviderCallLimit);
     }
 
+    [Fact]
+    public void Configuration_ReturnsTheAuthenticatedRoleBudgetAndInputLimits()
+    {
+        var controller = new ItinerarySearchController(new CapturingService(), Options.Create(new MultiDestinationSearchOptions { Enabled = true, AdminMaxProviderCalls = 222, MaxOptimizedDestinations = 4 }))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, "Admin")], "test")) } }
+        };
+
+        var result = Assert.IsType<OkObjectResult>(controller.Configuration().Result);
+        var configuration = Assert.IsType<ItinerarySearchCapabilitiesResponse>(result.Value);
+
+        Assert.Equal((222, 4), (configuration.ProviderCallLimit, configuration.MaxOptimizedDestinations));
+    }
+
     private static ItinerarySearchController CreateController(bool enabled)
     {
-        var service = new ItinerarySearchService(new ItinerarySearchServiceTests.MemoryStore(), new ItinerarySearchServiceTests.NoOpRunner(), Options.Create(new MultiDestinationSearchOptions()));
+        var options = Options.Create(new MultiDestinationSearchOptions());
+        var service = new ItinerarySearchService(new ItinerarySearchServiceTests.MemoryStore(), new ItinerarySearchServiceTests.NoOpRunner(), new OptimizedScheduleGenerator(options), new ItinerarySearchServiceTests.NoOpOptimizedRunner(), options);
         return new(service, Options.Create(new MultiDestinationSearchOptions { Enabled = enabled }));
     }
 

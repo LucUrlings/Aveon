@@ -66,6 +66,7 @@ describe('product shell', () => {
 
     expect(wrapper.get('h1').text()).toContain('one you weren’t going to search for')
     expect(wrapper.text()).toContain('searches beyond the obvious route')
+    expect(wrapper.text()).toContain('Multi-destination routes')
     expect(wrapper.get('a[href="https://github.com/LucUrlings/Aveon"]').attributes('rel')).toBe('noreferrer')
     expect(wrapper.get('a[href="https://lucurlings.nl"]').attributes('target')).toBe('_blank')
     expect(wrapper.get('.about-primary-action').attributes('href')).toBe('/')
@@ -81,5 +82,6 @@ describe('product shell', () => {
     expect(wrapper.get('.return-section').text()).toContain('choose an outbound first')
     expect(wrapper.get('.fare-type-grid').text()).toContain('Real combination')
     expect(wrapper.get('.fare-type-grid').text()).toContain('Synthetic combination')
+    expect(wrapper.text()).toContain('cannot guarantee the global cheapest route')
   })
 })

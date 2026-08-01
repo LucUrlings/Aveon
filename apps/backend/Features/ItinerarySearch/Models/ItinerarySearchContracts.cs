@@ -31,6 +31,20 @@ public sealed record OrderedTripRequest(
     string Ranking) : ItinerarySearchRequest(Adults, CabinClass, Ranking);
 
 public record SearchCoverage(string Mode = "exhaustive", int LiveProviderCallsUsed = 0, int ProviderCallLimit = 0, int CacheHits = 0, int CandidateStatesEvaluated = 0, int CandidateStatesPruned = 0);
+public record OptimizerFeasibility(
+    int RequiredLegCount,
+    int MinimumCalendarDays,
+    int AvailableCalendarDays,
+    int RouteOrderCount,
+    int GeneratedScheduleCount,
+    bool Bounded);
+public record AbstractScheduleLeg(string Id, string FromGroupId, string ToGroupId, DateOnly DepartureDate, DateOnly? RequiredArrivalDate = null);
+public record AbstractScheduleStay(string DestinationId, DateOnly ArrivalDate, DateOnly DepartureDate, int Nights, string Mode, int RequiredNights);
+public record AbstractItinerarySchedule(
+    string Id,
+    List<string> DestinationOrder,
+    List<AbstractScheduleLeg> Legs,
+    List<AbstractScheduleStay> Stays);
 public record ItineraryWarning(string Code, string Message);
 public record RankingBreakdown(decimal Score, decimal TotalPrice, int AdditionalFlightMinutes, int TotalStops, int AdditionalBookings, int AirportSwitches);
 public record ItinerarySegment(string MarketingCarrierName, string MarketingCarrierCode, string FlightNumber, string OriginAirport, string DestinationAirport, DateTime DepartureLocalTime, DateTime ArrivalLocalTime, int DurationMinutes);
@@ -75,7 +89,15 @@ public record ItinerarySearchSessionResponse(
     List<ItineraryWarning> Warnings,
     string? ErrorMessage = null,
     ItineraryPagination? Pagination = null,
-    ItineraryFilterMetadata? Filters = null);
+    ItineraryFilterMetadata? Filters = null,
+    OptimizerFeasibility? Feasibility = null,
+    List<AbstractItinerarySchedule>? AbstractSchedules = null);
+public record ItinerarySearchCapabilitiesResponse(
+    int ProviderCallLimit,
+    int MaxOptimizedDestinations,
+    int MaxAirportsPerGroup,
+    int MaxTripDays,
+    int MaxOrderedLegs);
 
 public record ItineraryResultsQuery
 {

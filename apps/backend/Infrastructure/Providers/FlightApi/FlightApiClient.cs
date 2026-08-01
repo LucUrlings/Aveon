@@ -14,6 +14,7 @@ public sealed class FlightApiClient(
     IOptions<FlightApiOptions> options,
     IProviderResponseCache providerResponseCache,
     IFlightApiRequestGate requestGate,
+    IProviderRequestCoalescer requestCoalescer,
     ILogger<FlightApiClient> logger) : IFlightSearchProvider, IAirportLookupProvider
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -44,7 +45,7 @@ public sealed class FlightApiClient(
         logger.LogInformation("FlightApi cache miss for key {CacheKey}", cacheKey);
 
         var cabinClass = MapCabinClass(request.CabinClass);
-        var path = $"onewaytrip/{_options.ApiKey}/{request.OriginAirport}/{request.DestinationAirport}/{request.DepartureDate:yyyy-MM-dd}/{request.Adults}/0/0/{cabinClass}/{_options.Currency}";
+        var path = $"onewaytrip/{_options.ApiKey}/{request.OriginAirport}/{request.DestinationAirport}/{request.DepartureDate:yyyy-MM-dd}/{request.Adults}/0/0/{cabinClass}/{request.Currency}";
         var stopwatch = Stopwatch.StartNew();
 
         logger.LogInformation(
@@ -58,7 +59,12 @@ public sealed class FlightApiClient(
 
         try
         {
-            var result = await GetLiveResponseAsync<FlightApiOneWayResponse>(path, cancellationToken);
+            var result = await requestCoalescer.RunAsync(cacheKey, async () =>
+            {
+                var live = await GetLiveResponseAsync<FlightApiOneWayResponse>(path, cancellationToken);
+                await providerResponseCache.SetAsync(cacheKey, live, cancellationToken);
+                return live;
+            }, cancellationToken);
             stopwatch.Stop();
             logger.LogInformation(
                 "FlightApi one-way search succeeded for {OriginAirport} -> {DestinationAirport} on {DepartureDate} in {ElapsedMilliseconds} ms",
@@ -67,8 +73,6 @@ public sealed class FlightApiClient(
                 request.DepartureDate,
                 stopwatch.ElapsedMilliseconds);
 
-            await providerResponseCache.SetAsync(cacheKey, result, cancellationToken);
-            logger.LogInformation("Stored FlightApi response in cache for key {CacheKey}", cacheKey);
             return result;
         }
         catch (Exception ex)
@@ -106,7 +110,7 @@ public sealed class FlightApiClient(
         logger.LogInformation("FlightApi round-trip cache miss for key {CacheKey}", cacheKey);
 
         var cabinClass = MapCabinClass(request.CabinClass);
-        var path = $"roundtrip/{_options.ApiKey}/{request.OriginAirport}/{request.DestinationAirport}/{request.DepartureDate:yyyy-MM-dd}/{request.ReturnDate:yyyy-MM-dd}/{request.Adults}/0/0/{cabinClass}/{_options.Currency}";
+        var path = $"roundtrip/{_options.ApiKey}/{request.OriginAirport}/{request.DestinationAirport}/{request.DepartureDate:yyyy-MM-dd}/{request.ReturnDate:yyyy-MM-dd}/{request.Adults}/0/0/{cabinClass}/{request.Currency}";
         var stopwatch = Stopwatch.StartNew();
 
         logger.LogInformation(
@@ -121,7 +125,12 @@ public sealed class FlightApiClient(
 
         try
         {
-            var result = await GetLiveResponseAsync<FlightApiOneWayResponse>(path, cancellationToken);
+            var result = await requestCoalescer.RunAsync(cacheKey, async () =>
+            {
+                var live = await GetLiveResponseAsync<FlightApiOneWayResponse>(path, cancellationToken);
+                await providerResponseCache.SetAsync(cacheKey, live, cancellationToken);
+                return live;
+            }, cancellationToken);
             stopwatch.Stop();
             logger.LogInformation(
                 "FlightApi round-trip search succeeded for {OriginAirport} -> {DestinationAirport} on {DepartureDate} returning {ReturnDate} in {ElapsedMilliseconds} ms",
@@ -131,8 +140,6 @@ public sealed class FlightApiClient(
                 request.ReturnDate,
                 stopwatch.ElapsedMilliseconds);
 
-            await providerResponseCache.SetAsync(cacheKey, result, cancellationToken);
-            logger.LogInformation("Stored FlightApi round-trip response in cache for key {CacheKey}", cacheKey);
             return result;
         }
         catch (Exception ex)
@@ -181,15 +188,18 @@ public sealed class FlightApiClient(
 
         try
         {
-            var result = await GetLiveResponseAsync<FlightApiCodeLookupResponse>(path, cancellationToken);
+            var result = await requestCoalescer.RunAsync(cacheKey, async () =>
+            {
+                var live = await GetLiveResponseAsync<FlightApiCodeLookupResponse>(path, cancellationToken);
+                await providerResponseCache.SetAsync(cacheKey, live, cancellationToken);
+                return live;
+            }, cancellationToken);
             stopwatch.Stop();
             logger.LogInformation(
                 "FlightApi airport lookup succeeded for query {Query} in {ElapsedMilliseconds} ms",
                 trimmedQuery,
                 stopwatch.ElapsedMilliseconds);
 
-            await providerResponseCache.SetAsync(cacheKey, result, cancellationToken);
-            logger.LogInformation("Stored FlightApi airport lookup response in cache for key {CacheKey}", cacheKey);
             return result;
         }
         catch (Exception ex)

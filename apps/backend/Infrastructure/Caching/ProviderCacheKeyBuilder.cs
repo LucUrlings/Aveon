@@ -9,6 +9,7 @@ public static class ProviderCacheKeyBuilder
         var origin = request.OriginAirport.Trim().ToUpperInvariant();
         var destination = request.DestinationAirport.Trim().ToUpperInvariant();
         var cabinClass = request.CabinClass.Trim().ToLowerInvariant();
+        var currency = request.Currency.Trim().ToUpperInvariant();
 
         return string.Join(
             ":",
@@ -19,7 +20,8 @@ public static class ProviderCacheKeyBuilder
             destination,
             request.DepartureDate.ToString("yyyy-MM-dd"),
             request.Adults,
-            cabinClass);
+            cabinClass,
+            currency);
     }
 
     public static string BuildFlightApiRoundTripSearchKey(ProviderRoundTripSearchRequest request)
@@ -27,6 +29,7 @@ public static class ProviderCacheKeyBuilder
         var origin = request.OriginAirport.Trim().ToUpperInvariant();
         var destination = request.DestinationAirport.Trim().ToUpperInvariant();
         var cabinClass = request.CabinClass.Trim().ToLowerInvariant();
+        var currency = request.Currency.Trim().ToUpperInvariant();
 
         return string.Join(
             ":",
@@ -38,7 +41,8 @@ public static class ProviderCacheKeyBuilder
             request.DepartureDate.ToString("yyyy-MM-dd"),
             request.ReturnDate.ToString("yyyy-MM-dd"),
             request.Adults,
-            cabinClass);
+            cabinClass,
+            currency);
     }
 
     public static string BuildFlightApiAirportLookupKey(string query) =>
@@ -48,4 +52,5 @@ public static class ProviderCacheKeyBuilder
             "flightapi",
             "airport-lookup",
             query.Trim().ToLowerInvariant());
+
 }

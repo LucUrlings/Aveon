@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using backend.Features.ItinerarySearch;
 using backend.Features.ItinerarySearch.Models;
+using backend.Infrastructure.Caching;
 using backend.Infrastructure.Models;
 using backend.Infrastructure.Providers.FlightApi;
 using backend.Infrastructure.Providers.FlightApi.Models;
@@ -88,6 +89,75 @@ public sealed class OrderedItinerarySearchRunnerTests
     }
 
     [Fact]
+    public async Task MaximumConfiguredOrderedInput_StaysWithinEveryRuntimeCollectionLimit()
+    {
+        var options = new MultiDestinationSearchOptions();
+        var groups = Enumerable.Range(0, options.MaxOrderedLegs + 1)
+            .Select(groupIndex => Enumerable.Range(0, options.MaxAirportsPerGroup)
+                .Select(airportIndex => $"{(char)('A' + groupIndex)}{(char)('A' + airportIndex)}{(char)('K' + groupIndex)}")
+                .ToList())
+            .ToList();
+        var request = new OrderedTripRequest(
+            Enumerable.Range(0, options.MaxOrderedLegs)
+                .Select(index => Leg($"max-{index}", groups[index], groups[index + 1], new DateOnly(2026, 9, 1).AddDays(index)))
+                .ToList(),
+            9,
+            "first",
+            "recommended");
+        var provider = new FixtureProvider(providerRequest => Response(providerRequest, 100, 60));
+        var (runner, store) = CreateRunner(provider, options: options);
+
+        await runner.RunAsync("maximum-ordered", request, options.HardMaxProviderCalls, CancellationToken.None);
+
+        var session = (await store.GetAsync("maximum-ordered", CancellationToken.None))!;
+        Assert.Equal(options.MaxOrderedLegs * options.MaxAirportsPerGroup * options.MaxAirportsPerGroup, provider.Requests.Count);
+        Assert.InRange(session.Results.Count, 0, options.MaxStoredResults);
+        Assert.InRange(session.Coverage.CandidateStatesEvaluated, 0, options.MaxActiveStates);
+        Assert.Equal("exhaustive", session.Coverage.Mode);
+    }
+
+    [Fact]
+    public async Task CachedAirportPairs_AreEvaluatedWithoutConsumingTheLiveCallBudget()
+    {
+        var cachedRequest = new ProviderSearchRequest("DUB", "AMS", new(2026, 9, 1), 1, "economy");
+        var cache = new FixtureCache(new Dictionary<string, object>
+        {
+            [ProviderCacheKeyBuilder.BuildFlightApiOneWaySearchKey(cachedRequest)] = Response(cachedRequest, 70, 80)
+        });
+        var provider = new FixtureProvider(request => Response(request, 90, 60));
+        var (runner, store) = CreateRunner(provider, cache);
+        var request = new OrderedTripRequest([Leg("one", ["DUB", "SNN"], ["AMS"], new(2026, 9, 1))], 1, "economy", "recommended");
+
+        await runner.RunAsync("cache-budget", request, 1, CancellationToken.None);
+
+        var session = (await store.GetAsync("cache-budget", CancellationToken.None))!;
+        Assert.Single(provider.Requests);
+        Assert.Equal("SNN", provider.Requests.Single().OriginAirport);
+        Assert.Equal(2, session.Results.Count);
+        Assert.Equal((1, 1, "exhaustive"), (session.Coverage.LiveProviderCallsUsed, session.Coverage.CacheHits, session.Coverage.Mode));
+    }
+
+    [Fact]
+    public async Task RecommendedScoring_UsesDynamicTimeValueAndRetainsEveryRankingLeader()
+    {
+        var provider = new FixtureProvider(request => request.OriginAirport switch
+        {
+            "DUB" => Response(request, 50, 300),
+            "SNN" => Response(request, 100, 60),
+            _ => Response(request, 70, 120)
+        });
+        var options = new MultiDestinationSearchOptions { MaxCandidatesPerState = 25, MaxActiveStates = 1000, MaxStoredResults = 3 };
+        var (runner, store) = CreateRunner(provider, options: options);
+        var request = new OrderedTripRequest([Leg("one", ["DUB", "SNN", "ORK"], ["AMS"], new(2026, 9, 1))], 1, "economy", "recommended");
+
+        await runner.RunAsync("ranking-union", request, 10, CancellationToken.None);
+
+        var results = (await store.GetAsync("ranking-union", CancellationToken.None))!.Results;
+        Assert.Equal(["ORK", "DUB", "SNN"], results.Select(result => result.Legs[0].OriginAirport).ToList());
+        Assert.Equal(80m, results[0].RankingBreakdown.Score);
+    }
+
+    [Fact]
     public async Task ProgressAndCompletionWrites_CannotOverwriteCanceledSession()
     {
         var provider = new BlockingProvider();
@@ -104,14 +174,14 @@ public sealed class OrderedItinerarySearchRunnerTests
         Assert.DoesNotContain(store.History, snapshot => snapshot.SearchId == "cancel-race" && snapshot.Status == "completed");
     }
 
-    private static (OrderedItinerarySearchRunner Runner, ConcurrentStore Store) CreateRunner(IFlightSearchProvider provider)
+    private static (OrderedItinerarySearchRunner Runner, ConcurrentStore Store) CreateRunner(IFlightSearchProvider provider, IProviderResponseCache? cache = null, MultiDestinationSearchOptions? options = null)
     {
         var services = new ServiceCollection();
         services.AddScoped<IFlightSearchProvider>(_ => provider);
         var root = services.BuildServiceProvider();
         var store = new ConcurrentStore();
-        var options = Options.Create(new MultiDestinationSearchOptions { MaxCandidatesPerState = 25, MaxActiveStates = 1000, MaxStoredResults = 100 });
-        return (new(root.GetRequiredService<IServiceScopeFactory>(), store, options, NullLogger<OrderedItinerarySearchRunner>.Instance), store);
+        var configured = Options.Create(options ?? new MultiDestinationSearchOptions { MaxCandidatesPerState = 25, MaxActiveStates = 1000, MaxStoredResults = 100 });
+        return (new(root.GetRequiredService<IServiceScopeFactory>(), store, cache ?? new EmptyProviderCache(), new NoOpGate(), configured, NullLogger<OrderedItinerarySearchRunner>.Instance), store);
     }
 
     private static OrderedLegRequest Leg(string id, List<string> from, List<string> to, DateOnly date, string continuity = "sameAirport") =>
@@ -134,6 +204,31 @@ public sealed class OrderedItinerarySearchRunnerTests
         public ConcurrentBag<ProviderSearchRequest> Requests { get; } = [];
         public Task<FlightApiOneWayResponse> SearchOneWayAsync(ProviderSearchRequest request, CancellationToken cancellationToken) { Requests.Add(request); return Task.FromResult(responseFactory(request)); }
         public Task<FlightApiOneWayResponse> SearchRoundTripAsync(ProviderRoundTripSearchRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class EmptyProviderCache : IProviderResponseCache
+    {
+        public Task<T?> GetAsync<T>(string cacheKey, CancellationToken cancellationToken) => Task.FromResult<T?>(default);
+        public Task SetAsync<T>(string cacheKey, T response, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class FixtureCache(Dictionary<string, object> values) : IProviderResponseCache
+    {
+        public Task<T?> GetAsync<T>(string cacheKey, CancellationToken cancellationToken) =>
+            Task.FromResult(values.TryGetValue(cacheKey, out var value) ? (T?)value : default);
+        public Task SetAsync<T>(string cacheKey, T response, CancellationToken cancellationToken)
+        {
+            values[cacheKey] = response!;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class NoOpGate : IFlightApiRequestGate
+    {
+        public ValueTask<IDisposable> AcquireAsync(CancellationToken cancellationToken) => throw new InvalidOperationException("The ordered runner must not acquire provider permits.");
+        public void RecordCacheHit() { }
+        public void RecordLiveCall() { }
+        public void RecordThrottledResponse() { }
     }
 
     private sealed class BlockingProvider : IFlightSearchProvider

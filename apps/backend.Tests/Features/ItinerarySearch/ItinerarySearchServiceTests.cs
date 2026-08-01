@@ -62,6 +62,69 @@ public sealed class ItinerarySearchServiceTests
     }
 
     [Fact]
+    public async Task AirportGroups_DeduplicateCodesDuringNormalization()
+    {
+        var service = CreateService();
+        var request = CreateOrderedRequest();
+        request = request with
+        {
+            Legs = [request.Legs[0] with { From = request.Legs[0].From with { AirportCodes = [" dub ", "DUB"] } }]
+        };
+
+        var session = await service.StartAsync(request, 25, CancellationToken.None);
+
+        Assert.Equal("running", session.Status);
+    }
+
+    [Fact]
+    public async Task NullAirportCodeCollection_ReturnsAnActionableValidationError()
+    {
+        var service = CreateService();
+        var request = CreateOrderedRequest();
+        request = request with
+        {
+            Legs = [request.Legs[0] with { From = request.Legs[0].From with { AirportCodes = null! } }]
+        };
+
+        var error = await Assert.ThrowsAsync<ItineraryValidationException>(() => service.StartAsync(request, 25, CancellationToken.None));
+
+        Assert.Equal("legs.from.airportCodes", error.Field);
+    }
+
+    [Fact]
+    public async Task ImpossibleOptimizedWindow_FailsBeforeCreatingAProviderSearchSession()
+    {
+        var store = new MemoryStore();
+        var service = CreateService(store: store);
+        var request = CreateOptimizedRequest() with
+        {
+            EndDate = new DateOnly(2026, 9, 2),
+            Destinations = [new DestinationRequest(Group("destination", "AMS"), new StayRuleRequest("minimumNights", 2))]
+        };
+
+        var error = await Assert.ThrowsAsync<ItineraryValidationException>(() => service.StartAsync(request, 25, CancellationToken.None));
+
+        Assert.Equal("endDate", error.Field);
+        Assert.Equal(0, store.Count);
+    }
+
+    [Fact]
+    public async Task FixedEnd_CannotDuplicateADestinationUnderADifferentCorrelationId()
+    {
+        var service = CreateService();
+        var request = CreateOptimizedRequest() with
+        {
+            EndpointMode = "fixedEnd",
+            FixedEnd = Group("different-client-id", "AMS")
+        };
+
+        var error = await Assert.ThrowsAsync<ItineraryValidationException>(() => service.StartAsync(request, 25, CancellationToken.None));
+
+        Assert.Equal("fixedEnd", error.Field);
+        Assert.Contains("duplicate", error.Message);
+    }
+
+    [Fact]
     public async Task Cancellation_IsStableAndPersisted()
     {
         var store = new MemoryStore();
@@ -74,6 +137,35 @@ public sealed class ItinerarySearchServiceTests
         Assert.Equal("canceled", first?.Status);
         Assert.Equal(first, second);
         Assert.Equal(first, await store.GetAsync(running.SearchId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task OptimizedSearch_DispatchesThePricedWorkerWithTheRoleBudgetAndCancellationToken()
+    {
+        var runner = new RecordingOptimizedRunner();
+        var service = CreateService(optimizedRunner: runner);
+
+        await service.StartAsync(CreateOptimizedRequest(), 42, CancellationToken.None);
+        var invocation = await runner.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(42, invocation.ProviderCallLimit);
+        Assert.NotEmpty(invocation.SchedulePlan.Schedules);
+        Assert.True(invocation.CancellationToken.CanBeCanceled);
+    }
+
+    [Fact]
+    public async Task CancelingAnOptimizedSearch_CancelsItsWorkerAndKeepsTheCanceledSessionStable()
+    {
+        var store = new MemoryStore();
+        var runner = new RecordingOptimizedRunner(block: true);
+        var service = CreateService(store: store, optimizedRunner: runner);
+        var running = await service.StartAsync(CreateOptimizedRequest(), 25, CancellationToken.None);
+        await runner.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        await service.CancelAsync(running.SearchId, CancellationToken.None);
+        await runner.Canceled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal("canceled", (await store.GetAsync(running.SearchId, CancellationToken.None))!.Status);
     }
 
     [Fact]
@@ -120,8 +212,8 @@ public sealed class ItinerarySearchServiceTests
         var leg = Leg("DUB", "AMS", 0, "TA");
         var separateA = Result("separate-a", [leg], 1, 0);
         var separateB = Result("separate-b", [leg], 1, 0);
-        var bundled = Result("bundled", [leg], 1, 0) with { BookingType = "bundledFare" };
-        await store.SetAsync(new("pagination", "ordered", "completed", "completed", 100, new(), [separateB, bundled, separateA], []), CancellationToken.None);
+        var futureProviderType = Result("future-provider-type", [leg], 1, 0) with { BookingType = "futureProviderType" };
+        await store.SetAsync(new("pagination", "ordered", "completed", "completed", 100, new(), [separateB, futureProviderType, separateA], []), CancellationToken.None);
 
         var secondPage = await service.GetAsync("pagination", new ItineraryResultsQuery
         {
@@ -134,8 +226,31 @@ public sealed class ItinerarySearchServiceTests
         Assert.Equal("separate-b", Assert.Single(secondPage!.Results).Id);
         Assert.Equal((2, 1, 2, 2), (secondPage.Pagination!.Page, secondPage.Pagination.PageSize, secondPage.Pagination.TotalResults, secondPage.Pagination.TotalPages));
 
-        var bundledOnly = await service.GetAsync("pagination", new ItineraryResultsQuery { BookingType = "bundledFare" }, CancellationToken.None);
-        Assert.Equal("bundled", Assert.Single(bundledOnly!.Results).Id);
+        var futureTypeOnly = await service.GetAsync("pagination", new ItineraryResultsQuery { BookingType = "futureProviderType" }, CancellationToken.None);
+        Assert.Equal("future-provider-type", Assert.Single(futureTypeOnly!.Results).Id);
+    }
+
+    [Fact]
+    public async Task OptimizedFilters_UseAllLegSemanticsAndBookingRiskControls()
+    {
+        var store = new MemoryStore();
+        var service = CreateService(store: store);
+        var matching = Result("matching", [Leg("DUB", "AMS", 0, "TA"), Leg("AMS", "CDG", 0, "TA")], 2, 0);
+        var mixedStops = Result("mixed-stops", [Leg("DUB", "AMS", 0, "TA"), Leg("AMS", "CDG", 1, "TA")], 2, 0);
+        var mixedAirlines = Result("mixed-airlines", [Leg("DUB", "AMS", 0, "TA"), Leg("AMS", "CDG", 0, "TB")], 2, 0);
+        var airportSwitch = Result("airport-switch", [Leg("DUB", "AMS", 0, "TA"), Leg("RTM", "CDG", 0, "TA")], 3, 1);
+        await store.SetAsync(new("optimized-filters", "optimize", "completed", "completed", 100, new(), [matching, mixedStops, mixedAirlines, airportSwitch], []), CancellationToken.None);
+
+        var filtered = await service.GetAsync("optimized-filters", new ItineraryResultsQuery
+        {
+            Direct = true,
+            Airlines = "TA",
+            BookingType = "separateTickets",
+            MaxBookingCount = 2,
+            AllowAirportSwitches = false
+        }, CancellationToken.None);
+
+        Assert.Equal("matching", Assert.Single(filtered!.Results).Id);
     }
 
     internal static OrderedTripRequest CreateOrderedRequest() => new(
@@ -156,18 +271,46 @@ public sealed class ItinerarySearchServiceTests
         id, "separateTickets", legs.Select(leg => leg.DestinationAirport).ToList(), legs, [], 200, "EUR", legs.Sum(leg => leg.DurationMinutes), legs.Sum(leg => leg.Stops), bookings, switches,
         Enumerable.Range(1, bookings).Select(index => new BookingOption($"Book {index}", $"https://book.example/{id}/{index}", 100, "EUR", "FlightApi")).ToList(), [], new(0, 200, 0, legs.Sum(leg => leg.Stops), bookings - 1, switches));
 
-    private static ItinerarySearchService CreateService(MultiDestinationSearchOptions? options = null, MemoryStore? store = null) =>
-        new(store ?? new MemoryStore(), new NoOpRunner(), Options.Create(options ?? new MultiDestinationSearchOptions()));
+    private static ItinerarySearchService CreateService(MultiDestinationSearchOptions? options = null, MemoryStore? store = null, IOptimizedItinerarySearchRunner? optimizedRunner = null) =>
+        new(store ?? new MemoryStore(), new NoOpRunner(), new OptimizedScheduleGenerator(Options.Create(options ?? new MultiDestinationSearchOptions())), optimizedRunner ?? new NoOpOptimizedRunner(), Options.Create(options ?? new MultiDestinationSearchOptions()));
 
     internal sealed class NoOpRunner : IOrderedItinerarySearchRunner
     {
         public Task RunAsync(string searchId, OrderedTripRequest request, int providerCallLimit, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
+    internal sealed class NoOpOptimizedRunner : IOptimizedItinerarySearchRunner
+    {
+        public Task RunAsync(string searchId, OptimizedTripRequest request, OptimizedSchedulePlan schedulePlan, int providerCallLimit, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class RecordingOptimizedRunner(bool block = false) : IOptimizedItinerarySearchRunner
+    {
+        public TaskCompletionSource<Invocation> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Canceled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task RunAsync(string searchId, OptimizedTripRequest request, OptimizedSchedulePlan schedulePlan, int providerCallLimit, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult(new(schedulePlan, providerCallLimit, cancellationToken));
+            if (!block) return;
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                Canceled.TrySetResult();
+            }
+        }
+    }
+
+    private sealed record Invocation(OptimizedSchedulePlan SchedulePlan, int ProviderCallLimit, CancellationToken CancellationToken);
+
     internal sealed class MemoryStore : IItinerarySearchSessionStore
     {
         private readonly Dictionary<string, ItinerarySearchSessionResponse> _sessions = [];
         private readonly object _sync = new();
+        public int Count { get { lock (_sync) return _sessions.Count; } }
         public Task SetAsync(ItinerarySearchSessionResponse session, CancellationToken cancellationToken) { lock (_sync) _sessions[session.SearchId] = session; return Task.CompletedTask; }
         public Task<bool> TrySetUnlessCanceledAsync(ItinerarySearchSessionResponse session, CancellationToken cancellationToken)
         {

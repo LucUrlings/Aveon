@@ -13,6 +13,19 @@ namespace backend.Tests;
 public sealed class SearchServiceTests
 {
     [Fact]
+    public async Task BackgroundProviderCalls_ReceiveABoundedExecutionToken()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var provider = new CancellationTokenRecordingProvider();
+        var service = CreateSearchService(store, provider);
+
+        var initial = await service.StartSearchAsync(CreateRequest(), new SearchLimit(100, null), CancellationToken.None);
+        await store.WaitForTerminalSessionAsync(initial.SearchId);
+
+        Assert.True(provider.TokenCanBeCanceled);
+    }
+
+    [Fact]
     public async Task StartSearchAsync_Completes_WhenIntermediateSessionPersistenceFails()
     {
         var store = new FlakySearchSessionStore(failingCalls: [2]);
@@ -1011,6 +1024,21 @@ public sealed class SearchServiceTests
             ProviderRoundTripSearchRequest request,
             CancellationToken cancellationToken) =>
             Task.FromResult(new FlightApiOneWayResponse());
+    }
+
+    private sealed class CancellationTokenRecordingProvider : IFlightSearchProvider
+    {
+        public bool TokenCanBeCanceled { get; private set; }
+        public Task<FlightApiOneWayResponse> SearchOneWayAsync(ProviderSearchRequest request, CancellationToken cancellationToken)
+        {
+            TokenCanBeCanceled = cancellationToken.CanBeCanceled;
+            return Task.FromResult(new FlightApiOneWayResponse());
+        }
+        public Task<FlightApiOneWayResponse> SearchRoundTripAsync(ProviderRoundTripSearchRequest request, CancellationToken cancellationToken)
+        {
+            TokenCanBeCanceled = cancellationToken.CanBeCanceled;
+            return Task.FromResult(new FlightApiOneWayResponse());
+        }
     }
 
     private sealed class DuplicateEntityFlightSearchProvider : IFlightSearchProvider

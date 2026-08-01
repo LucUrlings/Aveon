@@ -5,5 +5,6 @@ public record ProviderSearchRequest(
     string DestinationAirport,
     DateOnly DepartureDate,
     int Adults,
-    string CabinClass
+    string CabinClass,
+    string Currency = "EUR"
 );

@@ -6,15 +6,20 @@ export type OrderedTripRequest = { mode: 'ordered'; legs: OrderedLegRequest[]; a
 export type OptimizedTripRequest = { mode: 'optimize'; start: AirportGroupRequest; destinations: DestinationRequest[]; endpointMode: string; fixedEnd: AirportGroupRequest | null; startDate: string; endDate: string; defaultAirportContinuity: string; adults: number; cabinClass: string; ranking: Ranking }
 export type ItinerarySearchRequest = OptimizedTripRequest | OrderedTripRequest
 export type Ranking = 'recommended' | 'cheapest' | 'fastest'
+export type ItinerarySearchCapabilities = { providerCallLimit: number; maxOptimizedDestinations: number; maxAirportsPerGroup: number; maxTripDays: number; maxOrderedLegs: number }
 
 export type ItinerarySegment = { marketingCarrierName: string; marketingCarrierCode: string; flightNumber: string; originAirport: string; destinationAirport: string; departureLocalTime: string; arrivalLocalTime: string; durationMinutes: number }
 export type ItineraryLeg = { id: string; originAirport: string; destinationAirport: string; departureLocalTime: string; arrivalLocalTime: string; durationMinutes: number; stops: number; segments: ItinerarySegment[] }
+export type ItineraryStay = { destinationId: string; arrivalDate: string; departureDate: string; nights: number }
 export type BookingOption = { label: string; url: string; price: number; currency: string; provider: string }
-export type ItineraryResult = { id: string; bookingType: string; destinationOrder: string[]; legs: ItineraryLeg[]; totalPrice: number; currency: string; totalFlightDurationMinutes: number; totalStops: number; bookingCount: number; airportSwitches: number; bookingOptions: BookingOption[]; warnings: { code: string; message: string }[]; rankingBreakdown: { score: number } }
+export type RankingBreakdown = { score: number; totalPrice: number; additionalFlightMinutes: number; totalStops: number; additionalBookings: number; airportSwitches: number }
+export type ItineraryResult = { id: string; bookingType: string; destinationOrder: string[]; legs: ItineraryLeg[]; stays: ItineraryStay[]; totalPrice: number; currency: string; totalFlightDurationMinutes: number; totalStops: number; bookingCount: number; airportSwitches: number; bookingOptions: BookingOption[]; warnings: { code: string; message: string }[]; rankingBreakdown: RankingBreakdown }
 export type ItineraryFilterOption = { value: string; label: string; count: number }
 export type ItineraryFilters = { airlines: ItineraryFilterOption[]; bookingSources: ItineraryFilterOption[]; departureAirports: ItineraryFilterOption[]; arrivalAirports: ItineraryFilterOption[]; minPrice?: number | null; maxPrice?: number | null; maxDurationMinutes?: number | null; maxBookingCount?: number | null; maxAirportSwitches?: number | null }
 export type ItineraryPagination = { page: number; pageSize: number; totalResults: number; totalPages: number }
-export type ItinerarySearchSession = { searchId: string; mode: string; status: string; phase: string; progress: number; results: ItineraryResult[]; warnings: { code: string; message: string }[]; errorMessage?: string | null; filters?: ItineraryFilters | null; pagination?: ItineraryPagination | null }
+export type OptimizerFeasibility = { requiredLegCount: number; minimumCalendarDays: number; availableCalendarDays: number; routeOrderCount: number; generatedScheduleCount: number; bounded: boolean }
+export type SearchCoverage = { mode: 'exhaustive' | 'bounded'; liveProviderCallsUsed: number; providerCallLimit: number; cacheHits: number; candidateStatesEvaluated: number; candidateStatesPruned: number }
+export type ItinerarySearchSession = { searchId: string; mode: string; status: string; phase: string; progress: number; coverage: SearchCoverage; results: ItineraryResult[]; warnings: { code: string; message: string }[]; errorMessage?: string | null; filters?: ItineraryFilters | null; pagination?: ItineraryPagination | null; feasibility?: OptimizerFeasibility | null }
 
 export type ItineraryResultsQuery = {
   ranking?: Ranking; direct?: boolean; oneStop?: boolean; twoPlusStops?: boolean

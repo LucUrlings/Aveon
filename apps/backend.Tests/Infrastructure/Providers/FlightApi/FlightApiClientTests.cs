@@ -4,6 +4,7 @@ using backend.Infrastructure.Caching;
 using backend.Infrastructure.Models;
 using backend.Infrastructure.Providers.FlightApi;
 using backend.Infrastructure.Providers.FlightApi.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -32,7 +33,7 @@ public sealed class FlightApiClientTests
         Assert.Equal(0, handler.CallCount);
         Assert.Equal(0, gate.Acquisitions);
         Assert.Equal(1, gate.CacheHits);
-        Assert.Contains("provider:flightapi:oneway:DUB:AMS:2026-05-15:1:premium economy", cache.RequestedKeys);
+        Assert.Contains("provider:flightapi:oneway:DUB:AMS:2026-05-15:1:premium economy:EUR", cache.RequestedKeys);
     }
 
     [Fact]
@@ -41,14 +42,16 @@ public sealed class FlightApiClientTests
         var cache = new RecordingProviderResponseCache();
         var handler = new RecordingHttpMessageHandler(
             """{"itineraries":[{"id":"live-itinerary"}],"legs":[],"segments":[],"places":[],"carriers":[],"agents":[]}""");
-        var client = CreateClient(handler, cache);
+        var gate = new RecordingGate();
+        var client = CreateClient(handler, cache, gate);
 
         var response = await client.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None);
 
         Assert.Equal("live-itinerary", response.Itineraries[0].Id);
         Assert.Equal("https://api.flightapi.io/onewaytrip/test-key/DUB/AMS/2026-05-15/1/0/0/Premium_Economy/EUR", handler.LastRequestUri);
-        Assert.Equal("provider:flightapi:oneway:DUB:AMS:2026-05-15:1:premium economy", cache.LastSetKey);
+        Assert.Equal("provider:flightapi:oneway:DUB:AMS:2026-05-15:1:premium economy:EUR", cache.LastSetKey);
         Assert.NotNull(cache.LastFlightResponse);
+        Assert.Equal((1, 1), (gate.Acquisitions, gate.Releases));
     }
 
     [Fact]
@@ -76,6 +79,7 @@ public sealed class FlightApiClientTests
             Options.Create(new FlightApiOptions()),
             cache,
             CreateGate(),
+            new ProviderRequestCoalescer(),
             NullLogger<FlightApiClient>.Instance);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -85,7 +89,7 @@ public sealed class FlightApiClientTests
     }
 
     [Fact]
-    public async Task LiveSimpleOrderedAndAirportRequests_ShareTheSameFivePermitGate()
+    public async Task LiveSimpleOrderedOptimizedAndAirportRequests_ShareTheSameFivePermitGate()
     {
         var cache = new RecordingProviderResponseCache();
         var handler = new ConcurrentTrackingHttpMessageHandler(
@@ -93,15 +97,17 @@ public sealed class FlightApiClientTests
         using var gate = new FlightApiRequestGate(Options.Create(new FlightApiOptions { MaxConcurrentRequests = 5 }));
         var client = CreateClient(handler, cache, gate);
 
-        var orderedEdges = Enumerable.Range(0, 8).Select(offset =>
+        var orderedEdges = Enumerable.Range(0, 4).Select(offset =>
             client.SearchOneWayAsync(CreateSearchRequest() with { DepartureDate = new DateOnly(2026, 5, 15).AddDays(offset) }, CancellationToken.None));
-        await Task.WhenAll(orderedEdges.Cast<Task>().Concat(new Task[] {
+        var optimizedEdges = Enumerable.Range(4, 4).Select(offset =>
+            client.SearchOneWayAsync(CreateSearchRequest() with { DepartureDate = new DateOnly(2026, 5, 15).AddDays(offset) }, CancellationToken.None));
+        await Task.WhenAll(orderedEdges.Concat(optimizedEdges).Cast<Task>().Concat(new Task[] {
             client.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None),
             client.SearchRoundTripAsync(new ProviderRoundTripSearchRequest("DUB", "AMS", new DateOnly(2026, 5, 15), new DateOnly(2026, 5, 20), 1, "economy"), CancellationToken.None),
             client.SearchAirportsAsync("Dublin", CancellationToken.None)
         }));
 
-        Assert.Equal(11, handler.CallCount);
+        Assert.Equal(10, handler.CallCount);
         Assert.InRange(handler.MaximumConcurrentCalls, 1, 5);
     }
 
@@ -134,13 +140,50 @@ public sealed class FlightApiClientTests
         Assert.Equal((2, 2, 1), (gate.Acquisitions, gate.Releases, gate.ThrottledResponses));
     }
 
+    [Fact]
+    public async Task ConcurrentIdenticalCacheMisses_AreCoalescedBeforeTheLiveRequestGate()
+    {
+        var cache = new RecordingProviderResponseCache();
+        var handler = new ConcurrentTrackingHttpMessageHandler(
+            """{"itineraries":[],"legs":[],"segments":[],"places":[],"carriers":[],"agents":[]}""");
+        var gate = new RecordingGate();
+        var coalescer = new ProviderRequestCoalescer();
+        var client = CreateClient(handler, cache, gate, coalescer);
+
+        await Task.WhenAll(
+            client.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None),
+            client.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None),
+            client.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None));
+
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal((1, 1), (gate.Acquisitions, gate.Releases));
+    }
+
+    [Fact]
+    public async Task StructuredLogs_NeverContainProviderCredentialsOrBookingTokens()
+    {
+        var logger = new RecordingLogger<FlightApiClient>();
+        var handler = new RecordingHttpMessageHandler(
+            """{"itineraries":[{"id":"safe","deepLink":"https://book.example/fare?token=booking-secret"}],"legs":[],"segments":[],"places":[],"carriers":[],"agents":[]}""");
+        var client = CreateClient(handler, new RecordingProviderResponseCache(), logger: logger);
+
+        await client.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None);
+
+        var renderedLogs = string.Join('\n', logger.Messages);
+        Assert.DoesNotContain("test-key", renderedLogs, StringComparison.Ordinal);
+        Assert.DoesNotContain("booking-secret", renderedLogs, StringComparison.Ordinal);
+        Assert.DoesNotContain("token=", renderedLogs, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ProviderSearchRequest CreateSearchRequest() =>
         new("DUB", "AMS", new DateOnly(2026, 5, 15), 1, "premium economy");
 
     private static FlightApiClient CreateClient(
         HttpMessageHandler handler,
         IProviderResponseCache cache,
-        IFlightApiRequestGate? gate = null) =>
+        IFlightApiRequestGate? gate = null,
+        IProviderRequestCoalescer? coalescer = null,
+        ILogger<FlightApiClient>? logger = null) =>
         new(
             new HttpClient(handler) { BaseAddress = new Uri("https://api.flightapi.io/") },
             Options.Create(new FlightApiOptions
@@ -151,7 +194,8 @@ public sealed class FlightApiClientTests
             }),
             cache,
             gate ?? CreateGate(),
-            NullLogger<FlightApiClient>.Instance);
+            coalescer ?? new ProviderRequestCoalescer(),
+            logger ?? NullLogger<FlightApiClient>.Instance);
 
     private static IFlightApiRequestGate CreateGate() =>
         new FlightApiRequestGate(Options.Create(new FlightApiOptions { MaxConcurrentRequests = 5 }));
@@ -298,5 +342,14 @@ public sealed class FlightApiClientTests
             }
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}", Encoding.UTF8, "application/json") });
         }
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Messages.Add(formatter(state, exception));
     }
 }

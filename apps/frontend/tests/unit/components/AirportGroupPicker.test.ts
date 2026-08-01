@@ -22,4 +22,21 @@ describe('AirportGroupPicker', () => {
     await wrapper.get('.airport-chip').trigger('click')
     expect(wrapper.emitted('removeAirport')?.[0]).toEqual(['DUB'])
   })
+
+  it('enforces the configured airport-group limit', async () => {
+    const selected = { code: 'DUB', name: 'Dublin', displayLabel: 'Dublin (DUB)' }
+    const suggestion = { code: 'SNN', name: 'Shannon', displayLabel: 'Shannon (SNN)' }
+    const wrapper = mount(AirportGroupPicker, {
+      props: {
+        label: 'Airport group', inputAriaLabel: 'Add airport', suggestionsAriaLabel: 'Airport suggestions',
+        suggestionIdPrefix: 'limited', suggestions: [suggestion], input: '', airports: [selected], maxAirports: 1,
+        'onUpdate:input': () => {}, 'onUpdate:airports': () => {},
+      },
+    })
+
+    expect(wrapper.get('[role="combobox"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('.suggestion-button').trigger('click')
+    expect(wrapper.emitted('addAirport')).toBeUndefined()
+    expect(wrapper.text()).toContain('Up to 1 airport')
+  })
 })
