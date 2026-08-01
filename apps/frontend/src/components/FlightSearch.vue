@@ -78,6 +78,7 @@ const {
   selectedReturnDates,
 } = searchDates
 let hasMounted = false
+let shouldInitializeResultStageFilters = false
 
 const sessionState = useSearchSession({
   buildQuery: () => buildSearchResultsQuery(),
@@ -272,7 +273,8 @@ const loadedStopCounts = computed(() => {
   }
 
   for (const result of filteredResults.value) {
-    const stops = result.legs.reduce((sum, leg) => sum + Math.max(leg.segments.length - 1, 0), 0)
+    const filterLegIndex = selectedOutboundLegId.value ? 1 : 0
+    const stops = Math.max((result.legs[filterLegIndex]?.segments.length ?? 1) - 1, 0)
 
     if (stops <= 0) {
       counts.direct += 1
@@ -394,18 +396,13 @@ const buildSearchResultsQuery = (): SearchResultsQuery => {
     pageSize: DEFAULT_PAGE_SIZE,
   }
 
-  // Provider names and total duration change when independently bookable
-  // outbound/inbound fares are combined. Reusing those outbound-stage filters
-  // would hide valid recommendations immediately after selecting a leg.
-  if (!selectedOutboundLegId.value) {
-    const explicitProviders = getExplicitSelection(selectedProviders.value, providerFilters.value)
-    if (explicitProviders.length > 0) {
-      query.providers = explicitProviders
-    }
+  const explicitProviders = getExplicitSelection(selectedProviders.value, providerFilters.value)
+  if (explicitProviders.length > 0) {
+    query.providers = explicitProviders
+  }
 
-    if (response.value && maxDurationMinutes.value > 0 && maxDurationMinutes.value < availableMaxDurationMinutes.value) {
-      query.maxDuration = maxDurationMinutes.value
-    }
+  if (response.value && maxDurationMinutes.value > 0 && maxDurationMinutes.value < availableMaxDurationMinutes.value) {
+    query.maxDuration = maxDurationMinutes.value
   }
 
   const explicitAirlines = getExplicitSelection(selectedAirlines.value, airlineFilters.value)
@@ -455,7 +452,9 @@ const buildSearchResultsQuery = (): SearchResultsQuery => {
 watch(
   response,
   (nextResponse, previousResponse) => {
-    const shouldResetFilters = !previousResponse && Boolean(nextResponse) && !hasHydratedFiltersFromUrl.value
+    const shouldResetFilters = Boolean(nextResponse) && (
+      (!previousResponse && !hasHydratedFiltersFromUrl.value) || shouldInitializeResultStageFilters
+    )
     const previousProviderFilters = previousResponse?.filters.providers.map((option: { value: string }) => option.value) ?? []
     const previousAirlineFilters = previousResponse?.filters.airlines.map((option: { value: string }) => option.value) ?? []
     const previousDepartureAirportFilters = previousResponse?.filters.departureAirports.map((option: { value: string }) => option.value) ?? []
@@ -467,6 +466,7 @@ watch(
     syncSelectedFiltersToAvailable(selectedArrivalAirports, arrivalAirportFilters.value, previousArrivalAirportFilters, shouldResetFilters)
     syncMaxDurationToAvailable(shouldResetFilters)
     hasHydratedFiltersFromUrl.value = false
+    if (nextResponse) shouldInitializeResultStageFilters = false
   },
   { immediate: true },
 )
@@ -544,9 +544,26 @@ const toggleExpanded = (resultId: string) => {
   expandedResultIds.value = [...expandedResultIds.value, resultId]
 }
 
+const resetFiltersForResultStage = () => {
+  includeDirectFlights.value = true
+  includeOneStopFlights.value = false
+  includeTwoPlusStopFlights.value = false
+  selectedProviders.value = []
+  selectedAirlines.value = []
+  selectedDepartureAirports.value = []
+  selectedArrivalAirports.value = []
+  maxDurationMinutes.value = 0
+  departureTimeRange.value = [0, 1439]
+  arrivalTimeRange.value = [0, 1439]
+  returnDepartureTimeRange.value = [0, 1439]
+  returnArrivalTimeRange.value = [0, 1439]
+  shouldInitializeResultStageFilters = true
+}
+
 const toggleLegFilter = ({ legId, legIndex }: { legId: string; legIndex: number }) => {
   if (legIndex === 0) {
     const isClearingSelection = selectedOutboundLegId.value === legId
+    resetFiltersForResultStage()
     selectedOutboundLegId.value = isClearingSelection ? null : legId
     returnRanking.value = 'best'
     selectedOutboundResult.value = isClearingSelection
@@ -559,6 +576,7 @@ const toggleLegFilter = ({ legId, legIndex }: { legId: string; legIndex: number 
 }
 
 const clearLegFilters = () => {
+  if (selectedOutboundLegId.value || selectedReturnLegId.value) resetFiltersForResultStage()
   selectedOutboundLegId.value = null
   selectedOutboundResult.value = null
   selectedReturnLegId.value = null
@@ -652,6 +670,7 @@ const swapLocations = () => {
       <SearchFilters
         v-if="response"
         :trip-type="tripType"
+        :selected-outbound-leg-id="selectedOutboundLegId"
         v-model:include-direct-flights="includeDirectFlights"
         v-model:include-one-stop-flights="includeOneStopFlights"
         v-model:include-two-plus-stop-flights="includeTwoPlusStopFlights"

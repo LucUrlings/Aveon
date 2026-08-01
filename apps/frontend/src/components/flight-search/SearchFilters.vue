@@ -3,6 +3,7 @@ import { ref } from 'vue'
 
 const props = defineProps<{
   tripType: 'oneWay' | 'return'
+  selectedOutboundLegId: string | null
   providerFilters: string[]
   airlineFilters: string[]
   departureAirportFilters: string[]
@@ -98,10 +99,10 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
   <aside class="filters-panel" aria-labelledby="search-filters-title">
     <div class="filters-card">
       <p class="eyebrow">Filters</p>
-      <h3 id="search-filters-title">Refine results</h3>
+      <h3 id="search-filters-title">{{ props.selectedOutboundLegId ? 'Refine return options' : 'Refine results' }}</h3>
 
       <section class="filter-section" :class="{ open: expandedSections.stops }">
-        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.stops" aria-controls="filter-stops" @click="toggleSection('stops')">Stops</button>
+        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.stops" aria-controls="filter-stops" @click="toggleSection('stops')">{{ props.selectedOutboundLegId ? 'Return stops' : 'Stops' }}</button>
         <div v-show="expandedSections.stops" id="filter-stops" class="filter-section-body" :class="{ open: expandedSections.stops }">
           <div class="filter-section-inner stop-filter-group">
             <label class="filter-toggle">
@@ -121,11 +122,11 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
       </section>
 
       <section class="filter-section" :class="{ open: expandedSections.duration }">
-        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.duration" aria-controls="filter-duration" @click="toggleSection('duration')">Max duration</button>
+        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.duration" aria-controls="filter-duration" @click="toggleSection('duration')">{{ props.selectedOutboundLegId ? 'Max return duration' : 'Max duration' }}</button>
         <div v-show="expandedSections.duration" id="filter-duration" class="filter-section-body" :class="{ open: expandedSections.duration }">
           <div class="filter-section-inner time-filter-group">
             <div class="time-filter-header">
-              <span class="filter-label">Max duration</span>
+              <span class="filter-label">{{ props.selectedOutboundLegId ? 'Max return duration' : 'Max duration' }}</span>
               <strong>{{ formatDuration(maxDurationMinutes) }}</strong>
             </div>
             <div class="single-range-slider">
@@ -137,7 +138,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
               <input
                 :value="maxDurationMinutes"
                 type="range"
-                aria-label="Maximum journey duration"
+                :aria-label="props.selectedOutboundLegId ? 'Maximum return flight duration' : 'Maximum journey duration'"
                 min="0"
                 :max="availableMaxDurationMinutes"
                 step="15"
@@ -148,7 +149,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
         </div>
       </section>
 
-      <section class="filter-section" :class="{ open: expandedSections.departure }">
+      <section v-if="!props.selectedOutboundLegId" class="filter-section" :class="{ open: expandedSections.departure }">
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.departure" aria-controls="filter-departure" @click="toggleSection('departure')">
           {{ props.tripType === 'return' ? 'Outbound departure time' : 'Departure time' }}
         </button>
@@ -184,7 +185,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
         </div>
       </section>
 
-      <section class="filter-section" :class="{ open: expandedSections.arrival }">
+      <section v-if="!props.selectedOutboundLegId" class="filter-section" :class="{ open: expandedSections.arrival }">
         <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.arrival" aria-controls="filter-arrival" @click="toggleSection('arrival')">
           {{ props.tripType === 'return' ? 'Outbound arrival time' : 'Arrival time' }}
         </button>
@@ -225,11 +226,11 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
         class="filter-section"
         :class="{ open: expandedSections.returnDeparture }"
       >
-        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.returnDeparture" aria-controls="filter-return-departure" @click="toggleSection('returnDeparture')">Return departure time</button>
+        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.returnDeparture" aria-controls="filter-return-departure" @click="toggleSection('returnDeparture')">{{ props.selectedOutboundLegId ? 'Departure time' : 'Return departure time' }}</button>
         <div v-show="expandedSections.returnDeparture" id="filter-return-departure" class="filter-section-body" :class="{ open: expandedSections.returnDeparture }">
           <div class="filter-section-inner time-filter-group">
             <div class="time-filter-header">
-              <span class="filter-label">Return departure time</span>
+              <span class="filter-label">{{ props.selectedOutboundLegId ? 'Departure time' : 'Return departure time' }}</span>
               <strong>{{ formatMinutes(returnDepartureTimeRange[0]) }} - {{ formatMinutes(returnDepartureTimeRange[1]) }}</strong>
             </div>
             <div class="range-slider">
@@ -263,11 +264,11 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
         class="filter-section"
         :class="{ open: expandedSections.returnArrival }"
       >
-        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.returnArrival" aria-controls="filter-return-arrival" @click="toggleSection('returnArrival')">Return arrival time</button>
+        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.returnArrival" aria-controls="filter-return-arrival" @click="toggleSection('returnArrival')">{{ props.selectedOutboundLegId ? 'Arrival time' : 'Return arrival time' }}</button>
         <div v-show="expandedSections.returnArrival" id="filter-return-arrival" class="filter-section-body" :class="{ open: expandedSections.returnArrival }">
           <div class="filter-section-inner time-filter-group">
             <div class="time-filter-header">
-              <span class="filter-label">Return arrival time</span>
+              <span class="filter-label">{{ props.selectedOutboundLegId ? 'Arrival time' : 'Return arrival time' }}</span>
               <strong>{{ formatMinutes(returnArrivalTimeRange[0]) }} - {{ formatMinutes(returnArrivalTimeRange[1]) }}</strong>
             </div>
             <div class="range-slider">
@@ -297,7 +298,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
       </section>
 
       <section class="filter-section" :class="{ open: expandedSections.departureAirports }">
-        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.departureAirports" aria-controls="filter-departure-airports" @click="toggleSection('departureAirports')">Departure airport</button>
+        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.departureAirports" aria-controls="filter-departure-airports" @click="toggleSection('departureAirports')">{{ props.selectedOutboundLegId ? 'Return departure airport' : 'Departure airport' }}</button>
         <div v-show="expandedSections.departureAirports" id="filter-departure-airports" class="filter-section-body" :class="{ open: expandedSections.departureAirports }">
           <div class="filter-section-inner provider-filter-group">
             <template v-if="departureAirportFilters.length">
@@ -316,7 +317,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
       </section>
 
       <section class="filter-section" :class="{ open: expandedSections.arrivalAirports }">
-        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.arrivalAirports" aria-controls="filter-arrival-airports" @click="toggleSection('arrivalAirports')">Arrival airport</button>
+        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.arrivalAirports" aria-controls="filter-arrival-airports" @click="toggleSection('arrivalAirports')">{{ props.selectedOutboundLegId ? 'Return arrival airport' : 'Arrival airport' }}</button>
         <div v-show="expandedSections.arrivalAirports" id="filter-arrival-airports" class="filter-section-body" :class="{ open: expandedSections.arrivalAirports }">
           <div class="filter-section-inner provider-filter-group">
             <template v-if="arrivalAirportFilters.length">
@@ -354,7 +355,7 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
       </section>
 
       <section class="filter-section" :class="{ open: expandedSections.airlines }">
-        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.airlines" aria-controls="filter-airlines" @click="toggleSection('airlines')">Airlines</button>
+        <button type="button" class="filter-section-summary" :aria-expanded="expandedSections.airlines" aria-controls="filter-airlines" @click="toggleSection('airlines')">{{ props.selectedOutboundLegId ? 'Return airlines' : 'Airlines' }}</button>
         <div v-show="expandedSections.airlines" id="filter-airlines" class="filter-section-body" :class="{ open: expandedSections.airlines }">
           <div class="filter-section-inner provider-filter-group">
             <template v-if="airlineFilters.length">

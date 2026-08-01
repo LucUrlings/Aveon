@@ -416,6 +416,61 @@ public sealed class SearchServiceTests
     }
 
     [Fact]
+    public async Task GetSearchAsync_AppliesSelectedOutboundFiltersToTheReturnLeg()
+    {
+        var request = new SearchRequest(
+            ["DUB"],
+            ["AMS"],
+            [new DateOnly(2026, 5, 15)],
+            [new DateOnly(2026, 5, 15)],
+            1,
+            "economy");
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        var service = CreateSearchService(store, new RoundTripMergeFlightSearchProvider());
+        var initialSession = await service.StartSearchAsync(request, new SearchLimit(100, null), CancellationToken.None);
+        var finalSession = await store.WaitForTerminalSessionAsync(initialSession.SearchId);
+        var outboundLegId = finalSession.Response.Results[0].Legs[0].Id;
+
+        var selectedSession = await service.GetSearchAsync(
+            initialSession.SearchId,
+            new SearchResultsQuery { OutboundLegId = outboundLegId },
+            CancellationToken.None);
+
+        Assert.NotNull(selectedSession);
+        Assert.Equal("AMS", Assert.Single(selectedSession!.Response.Filters.DepartureAirports).Value);
+        Assert.Equal("DUB", Assert.Single(selectedSession.Response.Filters.ArrivalAirports).Value);
+        Assert.Equal("Test Return Airline", Assert.Single(selectedSession.Response.Filters.Airlines).Value);
+        Assert.Equal(120, selectedSession.Response.Filters.DurationMinutes.Max);
+
+        var returnFilteredSession = await service.GetSearchAsync(
+            initialSession.SearchId,
+            new SearchResultsQuery
+            {
+                OutboundLegId = outboundLegId,
+                DepartureAirports = "AMS",
+                ArrivalAirports = "DUB",
+                Airlines = "Test Return Airline",
+                MaxDuration = 150
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(returnFilteredSession);
+        Assert.Equal(2, returnFilteredSession!.Response.Results.Count);
+
+        var outboundAirlineSession = await service.GetSearchAsync(
+            initialSession.SearchId,
+            new SearchResultsQuery
+            {
+                OutboundLegId = outboundLegId,
+                Airlines = "Test Outbound Airline"
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(outboundAirlineSession);
+        Assert.Empty(outboundAirlineSession!.Response.Results);
+    }
+
+    [Fact]
     public async Task StartSearchAsync_DropsSyntheticRoundTripFares_WhenEitherHalfLacksABookingLink()
     {
         var request = new SearchRequest(
@@ -1423,7 +1478,8 @@ public sealed class SearchServiceTests
                 ],
                 Carriers =
                 [
-                    new FlightApiCarrier { Id = 1, Name = "Test Airline", DisplayCode = "TA" }
+                    new FlightApiCarrier { Id = 1, Name = "Test Outbound Airline", DisplayCode = "TO" },
+                    new FlightApiCarrier { Id = 2, Name = "Test Return Airline", DisplayCode = "TR" }
                 ]
             };
 
@@ -1478,7 +1534,7 @@ public sealed class SearchServiceTests
                         Arrival = arrival,
                         Duration = (int)(arrival - departure).TotalMinutes,
                         MarketingFlightNumber = id,
-                        MarketingCarrierId = 1
+                        MarketingCarrierId = originPlaceId == 2 ? 2 : 1
                     }
                 ]);
         }
@@ -1557,7 +1613,7 @@ public sealed class SearchServiceTests
                         Arrival = inboundArrival,
                         Duration = (int)(inboundArrival - inboundDeparture).TotalMinutes,
                         MarketingFlightNumber = "inbound-late",
-                        MarketingCarrierId = 1
+                        MarketingCarrierId = 2
                     }
                 ]);
         }

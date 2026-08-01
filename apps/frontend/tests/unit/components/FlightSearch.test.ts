@@ -479,6 +479,7 @@ describe('FlightSearch', () => {
         pageSize: 100,
       }), expect.any(AbortSignal))
     })
+
   })
 
   it('filters return combinations by a selected leg through the backend query', async () => {
@@ -533,7 +534,15 @@ describe('FlightSearch', () => {
               emits: ['submit'],
               template: '<button class="submit-search" @click="$emit(\'submit\')">submit</button>',
             },
-            SearchFilters: true,
+            SearchFilters: {
+              emits: ['update:selectedProviders', 'update:maxDurationMinutes'],
+              template: `
+                <div>
+                  <button class="set-return-provider-filter" @click="$emit('update:selectedProviders', ['FlightApi:Return Provider'])">provider</button>
+                  <button class="set-return-duration-filter" @click="$emit('update:maxDurationMinutes', 60)">duration</button>
+                </div>
+              `,
+            },
             SearchResultCard: {
               emits: ['filterLeg'],
               template: '<button class="filter-leg" @click="$emit(\'filterLeg\', { legId: \'return-outbound-leg\', legIndex: 0 })">filter leg</button>',
@@ -554,6 +563,19 @@ describe('FlightSearch', () => {
         oneStop: false,
         twoPlusStop: false,
         outboundLegId: 'return-outbound-leg',
+        page: 1,
+        pageSize: 100,
+      }), expect.any(AbortSignal))
+    })
+
+    await wrapper.get('.set-return-provider-filter').trigger('click')
+    await wrapper.get('.set-return-duration-filter').trigger('click')
+
+    await vi.waitFor(() => {
+      expect(mockGetSearchSession).toHaveBeenLastCalledWith('search-1', expect.objectContaining({
+        outboundLegId: 'return-outbound-leg',
+        providers: ['FlightApi:Return Provider'],
+        maxDuration: 60,
         page: 1,
         pageSize: 100,
       }), expect.any(AbortSignal))

@@ -5,7 +5,7 @@ import SearchProgress from '../../../src/components/flight-search/SearchProgress
 
 const mountFilters = () => mount(SearchFilters, {
   props: {
-    tripType: 'oneWay', providerFilters: ['Provider'], airlineFilters: ['Airline'],
+    tripType: 'oneWay', selectedOutboundLegId: null, providerFilters: ['Provider'], airlineFilters: ['Airline'],
     departureAirportFilters: ['DUB'], arrivalAirportFilters: ['AMS'], availableMaxDurationMinutes: 600,
     maxDurationMinutes: 600, includeDirectFlights: true, includeOneStopFlights: false,
     includeTwoPlusStopFlights: false, selectedProviders: ['Provider'], selectedAirlines: ['Airline'],
@@ -31,6 +31,21 @@ describe('search accessibility', () => {
 
     expect(sourcePanel.attributes('style')).not.toContain('display: none')
     expect(wrapper.get('button[aria-controls="filter-sources"]').attributes('aria-expanded')).toBe('true')
+  })
+
+  it('presents return-stage filters for the selectable return leg', async () => {
+    const wrapper = mountFilters()
+    await wrapper.setProps({ tripType: 'return', selectedOutboundLegId: 'outbound-leg' })
+
+    expect(wrapper.text()).toContain('Return stops')
+    expect(wrapper.text()).toContain('Max return duration')
+    expect(wrapper.text()).toContain('Return departure airport')
+    expect(wrapper.text()).toContain('Return arrival airport')
+    expect(wrapper.text()).toContain('Return airlines')
+    expect(wrapper.find('#filter-departure').exists()).toBe(false)
+    expect(wrapper.find('#filter-arrival').exists()).toBe(false)
+    expect(wrapper.find('#filter-return-departure').exists()).toBe(true)
+    expect(wrapper.find('#filter-return-arrival').exists()).toBe(true)
   })
 
   it('exposes determinate search progress to assistive technology', () => {

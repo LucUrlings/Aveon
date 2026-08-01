@@ -589,11 +589,12 @@ public sealed class SearchService(
         int providerResultCount,
         SearchResultsQuery query)
     {
-        var globalFilters = BuildGlobalFilterMetadata(canonicalResults);
-        var baseFilteredResults = ApplyBaseFilters(canonicalResults, query).ToList();
-        var filteredResults = ApplyFinalFilters(baseFilteredResults, query).ToList();
+        var filterLegIndex = query.GetOutboundLegId() is null ? 0 : 1;
+        var globalFilters = BuildGlobalFilterMetadata(canonicalResults, filterLegIndex);
+        var baseFilteredResults = ApplyBaseFilters(canonicalResults, query, filterLegIndex).ToList();
+        var filteredResults = ApplyFinalFilters(baseFilteredResults, query, filterLegIndex).ToList();
         var pagination = ApplyPagination(filteredResults, query, out var pagedResults);
-        var returnedStopCounts = BuildStopCounts(pagedResults);
+        var returnedStopCounts = BuildStopCounts(pagedResults, filterLegIndex);
         var visibleProviderResultCount = filteredResults.Sum(result => result.PriceOptions.Count);
 
         return new SearchResponse(
@@ -605,7 +606,7 @@ public sealed class SearchService(
                 returnedStopCounts.DirectFlightCount,
                 returnedStopCounts.OneStopFlightCount,
                 returnedStopCounts.TwoPlusStopFlightCount),
-            BuildFiltersMetadata(globalFilters, baseFilteredResults),
+            BuildFiltersMetadata(globalFilters, baseFilteredResults, filterLegIndex),
             pagination);
     }
 
@@ -1159,7 +1160,7 @@ public sealed class SearchService(
     private static string FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
 
-    private static StopCounts BuildStopCounts(IEnumerable<SearchResult> results)
+    private static StopCounts BuildStopCounts(IEnumerable<SearchResult> results, int legIndex = 0)
     {
         var direct = 0;
         var oneStop = 0;
@@ -1167,17 +1168,17 @@ public sealed class SearchService(
 
         foreach (var result in results)
         {
-            var maxStopsOnAnyLeg = result.Legs.Count == 0
+            var stops = result.Legs.Count <= legIndex
                 ? 0
-                : result.Legs.Max(leg => Math.Max(leg.Segments.Count - 1, 0));
+                : Math.Max(result.Legs[legIndex].Segments.Count - 1, 0);
 
-            if (maxStopsOnAnyLeg == 0)
+            if (stops == 0)
             {
                 direct += 1;
                 continue;
             }
 
-            if (maxStopsOnAnyLeg == 1)
+            if (stops == 1)
             {
                 oneStop += 1;
                 continue;
@@ -1191,7 +1192,8 @@ public sealed class SearchService(
 
     private static List<SearchResult> ApplyBaseFilters(
         IEnumerable<SearchResult> results,
-        SearchResultsQuery query)
+        SearchResultsQuery query,
+        int filterLegIndex)
     {
         var providers = query.GetProviders();
         var airlines = query.GetAirlines();
@@ -1221,9 +1223,9 @@ public sealed class SearchService(
             })
             .Where(result => result is not null)
             .Cast<SearchResult>()
-            .Where(result => MatchesStopFilters(result, query))
-            .Where(result => MatchesAirlineFilters(result, airlines))
-            .Where(result => MatchesAirportFilters(result, departureAirports, arrivalAirports))
+            .Where(result => MatchesStopFilters(result, query, filterLegIndex))
+            .Where(result => MatchesAirlineFilters(result, airlines, filterLegIndex))
+            .Where(result => MatchesAirportFilters(result, departureAirports, arrivalAirports, filterLegIndex))
             .Where(result => MatchesTimeFilters(result, departureTimeRange, arrivalTimeRange, returnDepartureTimeRange, returnArrivalTimeRange))
             .Where(result => MatchesLegFilters(result, outboundLegId, returnLegId))
             .ToList();
@@ -1231,9 +1233,11 @@ public sealed class SearchService(
 
     private static List<SearchResult> ApplyFinalFilters(
         IEnumerable<SearchResult> results,
-        SearchResultsQuery query)
+        SearchResultsQuery query,
+        int filterLegIndex)
         => results
-            .Where(result => !query.MaxDuration.HasValue || result.TotalDurationMinutes <= query.MaxDuration.Value)
+            .Where(result => !query.MaxDuration.HasValue ||
+                (result.Legs.ElementAtOrDefault(filterLegIndex)?.DurationMinutes ?? result.TotalDurationMinutes) <= query.MaxDuration.Value)
             .ToList();
 
     private static SearchPagination ApplyPagination(
@@ -1262,25 +1266,26 @@ public sealed class SearchService(
         return new SearchPagination(page, pageSizeWithDefault, totalResults, totalPages);
     }
 
-    private static SearchFiltersMetadata BuildGlobalFilterMetadata(List<SearchResult> results) =>
+    private static SearchFiltersMetadata BuildGlobalFilterMetadata(List<SearchResult> results, int filterLegIndex) =>
         new(
             BuildProviderCounts(results),
-            BuildAirlineCounts(results),
-            BuildAirportCounts(results, result => result.Legs.FirstOrDefault()?.OriginAirport),
-            BuildAirportCounts(results, result => result.Legs.FirstOrDefault()?.DestinationAirport),
-            BuildDurationRange(results),
+            BuildAirlineCounts(results, filterLegIndex),
+            BuildAirportCounts(results, result => result.Legs.ElementAtOrDefault(filterLegIndex)?.OriginAirport),
+            BuildAirportCounts(results, result => result.Legs.ElementAtOrDefault(filterLegIndex)?.DestinationAirport),
+            BuildDurationRange(results, filterLegIndex),
             BuildTimeRange(results, 0, leg => leg.DepartureLocalTime),
             BuildTimeRange(results, 0, leg => leg.ArrivalLocalTime),
             BuildTimeRange(results, 1, leg => leg.DepartureLocalTime),
             BuildTimeRange(results, 1, leg => leg.ArrivalLocalTime),
-            BuildStopFilterMetadata(results));
+            BuildStopFilterMetadata(results, filterLegIndex));
 
     private static SearchFiltersMetadata BuildFiltersMetadata(
         SearchFiltersMetadata globalFilters,
-        List<SearchResult> baseFilteredResults) =>
+        List<SearchResult> baseFilteredResults,
+        int filterLegIndex) =>
         globalFilters with
         {
-            DurationMinutes = BuildDurationRange(baseFilteredResults),
+            DurationMinutes = BuildDurationRange(baseFilteredResults, filterLegIndex),
             DepartureTimeMinutes = BuildTimeRange(baseFilteredResults, 0, leg => leg.DepartureLocalTime),
             ArrivalTimeMinutes = BuildTimeRange(baseFilteredResults, 0, leg => leg.ArrivalLocalTime),
             ReturnDepartureTimeMinutes = BuildTimeRange(baseFilteredResults, 1, leg => leg.DepartureLocalTime),
@@ -1295,9 +1300,11 @@ public sealed class SearchService(
             .OrderBy(option => option.Value, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-    private static List<SearchFilterOptionCount> BuildAirlineCounts(IEnumerable<SearchResult> results) =>
+    private static List<SearchFilterOptionCount> BuildAirlineCounts(IEnumerable<SearchResult> results, int legIndex) =>
         results
-            .SelectMany(result => result.Legs)
+            .Select(result => result.Legs.ElementAtOrDefault(legIndex))
+            .Where(leg => leg is not null)
+            .Cast<SearchResultLeg>()
             .SelectMany(leg => leg.Segments)
             .Where(segment => !string.IsNullOrWhiteSpace(segment.MarketingCarrierName))
             .GroupBy(segment => segment.MarketingCarrierName, StringComparer.OrdinalIgnoreCase)
@@ -1317,9 +1324,11 @@ public sealed class SearchService(
             .OrderBy(option => option.Value, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-    private static SearchRangeMetadata BuildDurationRange(IEnumerable<SearchResult> results)
+    private static SearchRangeMetadata BuildDurationRange(IEnumerable<SearchResult> results, int legIndex)
     {
-        var durations = results.Select(result => result.TotalDurationMinutes).ToList();
+        var durations = results
+            .Select(result => result.Legs.ElementAtOrDefault(legIndex)?.DurationMinutes ?? result.TotalDurationMinutes)
+            .ToList();
         if (durations.Count == 0)
         {
             return new SearchRangeMetadata(0, 0);
@@ -1348,25 +1357,25 @@ public sealed class SearchService(
         return new SearchRangeMetadata(minutes.Min(), minutes.Max());
     }
 
-    private static SearchStopFilterMetadata BuildStopFilterMetadata(IEnumerable<SearchResult> results)
+    private static SearchStopFilterMetadata BuildStopFilterMetadata(IEnumerable<SearchResult> results, int legIndex)
     {
-        var stopCounts = BuildStopCounts(results);
+        var stopCounts = BuildStopCounts(results, legIndex);
         return new SearchStopFilterMetadata(
             stopCounts.DirectFlightCount,
             stopCounts.OneStopFlightCount,
             stopCounts.TwoPlusStopFlightCount);
     }
 
-    private static bool MatchesStopFilters(SearchResult result, SearchResultsQuery query)
+    private static bool MatchesStopFilters(SearchResult result, SearchResultsQuery query, int legIndex)
     {
         if (!query.HasStopFilter)
         {
             return true;
         }
 
-        var stopCount = result.Legs.Count == 0
+        var stopCount = result.Legs.Count <= legIndex
             ? 0
-            : result.Legs.Max(leg => Math.Max(leg.Segments.Count - 1, 0));
+            : Math.Max(result.Legs[legIndex].Segments.Count - 1, 0);
 
         return stopCount switch
         {
@@ -1376,7 +1385,7 @@ public sealed class SearchService(
         };
     }
 
-    private static bool MatchesAirlineFilters(SearchResult result, List<string> airlines)
+    private static bool MatchesAirlineFilters(SearchResult result, List<string> airlines, int legIndex)
     {
         if (airlines.Count == 0)
         {
@@ -1384,17 +1393,19 @@ public sealed class SearchService(
         }
 
         return result.Legs
-            .SelectMany(leg => leg.Segments)
-            .Any(segment => airlines.Contains(segment.MarketingCarrierName, StringComparer.OrdinalIgnoreCase));
+            .ElementAtOrDefault(legIndex)?
+            .Segments
+            .Any(segment => airlines.Contains(segment.MarketingCarrierName, StringComparer.OrdinalIgnoreCase)) == true;
     }
 
     private static bool MatchesAirportFilters(
         SearchResult result,
         List<string> departureAirports,
-        List<string> arrivalAirports)
+        List<string> arrivalAirports,
+        int legIndex)
     {
-        var departureAirport = result.Legs.FirstOrDefault()?.OriginAirport;
-        var arrivalAirport = result.Legs.FirstOrDefault()?.DestinationAirport;
+        var departureAirport = result.Legs.ElementAtOrDefault(legIndex)?.OriginAirport;
+        var arrivalAirport = result.Legs.ElementAtOrDefault(legIndex)?.DestinationAirport;
 
         var matchesDepartureAirport = departureAirports.Count == 0 ||
             (!string.IsNullOrWhiteSpace(departureAirport) &&
