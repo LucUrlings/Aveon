@@ -19,7 +19,8 @@ export type ItineraryFilters = { airlines: ItineraryFilterOption[]; bookingSourc
 export type ItineraryPagination = { page: number; pageSize: number; totalResults: number; totalPages: number }
 export type OptimizerFeasibility = { requiredLegCount: number; minimumCalendarDays: number; availableCalendarDays: number; routeOrderCount: number; generatedScheduleCount: number; bounded: boolean }
 export type SearchCoverage = { mode: 'exhaustive' | 'bounded'; liveProviderCallsUsed: number; providerCallLimit: number; cacheHits: number; candidateStatesEvaluated: number; candidateStatesPruned: number }
-export type ItinerarySearchSession = { searchId: string; mode: string; status: string; phase: string; progress: number; coverage: SearchCoverage; results: ItineraryResult[]; warnings: { code: string; message: string }[]; errorMessage?: string | null; filters?: ItineraryFilters | null; pagination?: ItineraryPagination | null; feasibility?: OptimizerFeasibility | null }
+export type OrderedLegSearchStatus = { legId: string; fromLabel: string; toLabel: string; fromAirportCodes: string[]; toAirportCodes: string[]; departureDate: string; status: 'pending' | 'searching' | 'faresFound' | 'noFares' | 'limited' | 'failed'; airportPairsPlanned: number; airportPairsScheduled: number; airportPairsCompleted: number; faresFound: number; failedPairs: number }
+export type ItinerarySearchSession = { searchId: string; mode: string; status: string; phase: string; progress: number; coverage: SearchCoverage; results: ItineraryResult[]; warnings: { code: string; message: string }[]; errorMessage?: string | null; filters?: ItineraryFilters | null; pagination?: ItineraryPagination | null; feasibility?: OptimizerFeasibility | null; orderedLegs?: OrderedLegSearchStatus[] | null }
 
 export type ItineraryResultsQuery = {
   ranking?: Ranking; direct?: boolean; oneStop?: boolean; twoPlusStops?: boolean

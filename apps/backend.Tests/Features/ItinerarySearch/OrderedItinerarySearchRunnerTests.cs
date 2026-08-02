@@ -39,6 +39,14 @@ public sealed class OrderedItinerarySearchRunnerTests
         });
         Assert.Equal(10, provider.Requests.Count);
         Assert.Contains(store.History, snapshot => snapshot.Status == "running" && snapshot.Results.Count > 0);
+        Assert.NotNull(session.OrderedLegs);
+        Assert.Equal(3, session.OrderedLegs.Count);
+        Assert.All(session.OrderedLegs, leg =>
+        {
+            Assert.Equal("faresFound", leg.Status);
+            Assert.True(leg.FaresFound > 0);
+            Assert.Equal(leg.AirportPairsScheduled, leg.AirportPairsCompleted);
+        });
     }
 
     [Theory]
@@ -86,6 +94,53 @@ public sealed class OrderedItinerarySearchRunnerTests
         Assert.Equal(2, provider.Requests.Count);
         Assert.Equal("bounded", session.Coverage.Mode);
         Assert.Contains(session.Warnings, warning => warning.Code == "providerBudgetReached");
+    }
+
+    [Fact]
+    public async Task MissingLegFares_IdentifyTheLegThatPreventsACompleteItinerary()
+    {
+        var provider = new FixtureProvider(request => request.OriginAirport == "AMS" ? new FlightApiOneWayResponse() : Response(request, 100, 60));
+        var (runner, store) = CreateRunner(provider);
+        var request = new OrderedTripRequest([
+            Leg("one", ["DUB"], ["AMS"], new(2026, 9, 1)),
+            Leg("two", ["AMS"], ["WAW"], new(2026, 9, 3))
+        ], 1, "economy", "recommended");
+
+        await runner.RunAsync("missing-leg", request, 10, CancellationToken.None);
+
+        var session = (await store.GetAsync("missing-leg", CancellationToken.None))!;
+        Assert.Empty(session.Results);
+        Assert.NotNull(session.OrderedLegs);
+        Assert.Collection(session.OrderedLegs,
+            first =>
+            {
+                Assert.Equal("faresFound", first.Status);
+                Assert.True(first.FaresFound > 0);
+            },
+            second =>
+            {
+                Assert.Equal("noFares", second.Status);
+                Assert.Equal(0, second.FaresFound);
+                Assert.Equal(second.AirportPairsScheduled, second.AirportPairsCompleted);
+            });
+        Assert.Contains(session.Warnings, warning => warning.Code == "noCompleteItinerary");
+    }
+
+    [Fact]
+    public async Task ProviderBudget_ReportsLegsThatCouldNotBeSearched()
+    {
+        var provider = new FixtureProvider(request => Response(request, 100, 60));
+        var (runner, store) = CreateRunner(provider);
+        var request = new OrderedTripRequest([
+            Leg("one", ["DUB"], ["AMS"], new(2026, 9, 1)),
+            Leg("two", ["AMS"], ["WAW"], new(2026, 9, 3))
+        ], 1, "economy", "recommended");
+
+        await runner.RunAsync("skipped-leg", request, 1, CancellationToken.None);
+
+        var session = (await store.GetAsync("skipped-leg", CancellationToken.None))!;
+        Assert.NotNull(session.OrderedLegs);
+        Assert.Contains(session.OrderedLegs, leg => leg.Status == "limited" && leg.AirportPairsScheduled == 0);
     }
 
     [Fact]

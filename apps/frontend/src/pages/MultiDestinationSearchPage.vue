@@ -3,8 +3,8 @@ import { ref } from 'vue'
 import OptimizedTripSearch from '../features/itinerary-search/OptimizedTripSearch.vue'
 import OrderedRouteSearch from '../features/itinerary-search/OrderedRouteSearch.vue'
 
-const activeTab = ref<'optimize' | 'ordered'>('optimize')
-const modes = ['optimize', 'ordered'] as const
+const activeTab = ref<'optimize' | 'ordered'>('ordered')
+const modes = ['ordered', 'optimize'] as const
 const selectMode = (mode: typeof modes[number]) => { activeTab.value = mode }
 const moveMode = (current: typeof modes[number], direction: number) => {
   const index = modes.indexOf(current)
@@ -24,8 +24,8 @@ const moveMode = (current: typeof modes[number], direction: number) => {
     </header>
 
     <div class="advanced-tabs" role="tablist" aria-label="Multi-destination search mode">
-      <button id="multi-destination-tab-optimize" type="button" role="tab" aria-controls="multi-destination-panel-optimize" :aria-selected="activeTab === 'optimize'" :tabindex="activeTab === 'optimize' ? 0 : -1" @click="selectMode('optimize')" @keydown.left.prevent="moveMode('optimize', -1)" @keydown.right.prevent="moveMode('optimize', 1)">Optimize my trip</button>
       <button id="multi-destination-tab-ordered" type="button" role="tab" aria-controls="multi-destination-panel-ordered" :aria-selected="activeTab === 'ordered'" :tabindex="activeTab === 'ordered' ? 0 : -1" @click="selectMode('ordered')" @keydown.left.prevent="moveMode('ordered', -1)" @keydown.right.prevent="moveMode('ordered', 1)">Build my route</button>
+      <button id="multi-destination-tab-optimize" type="button" role="tab" aria-controls="multi-destination-panel-optimize" :aria-selected="activeTab === 'optimize'" :tabindex="activeTab === 'optimize' ? 0 : -1" @click="selectMode('optimize')" @keydown.left.prevent="moveMode('optimize', -1)" @keydown.right.prevent="moveMode('optimize', 1)">Optimize my trip</button>
     </div>
 
     <section v-if="activeTab === 'optimize'" id="multi-destination-panel-optimize" role="tabpanel" aria-labelledby="multi-destination-tab-optimize" class="advanced-card advanced-card--full" tabindex="0"><OptimizedTripSearch /></section>

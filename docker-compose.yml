@@ -28,7 +28,7 @@ services:
       MultiDestinationSearch__AdminMaxProviderCalls: ${MULTI_DESTINATION_ADMIN_MAX_PROVIDER_CALLS:-250}
       MultiDestinationSearch__ExecutionTimeoutMinutes: ${MULTI_DESTINATION_EXECUTION_TIMEOUT_MINUTES:-10}
       MultiDestinationSearch__MaxActiveStates: ${MULTI_DESTINATION_MAX_ACTIVE_STATES:-10000}
-      MultiDestinationSearch__MaxEvaluatedStates: ${MULTI_DESTINATION_MAX_EVALUATED_STATES:-100000}
+      MultiDestinationSearch__MaxEvaluatedStates: ${MULTI_DESTINATION_MAX_EVALUATED_STATES:-500000}
       ConnectionStrings__Default: Host=aveon-postgres;Port=5432;Database=${POSTGRES_DB:-aveon};Username=${POSTGRES_USER:-aveon};Password=${POSTGRES_PASSWORD:-aveon_dev_password}
     networks:
       - aveon-network

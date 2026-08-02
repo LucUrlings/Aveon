@@ -80,7 +80,7 @@ describe('product shell', () => {
       global: { stubs: { RouterLink: routerLinkStub } },
     })
 
-    expect(wrapper.get('h1').text()).toContain('Search the journey you mean')
+    expect(wrapper.get('h1').text()).toContain('Compare flights across flexible airports, dates, and destinations')
     expect(wrapper.get('.hero-actions a[href="/search"]').text()).toContain('Search flights')
     expect(wrapper.get('.hero-actions a[href="/multi-destination"]').text()).toContain('Plan multiple destinations')
     expect(wrapper.get('.mode-grid').text()).toContain('One-way and return')

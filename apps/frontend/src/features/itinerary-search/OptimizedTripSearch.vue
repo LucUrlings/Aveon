@@ -54,7 +54,6 @@ let controller: AbortController | null = null
 let leaderController: AbortController | null = null
 let observer: IntersectionObserver | null = null
 let requestVersion = 0
-let lastLeaderResultCount = -1
 let skipNextQueryRefresh = false
 
 const rankingOptions: { value: Ranking; label: string }[] = [
@@ -187,10 +186,7 @@ const refresh = async (poll = true) => {
     pollError.value = ''
     applySession(next)
     const resultCount = next.pagination?.totalResults ?? next.results.length
-    if (resultCount > 0 && (resultCount !== lastLeaderResultCount || !poll)) {
-      lastLeaderResultCount = resultCount
-      void loadRankingLeaders(searchId, version)
-    }
+    if (resultCount > 0) void loadRankingLeaders(searchId, version)
     if (poll && next.status === 'running') timer = window.setTimeout(() => refresh(true), 500)
   } catch (reason) {
     if (version === requestVersion && !(reason instanceof Error && reason.name === 'AbortError')) pollError.value = reason instanceof Error ? reason.message : 'Could not load this search.'
@@ -242,7 +238,6 @@ const submit = async () => {
   pollError.value = ''
   results.value = []
   rankingLeaders.value = { recommended: null, cheapest: null, fastest: null }
-  lastLeaderResultCount = -1
   loadedPage.value = 1
   controller = new AbortController()
   try {
@@ -362,7 +357,7 @@ onMounted(async () => {
       <div class="progress-heading">
         <div>
           <p class="eyebrow">{{ session.status === 'running' ? 'Search in progress' : 'Search status' }}</p>
-          <h2 id="search-progress-heading">{{ phaseLabel }}</h2>
+          <div class="progress-title"><span v-if="isRunning" class="progress-spinner" aria-hidden="true" /><h2 id="search-progress-heading">{{ phaseLabel }}</h2></div>
         </div>
         <strong>{{ Math.round(session.progress) }}%</strong>
       </div>
@@ -432,6 +427,7 @@ input, select { width: 100%; box-sizing: border-box; padding: 9px; border: 1px s
 .feasibility strong, .feasibility p { grid-column: 1 / -1; }.feasibility span { font-size: .9rem; }.feasibility p { margin: 0; color: #b42318; }.feasibility--invalid { background: #fff1f0; }
 .form-error { color: #b42318; }.authoritative-feasibility { margin-top: 18px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }.authoritative-feasibility p { margin-bottom: 0; }
 .search-progress, .results-section { margin-top: 20px; }.search-progress { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-raised); }.progress-heading, .results-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }.progress-heading h2, .results-heading h2 { margin: 2px 0 0; }.eyebrow { margin: 0; color: var(--brand-strong); font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }.search-progress progress { width: 100%; height: 8px; overflow: hidden; appearance: none; border: 0; border-radius: 999px; background: #e8ecf4; pointer-events: none; }.search-progress progress::-webkit-progress-bar { border-radius: 999px; background: #e8ecf4; }.search-progress progress::-webkit-progress-value { border-radius: 999px; background: linear-gradient(90deg, var(--brand), var(--accent)); }.search-progress progress::-moz-progress-bar { border-radius: 999px; background: linear-gradient(90deg, var(--brand), var(--accent)); }.coverage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; }.coverage-grid div { padding: 10px; border-radius: 8px; background: var(--surface); }.coverage-grid dt { color: var(--muted); font-size: .78rem; }.coverage-grid dd { margin: 3px 0 0; font-weight: 700; }.session-warnings { padding: 12px; border-left: 4px solid #d98b00; border-radius: 8px; background: #fff8e8; color: #714500; }.session-warnings p { margin: 5px 0 0; }.progress-actions { display: flex; gap: 8px; }
+.progress-title { display: flex; align-items: center; gap: 10px; }.progress-spinner { width: 15px; height: 15px; flex: 0 0 15px; border: 2px solid color-mix(in srgb, var(--brand) 22%, transparent); border-top-color: var(--brand); border-radius: 50%; animation: progress-spin .75s linear infinite; }@keyframes progress-spin { to { transform: rotate(360deg); } }
 .results-section { display: grid; gap: 16px; }.results-heading span { color: var(--muted); }.ranking-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }.ranking-tabs button { display: grid; gap: 4px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--ink-strong); text-align: left; cursor: pointer; }.ranking-tabs button.active { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); background: var(--brand-soft); }.ranking-tabs span { overflow: hidden; color: var(--muted); font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }.results-layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 16px; align-items: start; }.result-list { display: grid; gap: 14px; min-width: 0; }.empty-state { padding: 32px 20px; border: 1px dashed var(--border); border-radius: var(--radius-md); text-align: center; }.empty-state p { margin-bottom: 0; color: var(--muted); }.load-more-sentinel { display: flex; justify-content: center; min-height: 48px; }
 @media (max-width: 800px) { .endpoint-dates, .trip-options, .feasibility, .coverage-grid { grid-template-columns: 1fr 1fr; }.results-layout { grid-template-columns: 1fr; }.results-layout :deep(.filters) { grid-template-columns: repeat(2, minmax(0, 1fr)); }.results-layout :deep(.filters h2) { grid-column: 1 / -1; } }
 @media (max-width: 560px) { .endpoint-dates, .trip-options, .feasibility, .coverage-grid, .ranking-tabs, .results-layout :deep(.filters) { grid-template-columns: 1fr; }.progress-heading, .results-heading { flex-direction: column; }.ranking-tabs span { white-space: normal; } }

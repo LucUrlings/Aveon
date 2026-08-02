@@ -55,7 +55,9 @@ public sealed class OrderedItinerarySearchRunner(
             .Select(item => item.Request.LegIndex)
             .ToHashSet();
         var selected = SelectWithinBudget(cacheMisses, providerCallLimit, cacheCoveredLegs);
-        var state = new OrderedExecutionState(request, cached.Count, selected.Count, cacheMisses.Count, providerCallLimit, options.Value);
+        var plannedByLeg = Enumerable.Range(0, request.Legs.Count).Select(index => allRequests.Count(item => item.LegIndex == index)).ToArray();
+        var scheduledByLeg = Enumerable.Range(0, request.Legs.Count).Select(index => cached.Count(item => item.Request.LegIndex == index) + selected.Count(item => item.LegIndex == index)).ToArray();
+        var state = new OrderedExecutionState(request, cached.Count, selected.Count, cacheMisses.Count, providerCallLimit, options.Value, plannedByLeg, scheduledByLeg);
         try
         {
             await PersistAsync(searchId, state.Snapshot(searchId, "running", "searching"), cancellationToken);
@@ -170,12 +172,16 @@ internal sealed class OrderedExecutionState
     private readonly int _plannedLiveCalls;
     private readonly int _providerCallLimit;
     private readonly MultiDestinationSearchOptions _options;
+    private readonly int[] _plannedByLeg;
+    private readonly int[] _scheduledByLeg;
+    private readonly int[] _completedByLeg;
+    private readonly int[] _failedByLeg;
     private int _completed;
     private int _completedLiveCalls;
     private int _cacheHits;
     private int _failed;
 
-    public OrderedExecutionState(OrderedTripRequest request, int cachedCalls, int selectedLiveCalls, int plannedLiveCalls, int providerCallLimit, MultiDestinationSearchOptions options)
+    public OrderedExecutionState(OrderedTripRequest request, int cachedCalls, int selectedLiveCalls, int plannedLiveCalls, int providerCallLimit, MultiDestinationSearchOptions options, int[] plannedByLeg, int[] scheduledByLeg)
     {
         _request = request;
         _scheduledOperations = cachedCalls + selectedLiveCalls;
@@ -183,6 +189,10 @@ internal sealed class OrderedExecutionState
         _plannedLiveCalls = plannedLiveCalls;
         _providerCallLimit = providerCallLimit;
         _options = options;
+        _plannedByLeg = plannedByLeg;
+        _scheduledByLeg = scheduledByLeg;
+        _completedByLeg = new int[request.Legs.Count];
+        _failedByLeg = new int[request.Legs.Count];
         _fares = Enumerable.Range(0, request.Legs.Count).Select(_ => new List<OrderedFareCandidate>()).ToArray();
     }
 
@@ -191,10 +201,11 @@ internal sealed class OrderedExecutionState
         lock (_sync)
         {
             _fares[legIndex].AddRange(fares);
+            _completedByLeg[legIndex]++;
             _completed++;
             if (cacheHit) _cacheHits++;
             else _completedLiveCalls++;
-            if (failed) _failed++;
+            if (failed) { _failed++; _failedByLeg[legIndex]++; }
         }
     }
 
@@ -208,11 +219,33 @@ internal sealed class OrderedExecutionState
             if (_failed > 0) warnings.Add(new("providerCallsFailed", $"{_failed} airport-pair searches failed; available complete itineraries are still shown."));
             if (status == "completed" && results.Count == 0) warnings.Add(new("noCompleteItinerary", "No complete itinerary could be built from the available fares."));
             var progress = forceProgress ?? (_scheduledOperations == 0 ? 100 : (int)Math.Floor(_completed * 100d / _scheduledOperations));
+            var orderedLegs = _request.Legs.Select((leg, index) => new OrderedLegSearchStatus(
+                leg.Id,
+                leg.From.Label,
+                leg.To.Label,
+                leg.From.AirportCodes,
+                leg.To.AirportCodes,
+                leg.DepartureDate,
+                LegStatus(index),
+                _plannedByLeg[index],
+                _scheduledByLeg[index],
+                _completedByLeg[index],
+                _fares[index].Count,
+                _failedByLeg[index])).ToList();
             return new(
                 searchId, "ordered", status, phase, progress,
-                new(_plannedLiveCalls > _selectedLiveCalls ? "bounded" : "exhaustive", _completedLiveCalls, _providerCallLimit, _cacheHits, results.Count, 0),
-                results, warnings);
+                new(_plannedLiveCalls > _selectedLiveCalls || _failed > 0 ? "bounded" : "exhaustive", _completedLiveCalls, _providerCallLimit, _cacheHits, results.Count, 0),
+                results, warnings, OrderedLegs: orderedLegs);
         }
+    }
+
+    private string LegStatus(int index)
+    {
+        if (_fares[index].Count > 0) return "faresFound";
+        if (_scheduledByLeg[index] == 0) return "limited";
+        if (_completedByLeg[index] < _scheduledByLeg[index]) return _completedByLeg[index] == 0 ? "pending" : "searching";
+        if (_failedByLeg[index] == _scheduledByLeg[index]) return "failed";
+        return _scheduledByLeg[index] < _plannedByLeg[index] ? "limited" : "noFares";
     }
 
     private List<ItineraryResult> BuildResults()

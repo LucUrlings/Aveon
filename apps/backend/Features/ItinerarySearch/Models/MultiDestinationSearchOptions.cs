@@ -14,7 +14,7 @@ public record MultiDestinationSearchOptions
     public int AdminMaxProviderCalls { get; init; } = 250;
     public int HardMaxProviderCalls { get; init; } = 500;
     public int MaxActiveStates { get; init; } = 10_000;
-    public int MaxEvaluatedStates { get; init; } = 100_000;
+    public int MaxEvaluatedStates { get; init; } = 500_000;
     public int MaxCandidatesPerState { get; init; } = 25;
     public int MaxStoredResults { get; init; } = 100;
     public int ExecutionTimeoutMinutes { get; init; } = 10;

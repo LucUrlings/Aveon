@@ -119,6 +119,8 @@ public sealed class OptimizedItinerarySearchRunner(
                             execution.Request.Adults,
                             execution.Request.CabinClass,
                             _currency);
+                        var edgeKey = ProviderCacheKeyBuilder.BuildFlightApiOneWaySearchKey(providerRequest);
+                        if (execution.IsEdgeSaturated(edgeKey)) continue;
                         var fares = await GetEdgeAsync(execution, providerRequest, abstractLeg.Id, cancellationToken);
                         foreach (var fare in fares)
                         {
@@ -128,7 +130,7 @@ public sealed class OptimizedItinerarySearchRunner(
                                 continue;
                             }
 
-                            if (!execution.TryEvaluateState()) break;
+                            if (!execution.TryEvaluateState(edgeKey)) break;
                             RetainCandidate(next, path.Add(fare), execution);
                         }
 
@@ -155,7 +157,7 @@ public sealed class OptimizedItinerarySearchRunner(
         CancellationToken cancellationToken)
     {
         var cacheKey = ProviderCacheKeyBuilder.BuildFlightApiOneWaySearchKey(request);
-        if (execution.TryGetEdge(cacheKey, out var inMemory)) return FlightApiOrderedFareMapper.Map(inMemory, legId, request.Currency);
+        if (execution.TryGetEdge(cacheKey, legId, out var inMemory)) return inMemory;
 
         try
         {
@@ -164,8 +166,7 @@ public sealed class OptimizedItinerarySearchRunner(
             {
                 requestGate.RecordCacheHit();
                 execution.RecordCacheHit();
-                execution.StoreEdge(cacheKey, cached);
-                return FlightApiOrderedFareMapper.Map(cached, legId, request.Currency);
+                return SelectEdgeFares(execution, cacheKey, legId, cached, request.Currency);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -183,8 +184,7 @@ public sealed class OptimizedItinerarySearchRunner(
             using var scope = scopeFactory.CreateScope();
             var provider = scope.ServiceProvider.GetRequiredService<IFlightSearchProvider>();
             var response = await provider.SearchOneWayAsync(request, cancellationToken);
-            execution.StoreEdge(cacheKey, response);
-            return FlightApiOrderedFareMapper.Map(response, legId, request.Currency);
+            return SelectEdgeFares(execution, cacheKey, legId, response, request.Currency);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -194,9 +194,59 @@ public sealed class OptimizedItinerarySearchRunner(
         {
             execution.RecordProviderFailure();
             logger.LogWarning(exception, "Optimized FlightAPI edge failed for {Origin} to {Destination} on {Date}", request.OriginAirport, request.DestinationAirport, request.DepartureDate);
-            execution.StoreEdge(cacheKey, new FlightApiOneWayResponse());
+            execution.StoreEdge(cacheKey, legId, []);
             return [];
         }
+    }
+
+    private static List<OrderedFareCandidate> SelectEdgeFares(
+        OptimizerExecution execution,
+        string cacheKey,
+        string legId,
+        FlightApiOneWayResponse response,
+        string currency)
+    {
+        var mapped = FlightApiOrderedFareMapper.Map(response, legId, currency);
+        var selected = ParetoRankEdgeFares(mapped, execution.Request.Ranking, execution.Options.MaxCandidatesPerState);
+        execution.Prune(mapped.Count - selected.Count);
+        execution.StoreEdge(cacheKey, legId, selected);
+        return selected;
+    }
+
+    private static List<OrderedFareCandidate> ParetoRankEdgeFares(
+        List<OrderedFareCandidate> fares,
+        string ranking,
+        int limit)
+    {
+        var pareto = fares
+            .GroupBy(fare => new
+            {
+                fare.Leg.OriginAirport,
+                fare.Leg.DestinationAirport,
+                fare.Leg.DepartureLocalTime,
+                fare.Leg.ArrivalLocalTime
+            })
+            .SelectMany(group => group.Where(candidate => !group.Any(other =>
+                other.Id != candidate.Id &&
+                other.Price <= candidate.Price &&
+                other.Leg.DurationMinutes <= candidate.Leg.DurationMinutes &&
+                other.Leg.Stops <= candidate.Leg.Stops &&
+                (other.Price < candidate.Price || other.Leg.DurationMinutes < candidate.Leg.DurationMinutes || other.Leg.Stops < candidate.Leg.Stops))))
+            .DistinctBy(fare => fare.Id)
+            .ToList();
+
+        return (ranking switch
+        {
+            "cheapest" => pareto.OrderBy(fare => fare.Price).ThenBy(fare => fare.Leg.DurationMinutes).ThenBy(fare => fare.Leg.Stops),
+            "fastest" => pareto.OrderBy(fare => fare.Leg.DurationMinutes).ThenBy(fare => fare.Price).ThenBy(fare => fare.Leg.Stops),
+            _ => pareto.OrderBy(fare => fare.Price + fare.Leg.DurationMinutes / 60m * 20m + fare.Leg.Stops * 15m)
+                .ThenBy(fare => fare.Price)
+                .ThenBy(fare => fare.Leg.DurationMinutes)
+        })
+            .ThenBy(fare => fare.Leg.DepartureLocalTime)
+            .ThenBy(fare => fare.Id, StringComparer.Ordinal)
+            .Take(Math.Max(1, limit))
+            .ToList();
     }
 
     private static IEnumerable<string> Origins(OptimizedTripRequest request, AbstractScheduleLeg leg, OptimizerPath path)
@@ -362,7 +412,8 @@ public sealed class OptimizedItinerarySearchRunner(
         int providerCallLimit,
         MultiDestinationSearchOptions options)
     {
-        private readonly Dictionary<string, FlightApiOneWayResponse> _edges = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, List<OrderedFareCandidate>> _edges = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _edgeEvaluations = new(StringComparer.Ordinal);
         private bool _providerBudgetReached;
         private bool _timedOut;
         private bool _unexpectedFailure;
@@ -379,10 +430,19 @@ public sealed class OptimizedItinerarySearchRunner(
         public List<ItineraryResult> Results { get; private set; } = [];
         public int ProviderFailures { get; private set; }
         public bool FrontierLimitReached { get; private set; }
-        public bool EvaluationLimitReached { get; private set; }
+        public bool EvaluationLimitReached => _evaluated >= Options.MaxEvaluatedStates;
+        public bool EdgeStateLimitReached { get; private set; }
+        private int EdgeEvaluationAllowance => Math.Max(1, Options.MaxEvaluatedStates / Math.Max(1, ProviderCallLimit));
 
-        public bool TryGetEdge(string key, out FlightApiOneWayResponse response) => _edges.TryGetValue(key, out response!);
-        public void StoreEdge(string key, FlightApiOneWayResponse response) => _edges[key] = response;
+        private static string StoredEdgeKey(string key, string legId) => $"{key}|{legId}";
+        public bool TryGetEdge(string key, string legId, out List<OrderedFareCandidate> fares) => _edges.TryGetValue(StoredEdgeKey(key, legId), out fares!);
+        public void StoreEdge(string key, string legId, List<OrderedFareCandidate> fares) => _edges[StoredEdgeKey(key, legId)] = fares;
+        public bool IsEdgeSaturated(string key)
+        {
+            if (_edgeEvaluations.GetValueOrDefault(key) < EdgeEvaluationAllowance) return false;
+            EdgeStateLimitReached = true;
+            return true;
+        }
         public void RecordCacheHit() => _cacheHits++;
         public void RecordProviderFailure() => ProviderFailures++;
         public void MarkTimedOut() => _timedOut = true;
@@ -401,14 +461,17 @@ public sealed class OptimizedItinerarySearchRunner(
             return true;
         }
 
-        public bool TryEvaluateState()
+        public bool TryEvaluateState(string edgeKey)
         {
-            if (_evaluated >= Options.MaxEvaluatedStates)
+            if (EvaluationLimitReached) return false;
+            var edgeEvaluated = _edgeEvaluations.GetValueOrDefault(edgeKey);
+            if (edgeEvaluated >= EdgeEvaluationAllowance)
             {
-                EvaluationLimitReached = true;
+                EdgeStateLimitReached = true;
                 return false;
             }
             _evaluated++;
+            _edgeEvaluations[edgeKey] = edgeEvaluated + 1;
             return true;
         }
 
@@ -449,11 +512,12 @@ public sealed class OptimizedItinerarySearchRunner(
 
         public ItinerarySearchSessionResponse Snapshot(string status, string phase, int progress)
         {
-            var bounded = SchedulePlan.Feasibility.Bounded || _providerBudgetReached || FrontierLimitReached || EvaluationLimitReached || _timedOut || ProviderFailures > 0 || _unexpectedFailure;
+            var bounded = SchedulePlan.Feasibility.Bounded || _providerBudgetReached || FrontierLimitReached || EvaluationLimitReached || EdgeStateLimitReached || _timedOut || ProviderFailures > 0 || _unexpectedFailure;
             var warnings = new List<ItineraryWarning>();
             if (_providerBudgetReached) warnings.Add(new("providerBudgetReached", $"The optimizer reached its {ProviderCallLimit}-call live provider budget and continued with cached edges."));
             if (FrontierLimitReached) warnings.Add(new("frontierStateLimitReached", $"The optimizer limited a candidate frontier to its best {Options.MaxActiveStates} retained states and continued evaluating alternatives."));
             if (EvaluationLimitReached) warnings.Add(new("stateEvaluationBudgetReached", $"The optimizer reached its cumulative {Options.MaxEvaluatedStates}-state evaluation budget."));
+            if (EdgeStateLimitReached) warnings.Add(new("edgeStateLimitReached", $"The optimizer limited individual flight edges to {EdgeEvaluationAllowance} state evaluations so other edges could also be explored."));
             if (ProviderFailures > 0) warnings.Add(new("providerCallsFailed", $"{ProviderFailures} flight-edge searches failed; complete itineraries from successful edges are still shown."));
             if (_timedOut) warnings.Add(new("executionTimeout", "The optimizer reached its execution timeout; complete itineraries found so far are shown."));
             if (_unexpectedFailure) warnings.Add(new("optimizerFailure", "The optimizer stopped unexpectedly; complete itineraries found so far are shown."));

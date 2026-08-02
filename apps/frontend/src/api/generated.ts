@@ -719,6 +719,27 @@ export interface components {
             filters?: components["schemas"]["ItineraryFilterMetadata"] | null;
             feasibility?: components["schemas"]["OptimizerFeasibility"] | null;
             abstractSchedules?: components["schemas"]["AbstractItinerarySchedule"][] | null;
+            orderedLegs?: components["schemas"]["OrderedLegSearchStatus"][] | null;
+        };
+        OrderedLegSearchStatus: {
+            legId?: string | null;
+            fromLabel?: string | null;
+            toLabel?: string | null;
+            fromAirportCodes?: string[] | null;
+            toAirportCodes?: string[] | null;
+            /** Format: date */
+            departureDate?: string;
+            status?: string | null;
+            /** Format: int32 */
+            airportPairsPlanned?: number;
+            /** Format: int32 */
+            airportPairsScheduled?: number;
+            /** Format: int32 */
+            airportPairsCompleted?: number;
+            /** Format: int32 */
+            faresFound?: number;
+            /** Format: int32 */
+            failedPairs?: number;
         };
         ItinerarySegment: {
             marketingCarrierName?: string | null;

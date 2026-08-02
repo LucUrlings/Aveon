@@ -8,31 +8,31 @@ describe('MultiDestinationSearchPage', () => {
     const wrapper = mount(MultiDestinationSearchPage)
 
     expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(2)
-    expect(wrapper.get('[aria-label="Optimize my trip form"]').exists()).toBe(true)
+    expect(wrapper.get('[aria-label="Build my route form"]').exists()).toBe(true)
 
-    await wrapper.findAll('[role="tab"]')[1].trigger('click')
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs.map(tab => tab.text())).toEqual(['Build my route', 'Optimize my trip'])
+    await tabs[1].trigger('click')
 
     expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(2)
-    expect(wrapper.get('[aria-label="Build my route form"]').exists()).toBe(true)
+    expect(wrapper.get('[aria-label="Optimize my trip form"]').exists()).toBe(true)
   })
 
   it('exposes keyboard-operable tabs with associated tab panels', async () => {
     const wrapper = mount(MultiDestinationSearchPage)
-    const optimize = wrapper.get('#multi-destination-tab-optimize')
+    const ordered = wrapper.get('#multi-destination-tab-ordered')
 
-    expect(optimize.attributes('aria-controls')).toBe('multi-destination-panel-optimize')
-    expect(wrapper.get('[role="tabpanel"]').attributes('aria-labelledby')).toBe('multi-destination-tab-optimize')
-    await optimize.trigger('keydown', { key: 'ArrowRight' })
+    expect(ordered.attributes('aria-controls')).toBe('multi-destination-panel-ordered')
+    expect(wrapper.get('[role="tabpanel"]').attributes('aria-labelledby')).toBe('multi-destination-tab-ordered')
+    await ordered.trigger('keydown', { key: 'ArrowRight' })
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.get('#multi-destination-tab-ordered').attributes('aria-selected')).toBe('true')
-    expect(wrapper.get('[role="tabpanel"]').attributes('aria-labelledby')).toBe('multi-destination-tab-ordered')
+    expect(wrapper.get('#multi-destination-tab-optimize').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[role="tabpanel"]').attributes('aria-labelledby')).toBe('multi-destination-tab-optimize')
   })
 
   it('adds only one new airport picker for each connected ordered destination', async () => {
     const wrapper = mount(MultiDestinationSearchPage)
-    await wrapper.findAll('[role="tab"]')[1].trigger('click')
-
     expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(2)
     await wrapper.get('button.secondary-action').trigger('click')
     expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(3)
@@ -44,7 +44,6 @@ describe('MultiDestinationSearchPage', () => {
 
   it('caps the ordered route builder at eight legs', async () => {
     const wrapper = mount(MultiDestinationSearchPage)
-    await wrapper.findAll('[role="tab"]')[1].trigger('click')
     const add = wrapper.get('button.secondary-action')
 
     for (let index = 1; index < 8; index += 1) await add.trigger('click')

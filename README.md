@@ -246,7 +246,7 @@ Important settings:
 | `MULTI_DESTINATION_ADMIN_MAX_PROVIDER_CALLS` | Administrator multi-destination live-call budget | `250` |
 | `MULTI_DESTINATION_EXECUTION_TIMEOUT_MINUTES` | Ordered and optimized worker timeout | `10` |
 | `MULTI_DESTINATION_MAX_ACTIVE_STATES` | Maximum candidate paths retained in an optimizer frontier | `10000` |
-| `MULTI_DESTINATION_MAX_EVALUATED_STATES` | Maximum cumulative optimizer path evaluations | `100000` |
+| `MULTI_DESTINATION_MAX_EVALUATED_STATES` | Maximum cumulative optimizer path evaluations | `500000` |
 
 `AVEON_PUBLIC_URL` must be an HTTP or HTTPS origin without a path. For the public deployment, use:
 

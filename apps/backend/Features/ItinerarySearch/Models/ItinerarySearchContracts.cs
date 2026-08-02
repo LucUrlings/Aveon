@@ -47,6 +47,19 @@ public record AbstractItinerarySchedule(
     List<AbstractScheduleLeg> Legs,
     List<AbstractScheduleStay> Stays);
 public record ItineraryWarning(string Code, string Message);
+public record OrderedLegSearchStatus(
+    string LegId,
+    string FromLabel,
+    string ToLabel,
+    List<string> FromAirportCodes,
+    List<string> ToAirportCodes,
+    DateOnly DepartureDate,
+    string Status,
+    int AirportPairsPlanned = 0,
+    int AirportPairsScheduled = 0,
+    int AirportPairsCompleted = 0,
+    int FaresFound = 0,
+    int FailedPairs = 0);
 public record RankingBreakdown(decimal Score, decimal TotalPrice, int AdditionalFlightMinutes, int TotalStops, int AdditionalBookings, int AirportSwitches);
 public record ItinerarySegment(string MarketingCarrierName, string MarketingCarrierCode, string FlightNumber, string OriginAirport, string DestinationAirport, DateTime DepartureLocalTime, DateTime ArrivalLocalTime, int DurationMinutes);
 public record ItineraryLeg(string Id, string OriginAirport, string DestinationAirport, DateTime DepartureLocalTime, DateTime ArrivalLocalTime, int DurationMinutes, int Stops, List<ItinerarySegment>? Segments = null);
@@ -92,7 +105,8 @@ public record ItinerarySearchSessionResponse(
     ItineraryPagination? Pagination = null,
     ItineraryFilterMetadata? Filters = null,
     OptimizerFeasibility? Feasibility = null,
-    List<AbstractItinerarySchedule>? AbstractSchedules = null);
+    List<AbstractItinerarySchedule>? AbstractSchedules = null,
+    List<OrderedLegSearchStatus>? OrderedLegs = null);
 public record ItinerarySearchCapabilitiesResponse(
     int ProviderCallLimit,
     int MaxOptimizedDestinations,

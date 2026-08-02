@@ -167,6 +167,52 @@ describe('OptimizedTripSearch', () => {
     expect(wrapper.get('#ranking-tab-cheapest').attributes('aria-selected')).toBe('true')
   })
 
+  it('refreshes ranking leaders when progressive results improve without changing the stored result count', async () => {
+    vi.useFakeTimers()
+    window.history.replaceState({}, '', '/multi-destination?searchId=optimizer-1')
+    let mainSnapshotCalls = 0
+    const pricedResult = (id: string, price: number) => ({
+      ...result,
+      id,
+      totalPrice: price,
+      bookingOptions: [{ ...result.bookingOptions[0], price }],
+      rankingBreakdown: { ...result.rankingBreakdown, totalPrice: price, score: price },
+    })
+    getSearch.mockImplementation((_searchId, requestedQuery) => {
+      if (requestedQuery.pageSize === 1) {
+        const current = mainSnapshotCalls <= 1 ? 0 : 1
+        const price = current === 0
+          ? requestedQuery.ranking === 'recommended' ? 963 : requestedQuery.ranking === 'cheapest' ? 953 : 980
+          : requestedQuery.ranking === 'fastest' ? 900 : 776.74
+        return Promise.resolve(session({
+          status: current === 0 ? 'running' : 'completed',
+          results: [pricedResult(`${requestedQuery.ranking}-${current}`, price)],
+          pagination: { page: 1, pageSize: 1, totalResults: 100, totalPages: 100 },
+        }))
+      }
+      mainSnapshotCalls += 1
+      const current = mainSnapshotCalls === 1 ? 0 : 1
+      return Promise.resolve(session({
+        status: current === 0 ? 'running' : 'completed',
+        results: [pricedResult(`visible-${current}`, current === 0 ? 963 : 776.74)],
+        pagination: { page: 1, pageSize: 10, totalResults: 100, totalPages: 10 },
+      }))
+    })
+
+    const wrapper = mount(OptimizedTripSearch)
+    await flushPromises()
+    expect(wrapper.get('#ranking-tab-cheapest').text()).toContain('953.00')
+
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
+    expect(wrapper.get('.result-card').text()).toContain('776.74')
+    expect(wrapper.get('#ranking-tab-recommended').text()).toContain('776.74')
+    expect(wrapper.get('#ranking-tab-cheapest').text()).toContain('776.74')
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
   it('cancels the running session before starting a replacement search', async () => {
     vi.useFakeTimers()
     let releaseStale!: (value: ReturnType<typeof session>) => void
@@ -177,6 +223,7 @@ describe('OptimizedTripSearch', () => {
     await configureTrip(wrapper)
     await wrapper.get('form').trigger('submit')
     await flushPromises()
+    expect(wrapper.get('.search-progress .progress-spinner').attributes('aria-hidden')).toBe('true')
     await vi.advanceTimersByTimeAsync(50)
     await wrapper.get('form').trigger('submit')
     await flushPromises()

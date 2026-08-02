@@ -116,7 +116,7 @@ public sealed class FlightApiClientTests
     {
         var failureGate = new RecordingGate();
         var failureClient = CreateClient(new StatusHttpMessageHandler(HttpStatusCode.InternalServerError), new RecordingProviderResponseCache(), failureGate);
-        await Assert.ThrowsAsync<HttpRequestException>(() => failureClient.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None));
+        await Assert.ThrowsAsync<FlightApiResponseException>(() => failureClient.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None));
         Assert.Equal((1, 1), (failureGate.Acquisitions, failureGate.Releases));
 
         var cancellationGate = new RecordingGate();
@@ -124,6 +124,35 @@ public sealed class FlightApiClientTests
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(30));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancellationClient.SearchOneWayAsync(CreateSearchRequest(), cancellation.Token));
         Assert.Equal((1, 1), (cancellationGate.Acquisitions, cancellationGate.Releases));
+    }
+
+    [Fact]
+    public async Task ProviderError_ExposesBoundedSanitizedDiagnosticsAndCorrelationId()
+    {
+        var logger = new RecordingLogger<FlightApiClient>();
+        var handler = new DiagnosticErrorHandler(
+            HttpStatusCode.BadRequest,
+            """{"message":"Invalid route for key test-key token=provider-secret","debug":"must-not-be-logged"}""",
+            "provider-request-123");
+        var client = CreateClient(handler, new RecordingProviderResponseCache(), logger: logger);
+
+        var error = await Assert.ThrowsAsync<FlightApiResponseException>(() =>
+            client.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None));
+
+        Assert.Equal(HttpStatusCode.BadRequest, error.StatusCode);
+        Assert.Equal("provider-request-123", error.ProviderRequestId);
+        Assert.Contains("Invalid route", error.ResponseSummary);
+        Assert.Contains("[redacted]", error.ResponseSummary);
+        Assert.DoesNotContain("test-key", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("provider-secret", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("must-not-be-logged", error.Message, StringComparison.Ordinal);
+        Assert.Contains("provider-request-123", error.Message);
+
+        var renderedLogs = string.Join('\n', logger.Messages);
+        Assert.Contains("Invalid route", renderedLogs);
+        Assert.Contains("provider-request-123", renderedLogs);
+        Assert.DoesNotContain("test-key", renderedLogs, StringComparison.Ordinal);
+        Assert.DoesNotContain("provider-secret", renderedLogs, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -319,6 +348,19 @@ public sealed class FlightApiClientTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(new HttpResponseMessage(statusCode));
     }
 
+    private sealed class DiagnosticErrorHandler(HttpStatusCode statusCode, string body, string requestId) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(statusCode)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            };
+            response.Headers.TryAddWithoutValidation("x-request-id", requestId);
+            return Task.FromResult(response);
+        }
+    }
+
     private sealed class CancelingHttpMessageHandler : HttpMessageHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -350,6 +392,6 @@ public sealed class FlightApiClientTests
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-            Messages.Add(formatter(state, exception));
+            Messages.Add($"{formatter(state, exception)} {exception?.Message}".Trim());
     }
 }

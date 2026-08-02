@@ -24,6 +24,18 @@ public sealed class ItinerarySearchService(
         var searchId = Guid.NewGuid().ToString("N");
         var mode = request is OptimizedTripRequest ? "optimize" : "ordered";
         var effectiveLimit = Math.Clamp(providerCallLimit, 1, options.Value.HardMaxProviderCalls);
+        var orderedLegs = request is OrderedTripRequest orderedForSession
+            ? orderedForSession.Legs.Select(leg => new OrderedLegSearchStatus(
+                leg.Id,
+                leg.From.Label,
+                leg.To.Label,
+                leg.From.AirportCodes,
+                leg.To.AirportCodes,
+                leg.DepartureDate,
+                "pending",
+                leg.From.AirportCodes.Sum(origin => leg.To.AirportCodes.Count(destination => !string.Equals(origin, destination, StringComparison.OrdinalIgnoreCase)))))
+                .ToList()
+            : null;
         var session = new ItinerarySearchSessionResponse(
             searchId,
             mode,
@@ -34,7 +46,8 @@ public sealed class ItinerarySearchService(
             [],
             [],
             Feasibility: schedulePlan?.Feasibility,
-            AbstractSchedules: schedulePlan?.Schedules);
+            AbstractSchedules: schedulePlan?.Schedules,
+            OrderedLegs: orderedLegs);
         await store.SetAsync(session, cancellationToken);
         ItinerarySearchTelemetry.RecordStarted(mode);
         _logger.LogInformation(

@@ -3,7 +3,7 @@
     <section class="home-hero" aria-labelledby="home-title">
       <div class="hero-copy">
         <p class="home-eyebrow">Flight discovery, widened</p>
-        <h1 id="home-title">Search the journey you mean, not just one route.</h1>
+        <h1 id="home-title">Compare flights across flexible airports, dates, and destinations.</h1>
         <p class="hero-lead">Compare flexible airports and dates, build an exact sequence of flights, or let Aveon explore a bounded multi-destination trip. Useful results arrive progressively and every booking stays transparent.</p>
         <div class="hero-actions">
           <RouterLink class="primary-action" to="/search">Search flights</RouterLink>

@@ -4,7 +4,7 @@ import { getItinerarySearch, getItinerarySearchCapabilities, startItinerarySearc
 import ItineraryFiltersPanel from './ItineraryFiltersPanel.vue'
 import ItineraryResultCard from './ItineraryResultCard.vue'
 import OrderedLegEditor, { type OrderedLegModel } from './OrderedLegEditor.vue'
-import type { ItineraryResultsQuery, ItinerarySearchSession, OrderedTripRequest, Ranking } from './types'
+import type { ItineraryResultsQuery, ItinerarySearchSession, OrderedLegSearchStatus, OrderedTripRequest, Ranking } from './types'
 import { trackItineraryEvent } from './analytics'
 
 let sequence = 1
@@ -14,6 +14,8 @@ const nextDate = () => {
 }
 const createLeg = (): OrderedLegModel => { const number = sequence++; return { id: `ordered-leg-${number}`, fromLabel: 'Starting airport group', toLabel: `Destination ${number}`, from: [], to: [], departureDate: nextDate(), continuity: 'sameAirport' } }
 const legs = ref<OrderedLegModel[]>([createLeg()])
+const returnToStart = ref(false)
+const returnDate = ref('')
 const adults = ref(1)
 const cabinClass = ref('economy')
 const ranking = ref<Ranking>('recommended')
@@ -29,6 +31,56 @@ const reportedSessions = new Set<string>()
 let timer: number | undefined
 let controller: AbortController | null = null
 const isRunning = computed(() => session.value?.status === 'running')
+const lastDepartureDate = computed(() => legs.value.at(-1)?.departureDate ?? '')
+const addDays = (value: string, days: number) => {
+  const date = new Date(`${value}T12:00:00`)
+  if (Number.isNaN(date.getTime())) return ''
+  date.setDate(date.getDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+const generatedReturnLeg = computed<OrderedLegModel | null>(() => {
+  if (!returnToStart.value) return null
+  const first = legs.value[0]
+  const last = legs.value.at(-1)
+  if (!first || !last) return null
+  return {
+    id: 'ordered-return-to-start',
+    fromLabel: last.toLabel,
+    toLabel: `${first.fromLabel} (return home)`,
+    from: [...last.to],
+    to: [...first.from],
+    departureDate: returnDate.value,
+    continuity: 'sameAirport',
+  }
+})
+const submittedLegs = computed(() => generatedReturnLeg.value ? [...legs.value, generatedReturnLeg.value] : legs.value)
+const maxEditableLegs = computed(() => Math.max(1, maxOrderedLegs.value - (returnToStart.value ? 1 : 0)))
+const routeSummary = computed<OrderedLegSearchStatus[]>(() => session.value?.orderedLegs ?? submittedLegs.value.map(leg => ({
+  legId: leg.id,
+  fromLabel: leg.fromLabel,
+  toLabel: leg.toLabel,
+  fromAirportCodes: leg.from.map(airport => airport.code),
+  toAirportCodes: leg.to.map(airport => airport.code),
+  departureDate: leg.departureDate,
+  status: session.value?.status === 'running' ? 'searching' : 'pending',
+  airportPairsPlanned: leg.from.length * leg.to.length,
+  airportPairsScheduled: 0,
+  airportPairsCompleted: 0,
+  faresFound: 0,
+  failedPairs: 0,
+})))
+const everyLegHasFares = computed(() => routeSummary.value.length > 0 && routeSummary.value.every(leg => leg.faresFound > 0))
+const noCompleteItinerary = computed(() => session.value?.warnings.some(warning => warning.code === 'noCompleteItinerary') ?? false)
+const orderedPhaseLabel = computed(() => session.value?.status === 'running' ? 'Searching your route' : session.value?.status === 'failed' ? 'Route search failed' : 'Route search complete')
+const airportCodes = (values: string[]) => values.join(' / ')
+const legStatusLabel = (leg: OrderedLegSearchStatus) => {
+  if (leg.status === 'faresFound') return `${leg.faresFound} fare${leg.faresFound === 1 ? '' : 's'} found`
+  if (leg.status === 'noFares') return 'No fares found'
+  if (leg.status === 'failed') return 'Airport-pair searches failed'
+  if (leg.status === 'limited') return leg.airportPairsCompleted > 0 ? 'No fares in checked pairs' : 'Not searched within call limit'
+  if (leg.status === 'searching') return `Searching ${leg.airportPairsCompleted} / ${leg.airportPairsScheduled || leg.airportPairsPlanned} airport pairs`
+  return 'Waiting to search'
+}
 const recordSessionAnalytics = (next: ItinerarySearchSession) => {
   if (next.status === 'running' || reportedSessions.has(next.searchId)) return
   reportedSessions.add(next.searchId)
@@ -43,7 +95,7 @@ const updateLeg = (index: number, leg: OrderedLegModel) => {
   legs.value = reconnectRoute(route)
 }
 const addLeg = () => {
-  if (legs.value.length >= maxOrderedLegs.value) return
+  if (legs.value.length >= maxEditableLegs.value) return
   legs.value = reconnectRoute([...legs.value, createLeg()])
 }
 const removeLeg = (index: number) => {
@@ -52,6 +104,9 @@ const removeLeg = (index: number) => {
   legs.value = reconnectRoute(route.filter((_, position) => position !== index))
 }
 const group = (id: string, label: string, airports: OrderedLegModel['from']) => ({ id, label: label.trim(), airportCodes: airports.map(airport => airport.code) })
+const toggleReturn = () => {
+  if (returnToStart.value && !returnDate.value) returnDate.value = addDays(lastDepartureDate.value, 1)
+}
 
 const refresh = async (poll = false) => {
   if (!session.value?.searchId) return
@@ -68,11 +123,12 @@ const refresh = async (poll = false) => {
 const submit = async () => {
   error.value = ''
   if (legs.value.some(leg => !leg.departureDate || leg.from.length === 0 || leg.to.length === 0)) { error.value = 'Add a date and at least one airport to both ends of every flight.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'route_fields' }); return }
+  if (returnToStart.value && (!returnDate.value || returnDate.value < lastDepartureDate.value)) { error.value = 'Choose a return date on or after the final outbound flight.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'return_date' }); return }
   submitting.value = true
   controller?.abort(); controller = new AbortController()
   const request: OrderedTripRequest = {
     mode: 'ordered', adults: adults.value, cabinClass: cabinClass.value, ranking: ranking.value,
-    legs: legs.value.map((leg, index) => ({ id: leg.id, from: group(`${leg.id}-from`, leg.fromLabel, leg.from), to: group(`${leg.id}-to`, leg.toLabel, leg.to), departureDate: leg.departureDate, airportContinuityWithPrevious: index === 0 ? 'sameAirport' : leg.continuity })),
+    legs: submittedLegs.value.map((leg, index) => ({ id: leg.id, from: group(`${leg.id}-from`, leg.fromLabel, leg.from), to: group(`${leg.id}-to`, leg.toLabel, leg.to), departureDate: leg.departureDate, airportContinuityWithPrevious: index === 0 ? 'sameAirport' : leg.continuity })),
   }
   try {
     session.value = await startItinerarySearch(request, controller.signal)
@@ -99,19 +155,54 @@ onMounted(async () => {
     <form class="ordered-form" @input="formDirty = true" @submit.prevent="submit">
       <div class="mode-introduction"><strong>Keep this exact route order</strong><p>Enter each stop once. Every new destination automatically continues from the one above it; Aveon searches the airport combinations and dates without rearranging your stops.</p></div>
       <OrderedLegEditor v-for="(leg, index) in legs" :key="leg.id" :model-value="leg" :index="index" :removable="legs.length > 1" :max-airports="maxAirportsPerGroup" @update:model-value="updateLeg(index, $event)" @remove="removeLeg(index)" />
-      <button type="button" class="secondary-action" :disabled="legs.length >= maxOrderedLegs" @click="addLeg">Add next destination</button>
-      <div class="trip-options">
-        <label>Travellers<input v-model.number="adults" type="number" min="1" max="9" /></label>
-        <label>Cabin<select v-model="cabinClass"><option value="economy">Economy</option><option value="premium_economy">Premium economy</option><option value="business">Business</option><option value="first">First</option></select></label>
-        <label>Ranking<select v-model="ranking"><option value="recommended">Recommended</option><option value="cheapest">Cheapest</option><option value="fastest">Fastest</option></select></label>
+      <button type="button" class="secondary-action add-destination-action" :disabled="legs.length >= maxEditableLegs" @click="addLeg">
+        <span class="add-icon" aria-hidden="true">+</span>
+        <span><strong>Add another flight to this route</strong><small>Continue from the current destination to one more place.</small></span>
+      </button>
+      <div class="return-to-start">
+        <label class="return-choice">
+          <input v-model="returnToStart" type="checkbox" :disabled="!returnToStart && legs.length >= maxOrderedLegs" @change="toggleReturn" />
+          <span><strong>Return to starting point</strong><small>Add a final flight back to the starting airport group without entering it again.</small></span>
+        </label>
+        <div v-if="returnToStart" class="return-details">
+          <label>Return date<input v-model="returnDate" type="date" :min="lastDepartureDate" required /></label>
+          <div class="generated-return" aria-label="Generated return leg">
+            <span>Return home</span>
+            <strong>{{ airportCodes(legs.at(-1)?.to.map(airport => airport.code) ?? []) || 'Final destination' }} → {{ airportCodes(legs[0]?.from.map(airport => airport.code) ?? []) || 'Starting point' }}</strong>
+            <small>This final leg is searched and reported separately, so you can see if its fares are missing or its provider calls fail.</small>
+          </div>
+        </div>
+      </div>
+      <div class="options-divider"><span>Trip and result options</span></div>
+      <div class="search-options">
+        <p>These settings apply to the complete route.</p>
+        <div class="trip-options">
+          <label>Travellers<input v-model.number="adults" type="number" min="1" max="9" /></label>
+          <label>Cabin<select v-model="cabinClass"><option value="economy">Economy</option><option value="premium_economy">Premium economy</option><option value="business">Business</option><option value="first">First</option></select></label>
+          <label>Ranking<select v-model="ranking"><option value="recommended">Recommended</option><option value="cheapest">Cheapest</option><option value="fastest">Fastest</option></select></label>
+        </div>
       </div>
       <p v-if="error" role="alert" class="form-error">{{ error }}</p>
       <button class="primary-action" type="submit" :disabled="submitting">{{ submitting ? 'Starting…' : 'Search complete route' }}</button>
     </form>
 
-    <section v-if="session" class="search-status" aria-live="polite">
-      <p v-if="isRunning">Searching airport pairs… {{ session.progress }}%</p>
-      <p v-else-if="session.status === 'failed'" role="alert">{{ session.errorMessage ?? 'Search failed.' }}</p>
+    <section v-if="session" class="route-search-progress" aria-labelledby="ordered-search-progress-heading" aria-live="polite">
+      <div class="progress-heading">
+        <div><p class="eyebrow">{{ isRunning ? 'Search in progress' : 'Search status' }}</p><div class="progress-title"><span v-if="isRunning" class="progress-spinner" aria-hidden="true" /><h2 id="ordered-search-progress-heading">{{ orderedPhaseLabel }}</h2></div></div>
+        <strong>{{ Math.round(session.progress) }}%</strong>
+      </div>
+      <progress :value="session.progress" max="100">{{ Math.round(session.progress) }}%</progress>
+      <div class="route-summary-heading"><strong>Your route</strong><span>Each line shows whether that flight leg returned bookable fares.</span></div>
+      <ol class="route-summary" aria-label="Route leg search status">
+        <li v-for="(leg, index) in routeSummary" :key="leg.legId" :class="`leg-status leg-status--${leg.status}`">
+          <span class="leg-number">{{ index + 1 }}</span>
+          <div class="leg-route"><strong>{{ airportCodes(leg.fromAirportCodes) }} → {{ airportCodes(leg.toAirportCodes) }}</strong><span>{{ leg.departureDate }}</span></div>
+          <div class="leg-outcome"><strong>{{ legStatusLabel(leg) }}</strong><span v-if="leg.airportPairsScheduled > 0">{{ leg.airportPairsCompleted }} of {{ leg.airportPairsScheduled }} selected pairs checked<span v-if="leg.failedPairs > 0"> · {{ leg.failedPairs }} failed</span><span v-if="leg.airportPairsScheduled < leg.airportPairsPlanned"> · {{ leg.airportPairsPlanned }} possible</span></span></div>
+        </li>
+      </ol>
+      <p v-if="session.status === 'completed' && noCompleteItinerary && everyLegHasFares" class="connection-note">Every leg returned fares, but none could be connected into a complete itinerary under the selected dates and airport-continuity rules.</p>
+      <p v-else-if="session.status === 'completed' && noCompleteItinerary" class="connection-note connection-note--problem">No complete itinerary was found. Legs marked “No fares” or “Not searched” show where the route broke.</p>
+      <p v-if="session.status === 'failed'" role="alert" class="form-error">{{ session.errorMessage ?? 'Search failed.' }}</p>
       <p v-for="warning in session.warnings" :key="warning.code" class="form-warning">{{ warning.message }}</p>
     </section>
 
@@ -137,13 +228,22 @@ onMounted(async () => {
 .mode-introduction p { margin: 5px 0 0; color: var(--muted); }
 .secondary-action, .primary-action { justify-self: start; padding: 10px 14px; border-radius: 8px; cursor: pointer; }
 .secondary-action { border: 1px solid var(--border); background: var(--surface); color: var(--ink-strong); }
+.add-destination-action { display: flex; width: 100%; box-sizing: border-box; align-items: center; gap: 12px; padding: 13px 15px; border: 2px dashed var(--border-strong); background: color-mix(in srgb, var(--brand-soft) 35%, var(--surface)); text-align: left; }.add-destination-action:hover:not(:disabled) { border-color: var(--brand); background: var(--brand-soft); }.add-destination-action > span:last-child { display: grid; gap: 2px; }.add-destination-action small { color: var(--muted); font-weight: 400; }.add-icon { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border-radius: 50%; background: var(--brand); color: white; font-size: 1.35rem; line-height: 1; }.add-destination-action:disabled { opacity: .5; cursor: not-allowed; }
+.return-to-start { display: grid; gap: 10px; }.return-choice { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); cursor: pointer; }.return-choice input { width: auto; margin-top: 3px; accent-color: var(--brand); }.return-choice span { display: grid; gap: 3px; }.return-choice small, .generated-return span, .generated-return small { color: var(--muted); }.return-details { display: grid; grid-template-columns: minmax(180px, 220px) minmax(0, 1fr); gap: 12px; align-items: stretch; padding-left: 24px; }.return-details label { display: grid; gap: 5px; color: var(--muted); }.return-details input { padding: 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink-strong); }.generated-return { display: grid; gap: 3px; padding: 10px 12px; border-left: 3px solid var(--brand); border-radius: 8px; background: var(--brand-soft); }
 .primary-action { border: 0; background: var(--brand); color: white; font-weight: 700; }
 .primary-action:disabled { opacity: .6; cursor: wait; }
-.trip-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.options-divider { display: flex; align-items: center; gap: 12px; margin-top: 8px; color: var(--muted); font-size: .76rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }.options-divider::before, .options-divider::after { content: ''; height: 1px; flex: 1; background: var(--border); }.search-options { display: grid; gap: 10px; }.search-options > p { margin: 0; color: var(--muted); font-size: .86rem; }.trip-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .trip-options label { display: grid; gap: 5px; color: var(--muted); }
 .trip-options input, .trip-options select { padding: 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink-strong); }
-.form-error { color: #b42318; }.form-warning { color: #9b5c00; }.search-status { margin-top: 18px; }
+.form-error { color: #b42318; }.form-warning { color: #9b5c00; }
+.route-search-progress { display: grid; gap: 14px; margin-top: 20px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-raised); }
+.progress-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }.progress-heading h2 { margin: 2px 0 0; }.eyebrow { margin: 0; color: var(--brand-strong); font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.progress-title { display: flex; align-items: center; gap: 10px; }.progress-spinner { width: 15px; height: 15px; flex: 0 0 15px; border: 2px solid color-mix(in srgb, var(--brand) 22%, transparent); border-top-color: var(--brand); border-radius: 50%; animation: progress-spin .75s linear infinite; }@keyframes progress-spin { to { transform: rotate(360deg); } }
+.route-search-progress progress { width: 100%; height: 8px; overflow: hidden; appearance: none; border: 0; border-radius: 999px; background: #e8ecf4; pointer-events: none; }.route-search-progress progress::-webkit-progress-bar { border-radius: 999px; background: #e8ecf4; }.route-search-progress progress::-webkit-progress-value { border-radius: 999px; background: linear-gradient(90deg, var(--brand), var(--accent)); }.route-search-progress progress::-moz-progress-bar { border-radius: 999px; background: linear-gradient(90deg, var(--brand), var(--accent)); }
+.route-summary-heading { display: flex; justify-content: space-between; gap: 12px; }.route-summary-heading span { color: var(--muted); font-size: .86rem; }
+.route-summary { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }.route-summary li { display: grid; grid-template-columns: 30px minmax(0, 1fr) minmax(180px, auto); align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }.leg-number { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--brand-soft); color: var(--brand-strong); font-weight: 800; }.leg-route, .leg-outcome { display: grid; gap: 3px; }.leg-route span, .leg-outcome span { color: var(--muted); font-size: .8rem; }.leg-outcome { justify-items: end; text-align: right; }.leg-status--faresFound .leg-outcome strong { color: #177245; }.leg-status--noFares .leg-outcome strong, .leg-status--failed .leg-outcome strong, .leg-status--limited .leg-outcome strong { color: #b42318; }
+.connection-note { margin: 0; padding: 11px 13px; border-radius: 8px; background: #fff8e8; color: #714500; }.connection-note--problem { background: #fff1f0; color: #8f1d18; }
 .results-layout { display: grid; grid-template-columns: minmax(210px, 260px) minmax(0, 1fr); gap: 18px; margin-top: 22px; }.results-list { display: grid; gap: 14px; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: 10px; }.pagination button { padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--ink-strong); }
-@media (max-width: 680px) { .trip-options, .results-layout { grid-template-columns: 1fr; } }
+@media (max-width: 680px) { .trip-options, .results-layout, .return-details { grid-template-columns: 1fr; }.return-details { padding-left: 0; }.progress-heading, .route-summary-heading { flex-direction: column; }.route-summary li { grid-template-columns: 30px minmax(0, 1fr); }.leg-outcome { grid-column: 2; justify-items: start; text-align: left; } }
 </style>

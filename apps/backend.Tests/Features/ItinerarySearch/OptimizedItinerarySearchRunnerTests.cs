@@ -151,6 +151,27 @@ public sealed class OptimizedItinerarySearchRunnerTests
     }
 
     [Fact]
+    public async Task PerEdgeAllowance_ExploresUnseenEdgesBeforeTheGlobalStateBudgetIsConsumed()
+    {
+        var options = new MultiDestinationSearchOptions
+        {
+            MaxActiveStates = 2,
+            MaxEvaluatedStates = 7,
+            MaxCandidatesPerState = 10,
+            MaxStoredResults = 10
+        };
+        var provider = new FixtureProvider(request => RichResponse(request, 6));
+        var request = OneDestinationRequest() with { Start = Group("start", "DUB", "SNN", "ORK") };
+
+        var session = await RunAsync("edge-fairness", request, provider, providerCallLimit: 3, options: options);
+
+        Assert.Equal(3, provider.Requests.Select(item => item.OriginAirport).Distinct().Count());
+        Assert.Equal(6, session.Coverage.CandidateStatesEvaluated - session.Feasibility!.GeneratedScheduleCount);
+        Assert.Contains(session.Warnings, warning => warning.Code == "edgeStateLimitReached");
+        Assert.DoesNotContain(session.Warnings, warning => warning.Code == "stateEvaluationBudgetReached");
+    }
+
+    [Fact]
     public async Task FrontierAndResultLimits_PruneRetainedCandidatesWithoutStoppingEvaluation()
     {
         var options = new MultiDestinationSearchOptions
@@ -322,6 +343,26 @@ public sealed class OptimizedItinerarySearchRunnerTests
             Legs = [new() { Id = "provider-leg", OriginPlaceId = 1, DestinationPlaceId = 2, Departure = departure, Arrival = departure.AddMinutes(duration), Duration = duration, SegmentIds = ["segment"] }],
             Itineraries = [new() { Id = $"{request.OriginAirport}-{request.DestinationAirport}-{request.DepartureDate:yyyyMMdd}", LegIds = ["provider-leg"], DeepLink = $"https://book.example/{request.OriginAirport}-{request.DestinationAirport}", PricingOptions = [new() { Id = "price", Price = new() { Amount = price } }] }]
         };
+    }
+
+    private static FlightApiOneWayResponse RichResponse(ProviderSearchRequest request, int count)
+    {
+        var response = new FlightApiOneWayResponse
+        {
+            Places = [new() { Id = 1, Iata = request.OriginAirport }, new() { Id = 2, Iata = request.DestinationAirport }],
+            Carriers = [new() { Id = 10, Name = "Test Air", DisplayCode = "TA" }]
+        };
+        for (var index = 0; index < count; index++)
+        {
+            var departure = request.DepartureDate.ToDateTime(new(7 + index, 0));
+            var duration = 60 + index * 10;
+            var segmentId = $"segment-{index}";
+            var legId = $"provider-leg-{index}";
+            response.Segments.Add(new() { Id = segmentId, OriginPlaceId = 1, DestinationPlaceId = 2, Departure = departure, Arrival = departure.AddMinutes(duration), Duration = duration, MarketingCarrierId = 10, MarketingFlightNumber = $"10{index}" });
+            response.Legs.Add(new() { Id = legId, OriginPlaceId = 1, DestinationPlaceId = 2, Departure = departure, Arrival = departure.AddMinutes(duration), Duration = duration, SegmentIds = [segmentId] });
+            response.Itineraries.Add(new() { Id = $"itinerary-{index}", LegIds = [legId], DeepLink = $"https://book.example/{index}", PricingOptions = [new() { Id = $"price-{index}", Price = new() { Amount = 100 - index * 5 } }] });
+        }
+        return response;
     }
 
     private sealed class FixtureProvider(Func<ProviderSearchRequest, FlightApiOneWayResponse> responseFactory) : IFlightSearchProvider
