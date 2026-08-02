@@ -64,6 +64,13 @@ beforeEach(() => {
 })
 
 describe('SearchResultsPanel', () => {
+  it('warns that outbound prices do not include the return fare', () => {
+    const wrapper = mountPanel({ tripType: 'return' })
+
+    expect(wrapper.get('.outbound-price-notice').text()).toContain('Prices shown are for the outbound flight only')
+    expect(wrapper.get('.outbound-price-notice').text()).toContain('total trip price')
+  })
+
   it('emits loadMore from the manual pagination fallback', async () => {
     const wrapper = mountPanel()
 

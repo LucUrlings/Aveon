@@ -73,7 +73,7 @@ describe('flight search api', () => {
               arrivalTimeMinutes: { min: 570, max: 570 },
               returnDepartureTimeMinutes: { min: 0, max: 0 },
               returnArrivalTimeMinutes: { min: 0, max: 0 },
-              stops: { direct: 1, oneStop: 0, twoPlusStop: 0 },
+              stops: { direct: 1, oneStop: 0, twoPlusStop: 0, minimumAvailableStops: 0 },
             },
             pagination: {
               page: 1,
@@ -115,6 +115,7 @@ describe('flight search api', () => {
       { label: 'View fare', url: 'https://example.com/fare', price: { amount: 123.45, currency: 'EUR' } },
     ])
     expect(session.response.filters.providers).toEqual([{ value: 'FlightApi:KLM', count: 1 }])
+    expect(session.response.filters.stops.minimumAvailableStops).toBe(0)
     expect(session.response.pagination.totalResults).toBe(1)
     expect(fetchMock).toHaveBeenLastCalledWith(
       expect.stringContaining('/api/v1/search'),
@@ -223,6 +224,7 @@ describe('flight search api', () => {
     await getSearchSession('search-1', {
       direct: true,
       oneStop: false,
+      exactStops: 3,
       providers: ['FlightApi:KLM'],
       departureTime: [0, 720],
       returnDepartureTime: [900, 1200],
@@ -241,6 +243,7 @@ describe('flight search api', () => {
     const requestUrl = new URL(fetchMock.mock.calls[0][0] as string, window.location.origin)
     expect(requestUrl.searchParams.get('direct')).toBe('true')
     expect(requestUrl.searchParams.get('oneStop')).toBe('false')
+    expect(requestUrl.searchParams.get('exactStops')).toBe('3')
     expect(requestUrl.searchParams.get('providers')).toBe('FlightApi:KLM')
     expect(requestUrl.searchParams.get('departureTime')).toBe('0-720')
     expect(requestUrl.searchParams.get('returnDepartureTime')).toBe('900-1200')

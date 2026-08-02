@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import OptimizedTripSearch from '../features/itinerary-search/OptimizedTripSearch.vue'
 import OrderedRouteSearch from '../features/itinerary-search/OrderedRouteSearch.vue'
 
-const activeTab = ref<'optimize' | 'ordered'>('ordered')
+const route = useRoute()
+const activeTab = ref<'optimize' | 'ordered'>(route.query.mode === 'optimize' ? 'optimize' : 'ordered')
+const prefillRoute = computed(() => route.query.prefill === 'true' && typeof route.query.route === 'string'
+  ? route.query.route.split(',').map(code => code.trim().toUpperCase()).filter(code => /^[A-Z]{3}$/.test(code))
+  : [])
 const modes = ['ordered', 'optimize'] as const
 const selectMode = (mode: typeof modes[number]) => { activeTab.value = mode }
 const moveMode = (current: typeof modes[number], direction: number) => {
@@ -12,6 +17,7 @@ const moveMode = (current: typeof modes[number], direction: number) => {
   selectMode(next)
   window.setTimeout(() => document.getElementById(`multi-destination-tab-${next}`)?.focus())
 }
+watch(() => route.query.mode, mode => { activeTab.value = mode === 'optimize' ? 'optimize' : 'ordered' })
 </script>
 
 <template>
@@ -30,7 +36,7 @@ const moveMode = (current: typeof modes[number], direction: number) => {
 
     <section v-if="activeTab === 'optimize'" id="multi-destination-panel-optimize" role="tabpanel" aria-labelledby="multi-destination-tab-optimize" class="advanced-card advanced-card--full" tabindex="0"><OptimizedTripSearch /></section>
 
-    <section v-else id="multi-destination-panel-ordered" role="tabpanel" aria-labelledby="multi-destination-tab-ordered" class="advanced-card advanced-card--ordered" tabindex="0"><OrderedRouteSearch /></section>
+    <section v-else id="multi-destination-panel-ordered" role="tabpanel" aria-labelledby="multi-destination-tab-ordered" class="advanced-card advanced-card--ordered" tabindex="0"><OrderedRouteSearch :prefill-route="prefillRoute" /></section>
   </main>
 </template>
 

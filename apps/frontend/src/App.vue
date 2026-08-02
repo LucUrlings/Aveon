@@ -17,6 +17,7 @@ import AppNavbar from './components/AppNavbar.vue'
         <p>Flexible flight discovery across airports and dates.</p>
         <nav aria-label="Footer navigation">
           <RouterLink to="/search">Search</RouterLink>
+          <RouterLink to="/explore">Explore</RouterLink>
           <RouterLink to="/how-it-works">How it works</RouterLink>
           <RouterLink to="/about">About</RouterLink>
           <a href="https://github.com/LucUrlings/Aveon" target="_blank" rel="noreferrer">GitHub</a>

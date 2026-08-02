@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import type { SearchStopFilterMetadata } from '../../features/flight-search/types'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   tripType: 'oneWay' | 'return'
   selectedOutboundLegId: string | null
   providerFilters: string[]
@@ -9,7 +10,12 @@ const props = defineProps<{
   departureAirportFilters: string[]
   arrivalAirportFilters: string[]
   availableMaxDurationMinutes: number
-}>()
+  automaticExactStops?: number | null
+  stopCounts?: SearchStopFilterMetadata
+}>(), {
+  automaticExactStops: null,
+  stopCounts: () => ({ direct: 0, oneStop: 0, twoPlusStop: 0, minimumAvailableStops: null }),
+})
 
 const maxDurationMinutes = defineModel<number>('maxDurationMinutes', { required: true })
 const includeDirectFlights = defineModel<boolean>('includeDirectFlights', { required: true })
@@ -108,14 +114,17 @@ const toggleSection = (section: keyof typeof expandedSections.value) => {
             <label class="filter-toggle">
               <input v-model="includeDirectFlights" type="checkbox" />
               <span>Direct flights</span>
+              <small class="stop-count">{{ props.stopCounts.direct }}</small>
             </label>
             <label class="filter-toggle">
               <input v-model="includeOneStopFlights" type="checkbox" />
               <span>Include 1 stop</span>
+              <small class="stop-count">{{ props.stopCounts.oneStop }}</small>
             </label>
             <label class="filter-toggle">
               <input v-model="includeTwoPlusStopFlights" type="checkbox" />
-              <span>Include 2+ stops</span>
+              <span>{{ props.automaticExactStops !== null && props.automaticExactStops !== undefined ? `${props.automaticExactStops} stops (fewest available)` : 'Include 2+ stops' }}</span>
+              <small class="stop-count">{{ props.stopCounts.twoPlusStop }}</small>
             </label>
           </div>
         </div>

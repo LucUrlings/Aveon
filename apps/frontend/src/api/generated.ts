@@ -43,6 +43,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/explore/routes": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        get: {
+            parameters: { query?: { origin?: string; }; header?: never; path?: never; cookie?: never; };
+            requestBody?: never;
+            responses: {
+                200: { headers: { [name: string]: unknown; }; content: { "text/plain": components["schemas"]["ExploreRoutesResponse"]; "application/json": components["schemas"]["ExploreRoutesResponse"]; "text/json": components["schemas"]["ExploreRoutesResponse"]; }; };
+                400: { headers: { [name: string]: unknown; }; content: { "text/plain": components["schemas"]["ValidationProblemDetails"]; "application/json": components["schemas"]["ValidationProblemDetails"]; "text/json": components["schemas"]["ValidationProblemDetails"]; }; };
+            };
+        };
+        put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never;
+    };
+    "/api/v1/explore/hero": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        get: {
+            parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+            requestBody?: never;
+            responses: { 200: { headers: { [name: string]: unknown; }; content: { "text/plain": components["schemas"]["ExploreRoutesResponse"]; "application/json": components["schemas"]["ExploreRoutesResponse"]; "text/json": components["schemas"]["ExploreRoutesResponse"]; }; }; };
+        };
+        put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never;
+    };
     "/api/v1/Auth/register": {
         parameters: {
             query?: never;
@@ -499,6 +520,7 @@ export interface paths {
                     Direct?: boolean;
                     OneStop?: boolean;
                     TwoPlusStop?: boolean;
+                    ExactStops?: number;
                     Providers?: string;
                     Airlines?: string;
                     DepartureAirports?: string;
@@ -598,6 +620,28 @@ export interface components {
             code?: string | null;
             name?: string | null;
             displayLabel?: string | null;
+        };
+        ExploreAirport: {
+            code?: string | null;
+            name?: string | null;
+            city?: string | null;
+            country?: string | null;
+            /** Format: double */
+            latitude?: number;
+            /** Format: double */
+            longitude?: number;
+        };
+        ExploreRoutesResponse: {
+            origin?: components["schemas"]["ExploreAirport"];
+            destinations?: components["schemas"]["ExploreAirport"][] | null;
+            /** Format: date */
+            observedFrom?: string;
+            /** Format: date */
+            observedTo?: string;
+            /** Format: date-time */
+            fetchedAt?: string;
+            isComplete?: boolean;
+            isStale?: boolean;
         };
         BookingOption: {
             label?: string | null;
@@ -998,6 +1042,8 @@ export interface components {
             oneStop?: number;
             /** Format: int32 */
             twoPlusStop?: number;
+            /** Format: int32 */
+            minimumAvailableStops?: number | null;
         };
         StayRuleRequest: {
             mode?: string | null;

@@ -6,6 +6,9 @@ import ItineraryResultCard from './ItineraryResultCard.vue'
 import OrderedLegEditor, { type OrderedLegModel } from './OrderedLegEditor.vue'
 import type { ItineraryResultsQuery, ItinerarySearchSession, OrderedLegSearchStatus, OrderedTripRequest, Ranking } from './types'
 import { trackItineraryEvent } from './analytics'
+import type { AirportOption } from '../flight-search/types'
+
+const props = withDefaults(defineProps<{ prefillRoute?: string[] }>(), { prefillRoute: () => [] })
 
 let sequence = 1
 const nextDate = () => {
@@ -27,6 +30,8 @@ const maxOrderedLegs = ref(8)
 const maxAirportsPerGroup = ref(5)
 const formDirty = ref(false)
 const searchStarted = ref(false)
+const prefillActive = ref(false)
+const lastHydratedPrefill = ref('')
 const reportedSessions = new Set<string>()
 let timer: number | undefined
 let controller: AbortController | null = null
@@ -89,22 +94,37 @@ const recordSessionAnalytics = (next: ItinerarySearchSession) => {
 }
 
 const reconnectRoute = (route: OrderedLegModel[]) => route.map((leg, index) => index === 0 ? leg : ({ ...leg, from: [...route[index - 1].to], fromLabel: route[index - 1].toLabel }))
+const removePrefillFromUrl = () => {
+  if (!prefillActive.value) return
+  prefillActive.value = false
+  try {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('prefill')
+    url.searchParams.delete('route')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+  } catch { /* Unit-test and embedded URLs may not support history replacement. */ }
+}
+const markFormDirty = () => { formDirty.value = true; removePrefillFromUrl() }
 const updateLeg = (index: number, leg: OrderedLegModel) => {
+  removePrefillFromUrl()
   const route = [...legs.value]
   route[index] = leg
   legs.value = reconnectRoute(route)
 }
 const addLeg = () => {
+  removePrefillFromUrl()
   if (legs.value.length >= maxEditableLegs.value) return
   legs.value = reconnectRoute([...legs.value, createLeg()])
 }
 const removeLeg = (index: number) => {
+  removePrefillFromUrl()
   const route = [...legs.value]
   if (index === 0 && route[1]) route[1] = { ...route[1], from: [...route[0].from], fromLabel: route[0].fromLabel }
   legs.value = reconnectRoute(route.filter((_, position) => position !== index))
 }
 const group = (id: string, label: string, airports: OrderedLegModel['from']) => ({ id, label: label.trim(), airportCodes: airports.map(airport => airport.code) })
 const toggleReturn = () => {
+  removePrefillFromUrl()
   if (returnToStart.value && !returnDate.value) returnDate.value = addDays(lastDepartureDate.value, 1)
 }
 
@@ -121,6 +141,7 @@ const refresh = async (poll = false) => {
 }
 
 const submit = async () => {
+  removePrefillFromUrl()
   error.value = ''
   if (legs.value.some(leg => !leg.departureDate || leg.from.length === 0 || leg.to.length === 0)) { error.value = 'Add a date and at least one airport to both ends of every flight.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'route_fields' }); return }
   if (returnToStart.value && (!returnDate.value || returnDate.value < lastDepartureDate.value)) { error.value = 'Choose a return date on or after the final outbound flight.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'return_date' }); return }
@@ -140,11 +161,37 @@ const submit = async () => {
 }
 
 watch(query, () => { if (session.value?.searchId) refresh(false) }, { deep: true })
+watch(() => props.prefillRoute, codes => {
+  const normalized = codes.map(code => code.trim().toUpperCase()).filter(code => /^[A-Z]{3}$/.test(code))
+  const key = normalized.join(',')
+  if (normalized.length < 2 || new Set(normalized).size !== normalized.length || key === lastHydratedPrefill.value) return
+  const allowed = normalized.slice(0, maxOrderedLegs.value + 1)
+  const option = (code: string): AirportOption => ({ code, name: null, displayLabel: code })
+  const start = new Date(); start.setDate(start.getDate() + 1)
+  legs.value = allowed.slice(0, -1).map((code, index) => {
+    const departure = new Date(start); departure.setDate(start.getDate() + index)
+    return {
+      id: `ordered-prefill-${index + 1}`,
+      fromLabel: code,
+      toLabel: allowed[index + 1],
+      from: [option(code)],
+      to: [option(allowed[index + 1])],
+      departureDate: departure.toISOString().slice(0, 10),
+      continuity: 'sameAirport',
+    }
+  })
+  lastHydratedPrefill.value = key
+  prefillActive.value = true
+  formDirty.value = false
+}, { immediate: true, deep: true })
 onBeforeUnmount(() => { if (formDirty.value && !searchStarted.value) trackItineraryEvent('form_abandonment', { mode: 'ordered' }); if (timer) window.clearTimeout(timer); controller?.abort() })
 onMounted(async () => {
   try {
     const capabilities = await getItinerarySearchCapabilities()
-    if (capabilities.maxOrderedLegs > 0) maxOrderedLegs.value = capabilities.maxOrderedLegs
+    if (capabilities.maxOrderedLegs > 0) {
+      maxOrderedLegs.value = capabilities.maxOrderedLegs
+      if (legs.value.length > maxOrderedLegs.value) legs.value = reconnectRoute(legs.value.slice(0, maxOrderedLegs.value))
+    }
     if (capabilities.maxAirportsPerGroup > 0) maxAirportsPerGroup.value = capabilities.maxAirportsPerGroup
   } catch { /* Backend validation remains authoritative if capabilities are temporarily unavailable. */ }
 })
@@ -152,7 +199,7 @@ onMounted(async () => {
 
 <template>
   <section aria-label="Build my route form">
-    <form class="ordered-form" @input="formDirty = true" @submit.prevent="submit">
+    <form class="ordered-form" @input="markFormDirty" @submit.prevent="submit">
       <div class="mode-introduction"><strong>Keep this exact route order</strong><p>Enter each stop once. Every new destination automatically continues from the one above it; Aveon searches the airport combinations and dates without rearranging your stops.</p></div>
       <OrderedLegEditor v-for="(leg, index) in legs" :key="leg.id" :model-value="leg" :index="index" :removable="legs.length > 1" :max-airports="maxAirportsPerGroup" @update:model-value="updateLeg(index, $event)" @remove="removeLeg(index)" />
       <button type="button" class="secondary-action add-destination-action" :disabled="legs.length >= maxEditableLegs" @click="addLeg">

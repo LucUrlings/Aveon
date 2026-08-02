@@ -43,6 +43,16 @@ cat > "$web_root/sitemap.xml" <<EOF
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>$public_url/search</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>$public_url/explore</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>$public_url/about</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -51,6 +61,11 @@ cat > "$web_root/sitemap.xml" <<EOF
     <loc>$public_url/how-it-works</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>$public_url/multi-destination</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
   </url>
 </urlset>
 EOF

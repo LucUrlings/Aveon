@@ -1,3 +1,7 @@
+<script setup lang="ts">
+import HeroRouteGlobe from '../features/explore/HeroRouteGlobe.vue'
+</script>
+
 <template>
   <main id="main-content" class="home-page" tabindex="-1">
     <section class="home-hero" aria-labelledby="home-title">
@@ -7,6 +11,7 @@
         <p class="hero-lead">Compare flexible airports and dates, build an exact sequence of flights, or let Aveon explore a bounded multi-destination trip. Useful results arrive progressively and every booking stays transparent.</p>
         <div class="hero-actions">
           <RouterLink class="primary-action" to="/search">Search flights</RouterLink>
+          <RouterLink class="secondary-action" to="/explore">Explore destinations</RouterLink>
           <RouterLink class="secondary-action" to="/multi-destination">Plan multiple destinations</RouterLink>
         </div>
         <ul class="hero-proof" aria-label="Aveon product principles">
@@ -16,33 +21,14 @@
         </ul>
       </div>
 
-      <div class="journey-visual" aria-label="Example flexible journey from Dublin through Amsterdam and Paris">
-        <div class="visual-orbit visual-orbit--one"></div>
-        <div class="visual-orbit visual-orbit--two"></div>
-        <svg class="journey-route" viewBox="0 0 500 470" preserveAspectRatio="none" aria-hidden="true">
-          <defs>
-            <linearGradient id="journey-route-gradient" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#4f46e5" />
-              <stop offset="1" stop-color="#0891b2" />
-            </linearGradient>
-            <marker id="journey-route-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-              <path d="M 0 0 L 8 4 L 0 8 Z" fill="#0891b2" />
-            </marker>
-          </defs>
-          <path class="journey-route-segment" d="M 220 120 C 228 154, 252 179, 278 202" />
-          <path class="journey-route-segment" d="M 374 282 C 358 320, 310 350, 266 366" />
-        </svg>
-        <article class="journey-card journey-card--start"><span>Start group</span><strong>Dublin</strong><small>DUB · SNN · ORK</small></article>
-        <article class="journey-card journey-card--middle"><span>Flexible stop</span><strong>Amsterdam</strong><small>Stay 2+ nights</small></article>
-        <article class="journey-card journey-card--end"><span>Next destination</span><strong>Paris</strong><small>CDG · ORY</small></article>
-      </div>
+      <HeroRouteGlobe />
     </section>
 
     <section class="search-modes" aria-labelledby="search-modes-title">
       <div class="section-heading">
         <p class="home-eyebrow">Choose your starting point</p>
-        <h2 id="search-modes-title">Two ways to discover the right flight.</h2>
-        <p>Use the focused search when you know the trip shape. Use multi-destination planning when the route itself is part of the question.</p>
+        <h2 id="search-modes-title">Three ways to discover the right flight.</h2>
+        <p>Search a known route, explore where one airport can take you, or plan a complete multi-destination journey.</p>
       </div>
       <div class="mode-grid">
         <article class="mode-card mode-card--simple">
@@ -52,6 +38,14 @@
           <p>Search several origin airports, destinations, and dates at once. Compare outbound options first, then see compatible returns.</p>
           <ul><li>Multiple airport groups</li><li>Flexible or selected dates</li><li>Complete filters and rankings</li></ul>
           <RouterLink to="/search">Open flight search <span aria-hidden="true">→</span></RouterLink>
+        </article>
+        <article class="mode-card mode-card--explore">
+          <div class="mode-icon" aria-hidden="true">◎</div>
+          <p class="mode-kicker">Start with possibility</p>
+          <h3>Explore direct destinations</h3>
+          <p>Pick one airport and see its current direct-flight network across an interactive globe.</p>
+          <ul><li>Current scheduled routes</li><li>Random destination inspiration</li><li>Explicit fare and onward-route actions</li></ul>
+          <RouterLink to="/explore">Open route explorer <span aria-hidden="true">→</span></RouterLink>
         </article>
         <article class="mode-card mode-card--multi">
           <div class="mode-icon" aria-hidden="true">⌁</div>

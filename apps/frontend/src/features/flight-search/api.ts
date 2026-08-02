@@ -51,6 +51,7 @@ type ApiSearchStopFilterMetadata = {
   direct?: number | null
   oneStop?: number | null
   twoPlusStop?: number | null
+  minimumAvailableStops?: number | null
 }
 type ApiSearchFiltersMetadata = {
   providers?: ApiSearchFilterOptionCount[] | null
@@ -233,6 +234,7 @@ const normalizeFilters = (filters: ApiSearchFiltersMetadata | null | undefined):
     direct: filters?.stops?.direct ?? 0,
     oneStop: filters?.stops?.oneStop ?? 0,
     twoPlusStop: filters?.stops?.twoPlusStop ?? 0,
+    minimumAvailableStops: filters?.stops?.minimumAvailableStops ?? null,
   },
 })
 
@@ -331,6 +333,10 @@ const buildResultsQueryParams = (query: SearchResultsQuery) => {
 
   if (query.twoPlusStop !== undefined) {
     params.set('twoPlusStop', query.twoPlusStop ? 'true' : 'false')
+  }
+
+  if (query.exactStops !== undefined) {
+    params.set('exactStops', String(query.exactStops))
   }
 
   const setListParam = (key: string, values?: string[]) => {

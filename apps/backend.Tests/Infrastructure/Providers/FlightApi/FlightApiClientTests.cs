@@ -70,6 +70,52 @@ public sealed class FlightApiClientTests
     }
 
     [Fact]
+    public async Task SearchDepartureScheduleAsync_CallsV1ScheduleThroughTheSharedGate()
+    {
+        var handler = new RecordingHttpMessageHandler("""{"airport":{"pluginData":{"details":{"name":"Dublin","code":{"iata":"DUB"},"position":{"latitude":53.42,"longitude":-6.27}},"schedule":{"departures":{"page":{"current":2,"total":3},"data":[]}}}}}""");
+        var gate = new RecordingGate();
+        var logger = new RecordingLogger<FlightApiClient>();
+        var client = CreateClient(handler, new RecordingProviderResponseCache(), gate, logger: logger);
+
+        var response = await client.SearchDepartureScheduleAsync(" dub ", 2, CancellationToken.None);
+
+        Assert.Equal("DUB", response.Airport?.PluginData?.Details?.Code?.Iata);
+        Assert.Equal("https://api.flightapi.io/schedule/test-key?mode=departures&iata=DUB&page=2", handler.LastRequestUri);
+        Assert.Equal((1, 1), (gate.Acquisitions, gate.Releases));
+        Assert.Contains(logger.Messages, message => message.Contains("live FlightAPI departure schedule", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, message => message.Contains("cache miss or refresh", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SearchDepartureScheduleAsync_RetriesFlightApisGenericTransientBadRequest()
+    {
+        var handler = new TransientScheduleBadRequestHandler(2);
+        var gate = new RecordingGate();
+        var client = CreateClient(handler, new RecordingProviderResponseCache(), gate);
+
+        var response = await client.SearchDepartureScheduleAsync("DXB", 1, CancellationToken.None);
+
+        Assert.Equal("DXB", response.Airport?.PluginData?.Details?.Code?.Iata);
+        Assert.Equal(3, handler.CallCount);
+        Assert.Equal((3, 3), (gate.Acquisitions, gate.Releases));
+    }
+
+    [Fact]
+    public async Task SearchDepartureScheduleAsync_DoesNotRetryOtherBadRequests()
+    {
+        var handler = new TransientScheduleBadRequestHandler(3, "Invalid airport code");
+        var gate = new RecordingGate();
+        var client = CreateClient(handler, new RecordingProviderResponseCache(), gate);
+
+        var error = await Assert.ThrowsAsync<FlightApiResponseException>(() =>
+            client.SearchDepartureScheduleAsync("DXB", 1, CancellationToken.None));
+
+        Assert.Equal(HttpStatusCode.BadRequest, error.StatusCode);
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal((1, 1), (gate.Acquisitions, gate.Releases));
+    }
+
+    [Fact]
     public async Task SearchOneWayAsync_Throws_WhenApiKeyMissing()
     {
         var cache = new RecordingProviderResponseCache();
@@ -89,7 +135,7 @@ public sealed class FlightApiClientTests
     }
 
     [Fact]
-    public async Task LiveSimpleOrderedOptimizedAndAirportRequests_ShareTheSameFivePermitGate()
+    public async Task LiveSimpleOrderedOptimizedAirportAndScheduleRequests_ShareTheSameFivePermitGate()
     {
         var cache = new RecordingProviderResponseCache();
         var handler = new ConcurrentTrackingHttpMessageHandler(
@@ -104,10 +150,11 @@ public sealed class FlightApiClientTests
         await Task.WhenAll(orderedEdges.Concat(optimizedEdges).Cast<Task>().Concat(new Task[] {
             client.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None),
             client.SearchRoundTripAsync(new ProviderRoundTripSearchRequest("DUB", "AMS", new DateOnly(2026, 5, 15), new DateOnly(2026, 5, 20), 1, "economy"), CancellationToken.None),
-            client.SearchAirportsAsync("Dublin", CancellationToken.None)
+            client.SearchAirportsAsync("Dublin", CancellationToken.None),
+            client.SearchDepartureScheduleAsync("DUB", 1, CancellationToken.None)
         }));
 
-        Assert.Equal(10, handler.CallCount);
+        Assert.Equal(11, handler.CallCount);
         Assert.InRange(handler.MaximumConcurrentCalls, 1, 5);
     }
 
@@ -383,6 +430,33 @@ public sealed class FlightApiClientTests
                 return Task.FromResult(throttled);
             }
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}", Encoding.UTF8, "application/json") });
+        }
+    }
+
+    private sealed class TransientScheduleBadRequestHandler(int failures, string message = "Something went wrong, please try again") : HttpMessageHandler
+    {
+        public int CallCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            CallCount++;
+            if (CallCount <= failures)
+            {
+                var failed = new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent($"{{\"message\":\"{message}\"}}", Encoding.UTF8, "application/json")
+                };
+                failed.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.Zero);
+                return Task.FromResult(failed);
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """{"airport":{"pluginData":{"details":{"code":{"iata":"DXB"}},"schedule":{"departures":{"data":[]}}}}}""",
+                    Encoding.UTF8,
+                    "application/json")
+            });
         }
     }
 

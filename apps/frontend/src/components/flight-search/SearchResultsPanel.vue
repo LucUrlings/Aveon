@@ -96,6 +96,9 @@ onBeforeUnmount(() => {
           </span>
           <button class="clear-active-filter" type="button" @click="emit('clearLegFilters')">Clear</button>
         </div>
+        <p v-if="tripType === 'return' && !selectedOutboundLegId" class="outbound-price-notice">
+          Prices shown are for the outbound flight only. Choose an outbound to see return options and the total trip price.
+        </p>
       </div>
       <div class="results-stats">
         <span v-if="selectedOutboundLegId">Sorted: {{ rankingLabel }}</span>
@@ -174,6 +177,7 @@ h2 { margin: 0; color: var(--ink-strong); }
 .results-stats { display: flex; flex-wrap: wrap; justify-content: end; gap: 7px; color: var(--muted); font-size: 0.78rem; }
 .results-stats span { padding: 6px 9px; border-radius: 999px; border: 1px solid #e6eaf1; background: var(--surface-subtle); }
 .results-active-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.outbound-price-notice { max-width: 680px; margin: 10px 0 0; padding: 9px 11px; border-left: 3px solid var(--warning); border-radius: 8px; background: var(--warning-soft); color: #74430a; font-size: 0.82rem; font-weight: 650; line-height: 1.45; }
 .active-filter-chip { display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 8px; background: var(--brand-soft); color: var(--brand-strong); font-size: 0.78rem; font-weight: 700; }
 .clear-active-filter { border: none; background: transparent; color: var(--muted); font: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer; padding: 0; }
 .clear-active-filter:hover { color: var(--ink-strong); }

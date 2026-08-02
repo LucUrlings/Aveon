@@ -8,6 +8,8 @@ describe('frontend routes', () => {
   it('keeps the product index and flight search on separate routes', () => {
     expect(router.resolve('/').name).toBe('home')
     expect(router.resolve('/search').name).toBe('search')
+    expect(router.resolve('/explore').name).toBe('explore')
+    expect(typeof router.resolve('/explore').matched[0]?.components?.default).toBe('function')
   })
 
   it('redirects legacy root search URLs while leaving ordinary index queries alone', async () => {

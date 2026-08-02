@@ -6,13 +6,15 @@ Most flight tools ask travellers to commit to one route and one pair of dates be
 
 Production: [aveon.lucurlings.nl](https://aveon.lucurlings.nl)
 
-The root URL is the product overview. Use `/search` for flexible one-way and return search, or `/multi-destination` for ordered and optimized journeys. Existing shared root URLs containing search criteria are redirected to `/search` with their state intact.
+The root URL is the product overview. Use `/search` for flexible one-way and return search, `/explore` to map the current direct destinations from one airport, or `/multi-destination` for ordered and optimized journeys. Existing shared root URLs containing search criteria are redirected to `/search` with their state intact.
 
 Product roadmap: [Multi-Destination Travel Search Product Plan](docs/multi-destination-search-plan.md)
 
+Explore roadmap and implementation contract: [Explore Routes and Homepage Globe Plan](docs/explore-routes-plan.md)
+
 ## Implementation Status
 
-The multi-destination foundation, ordered-route search, feasibility engine, bounded optimizer, optimizer frontend, and release hardening are implemented. These correspond to Milestones 0–4 and 6 in the product plan.
+The multi-destination foundation, ordered-route search, feasibility engine, bounded optimizer, optimizer frontend, and release hardening are implemented. These correspond to Milestones 0–4 and 6 in the product plan. The direct-route Explore experience, onward discovery flow, and random-hub homepage globe are also implemented; their contract and remaining operational smoke-test item are tracked separately in the Explore plan.
 
 The former Milestone 5 investigated FlightAPI Multi Trip bundled fares. The configured FlightAPI subscription does not provide that API, so the experimental implementation was removed and the work is explicitly deferred. Current multi-destination results are assembled from independently bookable one-way fares.
 
@@ -24,11 +26,15 @@ Multi-destination search is enabled by default and remains independently switcha
 - Multiple origin and destination airports
 - Date ranges and individually selected travel dates
 - Cached airport autocomplete
+- Interactive direct-route exploration with a random-destination option
+- Random-hub route globe on the product homepage
 - Progressive search sessions with live completion status
 - Outbound-first return selection to avoid materializing every possible round trip
 - Provider round trips and compatible synthetic returns built from two one-way fares
 - Recommended, cheapest, and fastest return rankings
 - Filters for stops, providers, airlines, airports, duration, and departure or arrival times
+- Automatic fallback to the exact fewest available stops when no direct or one-stop result exists
+- Filter-aware stop counts and explicit outbound-only price labels during return selection
 - Backend pagination with automatic infinite loading and a manual fallback
 - Grouped provider fares and locale-aware booking links
 - Shareable URL-backed search and filter state
@@ -44,7 +50,7 @@ Aveon currently integrates with FlightAPI. It does not process payments, issue t
 
 ## Technology
 
-- Frontend: Vue 3, Vue Router, Vite, TypeScript, and Vitest
+- Frontend: Vue 3, Vue Router, Vite, TypeScript, Vitest, Globe.gl, TopoJSON, and World Atlas
 - Backend: ASP.NET Core 10, Entity Framework Core, and ASP.NET Core Identity
 - Database: PostgreSQL
 - Cache and search sessions: Redis
@@ -59,6 +65,7 @@ apps/
     Features/
       Airports/
       Auth/
+      Explore/
       ItinerarySearch/
       Search/
     Infrastructure/
@@ -75,6 +82,7 @@ apps/
         flight-search/
       features/
         auth/
+        explore/
         flight-search/
         itinerary-search/
       pages/
@@ -90,8 +98,9 @@ apps/
 3. Search combinations are processed in the background through one process-wide FlightAPI request gate. Cache lookup happens first, so cached responses do not consume one of the five live-request permits.
 4. The frontend polls the session and displays normalized, grouped results as provider calls complete.
 5. Results are filtered and paginated by the backend. The frontend requests the next page as the user scrolls.
-6. For return searches, the user first selects an outbound leg. The backend then returns only compatible inbound options for that selection.
-7. Real provider round trips remain distinct from synthetic combinations made from separately bookable one-way fares.
+6. Stop counts are calculated after the other active filters. If the default direct-only view is empty, the UI selects one stop when available, otherwise the exact lowest stop count that still has results.
+7. For return searches, the user first selects an outbound leg. Outbound cards explicitly state that their price excludes the return; the backend then returns only compatible inbound options and complete-trip prices for that selection.
+8. Real provider round trips remain distinct from synthetic combinations made from separately bookable one-way fares.
 
 This staged return flow prevents the outbound and inbound result sets from producing an unbounded cross-product in memory. The backend also limits provider calls, caps retained fares per direction, and rejects searches beyond the configured safety limits.
 
@@ -105,6 +114,16 @@ This staged return flow prevents the outbound and inbound result sets from produ
 
 See the in-product [How search works](https://aveon.lucurlings.nl/how-it-works) page for a user-facing explanation.
 
+### Explore routes
+
+- The Explore page reads every permitted page of FlightAPI's rolling departure schedule for one airport and deduplicates codeshares into unique direct destinations.
+- Route networks are cached for seven days; homepage hub previews are cached for thirty days, with retained stale data used when FlightAPI is temporarily unavailable.
+- Country outlines come from a locally bundled low-resolution world topology, so the globe remains a recognizable map without third-party tile or texture requests.
+- Schedule calls share the same process-wide FlightAPI gate as airport autocomplete and every fare-search mode.
+- Selecting a destination previews and highlights that direct leg without navigating. The traveler can explicitly search its fares, or commit the stop and keep exploring; multi-leg paths hand off to ordered Build my route without starting a provider request.
+- Hovering or focusing a destination immediately restarts its highlighted arc, keeps a faint complete route underneath, pauses rotation, and pans toward the airport. Loading, result replacement, selection cards, route breadcrumbs, and filtered destinations transition without blank-map flicker; reduced-motion preferences disable nonessential animation.
+- The route map describes recently observed scheduled service, not guaranteed fares or every seasonal route.
+
 ## Important Code Areas
 
 ### Backend
@@ -114,6 +133,7 @@ See the in-product [How search works](https://aveon.lucurlings.nl/how-it-works) 
 - Multi-destination metrics: [`ItinerarySearchTelemetry.cs`](apps/backend/Features/ItinerarySearch/ItinerarySearchTelemetry.cs)
 - Bounded priced optimizer: [`OptimizedItinerarySearchRunner.cs`](apps/backend/Features/ItinerarySearch/OptimizedItinerarySearchRunner.cs)
 - Search API: [`SearchController.cs`](apps/backend/Features/Search/SearchController.cs)
+- Explore API and route aggregation: [`ExploreRouteService.cs`](apps/backend/Features/Explore/ExploreRouteService.cs)
 - Global provider concurrency: [`FlightApiRequestGate.cs`](apps/backend/Infrastructure/Providers/FlightApi/FlightApiRequestGate.cs)
 - Identical live-request coalescing: [`ProviderRequestCoalescer.cs`](apps/backend/Infrastructure/Providers/FlightApi/ProviderRequestCoalescer.cs)
 - Guest and account limits: [`SearchLimitResolver.cs`](apps/backend/Features/Search/SearchLimitResolver.cs)
@@ -126,6 +146,8 @@ See the in-product [How search works](https://aveon.lucurlings.nl/how-it-works) 
 ### Frontend
 
 - Product landing page: [`HomePage.vue`](apps/frontend/src/pages/HomePage.vue)
+- Route explorer: [`ExplorePage.vue`](apps/frontend/src/pages/ExplorePage.vue)
+- Shared route globe: [`RouteGlobe.vue`](apps/frontend/src/features/explore/RouteGlobe.vue)
 - Search-page composition: [`FlightSearch.vue`](apps/frontend/src/components/FlightSearch.vue)
 - Search execution, polling, cancellation, and pagination: [`useSearchSession.ts`](apps/frontend/src/features/flight-search/useSearchSession.ts)
 - URL hydration and synchronization: [`useSearchRouteState.ts`](apps/frontend/src/features/flight-search/useSearchRouteState.ts)
@@ -143,7 +165,7 @@ See the in-product [How search works](https://aveon.lucurlings.nl/how-it-works) 
 
 ## FlightAPI deployment constraint
 
-All FlightAPI operations—including airport autocomplete, one-way, round-trip, and multi-destination edge searches—must issue live HTTP requests through the singleton `FlightApiRequestGate`. The configured allowance defaults to five concurrent requests across the whole backend process and can be raised when the FlightAPI subscription permits it. Cache hits bypass the gate, identical concurrent cache misses share one in-flight request, and retries reacquire one permit per live attempt while remaining bounded by the caller cancellation/timeout.
+All FlightAPI operations—including airport autocomplete, departure-schedule pages, one-way, round-trip, and multi-destination edge searches—must issue live HTTP requests through the singleton `FlightApiRequestGate`. The configured allowance defaults to five concurrent requests across the whole backend process and can be raised when the FlightAPI subscription permits it. Cache hits bypass the gate, identical concurrent cache misses share one in-flight request, and retries reacquire one permit per live attempt while remaining bounded by the caller cancellation/timeout.
 
 Aveon currently supports one backend application instance. Horizontal scaling is not safe until the process-local gate is replaced by a Redis-backed distributed lease or the provider allowance is divided explicitly between instances.
 
@@ -228,6 +250,7 @@ Important settings:
 | --- | --- | --- |
 | `FLIGHTAPI_API_KEY` | FlightAPI credential | Required |
 | `FLIGHTAPI_MAX_CONCURRENT_REQUESTS` | Process-wide live FlightAPI request limit | `5` |
+| `FLIGHTAPI_MAX_SCHEDULE_PAGES` | Defensive maximum pages per Airport Schedule aggregation | `10` |
 | `AVEON_PUBLIC_URL` | Public origin used for canonical metadata, `robots.txt`, and `sitemap.xml` | Required in the container |
 | `AVEON_PORT` | Host port for the application container | `8080` |
 | `POSTGRES_DB` | PostgreSQL database | `aveon` |
@@ -237,9 +260,14 @@ Important settings:
 | `REDIS_DEV_PORT` | Local Redis host port | `6379` |
 | `REDIS_FLIGHT_API_ONE_WAY_TTL_MINUTES` | Provider-response cache lifetime | `30` |
 | `REDIS_AIRPORT_DATA_TTL_MINUTES` | Airport lookup cache lifetime | `10080` |
+| `REDIS_EXPLORE_ROUTES_TTL_MINUTES` | Explore route-network freshness | `10080` |
+| `REDIS_HERO_ROUTES_TTL_MINUTES` | Homepage route-network freshness | `43200` |
+| `REDIS_EXPLORE_ROUTES_RETENTION_MINUTES` | Explore stale-cache retention | `43200` |
+| `REDIS_HERO_ROUTES_RETENTION_MINUTES` | Homepage stale-cache retention | `129600` |
 | `REDIS_SEARCH_SESSION_TTL_MINUTES` | Search-session lifetime | `30` |
 | `SEARCH_ANONYMOUS_MAX_SEARCH_COMBINATIONS` | Guest search limit | `15` |
 | `SEARCH_USER_MAX_SEARCH_COMBINATIONS` | Registered-user search limit | `100` |
+| `SEARCH_EXECUTION_TIMEOUT_MINUTES` | Simple-search worker timeout | `10` |
 | `MULTI_DESTINATION_SEARCH_ENABLED` | Independent multi-destination feature flag | `true` |
 | `MULTI_DESTINATION_ANONYMOUS_MAX_PROVIDER_CALLS` | Guest multi-destination live-call budget | `25` |
 | `MULTI_DESTINATION_USER_MAX_PROVIDER_CALLS` | Registered-user multi-destination live-call budget | `100` |
@@ -284,7 +312,7 @@ Run a production frontend build:
 AVEON_PUBLIC_URL=https://aveon.lucurlings.nl pnpm --dir apps/frontend build
 ```
 
-Frontend coverage includes simple and multi-destination search sessions, analytics privacy, stale-request cancellation, pagination, route synchronization, API normalization, authentication races, ranking, filtering, accessibility, date handling, and SEO generation. Backend coverage includes request validation, maximum-input bounds, ordered and optimized orchestration, telemetry, staged returns, pagination, provider-call limiting, user limits, controllers, cache keys, airport lookup, and FlightAPI behavior.
+Frontend coverage includes simple and multi-destination search sessions, Explore and homepage globes, onward-route history, WebGL fallback, reduced motion, analytics privacy, stale-request cancellation, pagination, route synchronization, API normalization, authentication races, ranking, filtering, accessibility, date handling, and SEO generation. Backend coverage includes request validation, Explore schedule aggregation and cache fallback, maximum-input bounds, ordered and optimized orchestration, telemetry, staged returns, pagination, provider-call limiting, user limits, controllers, cache keys, airport lookup, and FlightAPI behavior.
 
 ## API Type Generation
 
@@ -329,6 +357,7 @@ ghcr.io/lucurlings/aveon:latest
 - Prices and availability can change between discovery and booking.
 - Synthetic returns are separate bookings and can have different provider terms.
 - Multi-destination itineraries currently use separately bookable one-way fares; FlightAPI bundled Multi Trip fares are deferred.
+- Explore uses the provider's rolling Schedule API v1 window and therefore does not represent every seasonal route or prove fare availability.
 - Bounded optimized coverage does not guarantee the globally cheapest possible route.
 - Search history and saved itineraries are not currently persisted for users.
 - The frontend is a client-rendered Vue application. Static metadata and structured files provide the initial SEO surface, while route metadata is updated in the browser.

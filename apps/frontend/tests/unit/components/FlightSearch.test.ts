@@ -248,6 +248,91 @@ describe('FlightSearch', () => {
     expect(router.currentRoute.value.query.adults).toBe('1')
   })
 
+  it.each([
+    {
+      label: 'one stop',
+      stops: { direct: 0, oneStop: 4, twoPlusStop: 2, minimumAvailableStops: 1 },
+      expected: { direct: false, oneStop: true, twoPlusStop: false },
+      exactStops: undefined,
+    },
+    {
+      label: 'the exact lowest higher stop count',
+      stops: { direct: 0, oneStop: 0, twoPlusStop: 5, minimumAvailableStops: 3 },
+      expected: { direct: false, oneStop: false, twoPlusStop: true },
+      exactStops: 3,
+    },
+  ])('automatically falls back to $label when direct flights are unavailable', async ({ stops, expected, exactStops }) => {
+    const fallbackSession = makeSession({
+      response: {
+        ...makeSession().response,
+        filters: { ...makeSession().response.filters, stops },
+      },
+    })
+    mockSearchFlightsRequest.mockResolvedValue(fallbackSession)
+    mockGetSearchSession.mockResolvedValue(fallbackSession)
+
+    const { wrapper } = await mountWithRouter('/', {
+      global: {
+        stubs: {
+          FlightSearchBar: {
+            emits: ['submit'],
+            template: '<button class="submit-search" @click="$emit(\'submit\')">submit</button>',
+          },
+          SearchFilters: true,
+          SearchResultCard: true,
+        },
+      },
+    })
+
+    await wrapper.get('.submit-search').trigger('click')
+
+    await vi.waitFor(() => {
+      const query = mockGetSearchSession.mock.calls.at(-1)?.[1]
+      expect(query).toEqual(expect.objectContaining(expected))
+      expect(query?.exactStops).toBe(exactStops)
+    })
+  })
+
+  it('removes the automatic exact-stop restriction when the traveler changes stop filters', async () => {
+    const fallbackSession = makeSession({
+      response: {
+        ...makeSession().response,
+        filters: {
+          ...makeSession().response.filters,
+          stops: { direct: 0, oneStop: 0, twoPlusStop: 5, minimumAvailableStops: 3 },
+        },
+      },
+    })
+    mockSearchFlightsRequest.mockResolvedValue(fallbackSession)
+    mockGetSearchSession.mockResolvedValue(fallbackSession)
+
+    const { wrapper } = await mountWithRouter('/', {
+      global: {
+        stubs: {
+          FlightSearchBar: {
+            emits: ['submit'],
+            template: '<button class="submit-search" @click="$emit(\'submit\')">submit</button>',
+          },
+          SearchFilters: {
+            emits: ['update:includeDirectFlights'],
+            template: '<button class="include-direct" @click="$emit(\'update:includeDirectFlights\', true)">include direct</button>',
+          },
+          SearchResultCard: true,
+        },
+      },
+    })
+
+    await wrapper.get('.submit-search').trigger('click')
+    await vi.waitFor(() => expect(mockGetSearchSession.mock.calls.at(-1)?.[1]?.exactStops).toBe(3))
+    await wrapper.get('.include-direct').trigger('click')
+
+    await vi.waitFor(() => {
+      const query = mockGetSearchSession.mock.calls.at(-1)?.[1]
+      expect(query?.direct).toBe(true)
+      expect(query?.exactStops).toBeUndefined()
+    })
+  })
+
   it('refetches the current session with backend filter params and updates the page title from filtered results', async () => {
     mockSearchFlightsRequest.mockResolvedValue(makeSession())
     const filteredSession = makeSession({
@@ -618,6 +703,34 @@ describe('FlightSearch', () => {
       page: 1,
       pageSize: 100,
     }), expect.any(AbortSignal))
+  })
+
+  it('hydrates an Explore handoff without searching until the traveler confirms', async () => {
+    mockSearchFlightsRequest.mockResolvedValue(makeSession())
+    const { wrapper, router } = await mountWithRouter('/?origins=DUB&destinations=AMS&prefill=true', {
+      global: {
+        stubs: {
+          FlightSearchBar: {
+            props: ['originAirports', 'destinationAirports'],
+            emits: ['submit'],
+            template: '<div><span class="prefilled-route">{{ originAirports[0]?.code }} → {{ destinationAirports[0]?.code }}</span><button class="confirm-prefill" @click="$emit(\'submit\')">Search</button></div>',
+          },
+          SearchFilters: true,
+          SearchResultCard: true,
+        },
+      },
+    })
+
+    expect(wrapper.get('.prefilled-route').text()).toBe('DUB → AMS')
+    expect(mockSearchFlightsRequest).not.toHaveBeenCalled()
+    expect(router.currentRoute.value.query.prefill).toBe('true')
+    expect(router.currentRoute.value.query.dates).toBe(getDefaultDepartureDates().join(','))
+
+    await wrapper.get('.confirm-prefill').trigger('click')
+    await flushPromises()
+
+    expect(mockSearchFlightsRequest).toHaveBeenCalledOnce()
+    expect(router.currentRoute.value.query.prefill).toBeUndefined()
   })
 
   it('ignores an in-flight polling response after a newer search starts', async () => {

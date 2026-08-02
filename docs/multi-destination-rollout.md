@@ -6,7 +6,7 @@ Multi-destination search is controlled independently from simple search by `Mult
 
 1. Deploy exactly one backend instance. The FlightAPI request gate is process-local and horizontal scaling is prohibited until a distributed gate is implemented.
 2. Run the backend and frontend suites and a production frontend build.
-3. Confirm `FLIGHTAPI_MAX_CONCURRENT_REQUESTS` matches the provider subscription. It defaults to five and all simple-search, autocomplete, ordered-route, and optimized-route live requests share it.
+3. Confirm `FLIGHTAPI_MAX_CONCURRENT_REQUESTS` matches the provider subscription. It defaults to five and all simple-search, autocomplete, Explore schedule, ordered-route, and optimized-route live requests share it.
 4. Confirm the role budgets and execution timeout. No role budget may exceed `MultiDestinationSearch:HardMaxProviderCalls`.
 5. Verify logs and analytics contain no API key, booking URL, booking token, airport selection, or search identifier.
 
@@ -22,7 +22,7 @@ The application feature flag is global. Audience staging must therefore be enfor
 ## Rollback
 
 1. Set `MULTI_DESTINATION_SEARCH_ENABLED=false` and redeploy or restart the single backend instance.
-2. Verify `/api/v1/itinerary-searches/configuration` returns `404` and the simple `/api/v1/searches` flow still passes its smoke check.
+2. Verify `/api/v1/itinerary-searches/configuration` returns `404`, the simple `/api/v1/searches` flow still passes its smoke check, and `/api/v1/explore/routes?origin=DUB` remains governed only by its own cache/provider availability rather than the multi-destination flag.
 3. Allow already-running worker calls to end within their configured timeout. Redis sessions expire automatically and no user record depends on them.
 4. Preserve aggregate metrics and sanitized logs for diagnosis; never export provider credentials or booking URLs.
 

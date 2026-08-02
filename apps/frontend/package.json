@@ -11,13 +11,17 @@
     "generate:types": "openapi-typescript http://127.0.0.1:5210/swagger/v1/swagger.json -o src/api/generated.ts"
   },
   "dependencies": {
+    "globe.gl": "^2.46.1",
+    "topojson-client": "^3.1.0",
     "vue": "^3.5.30",
-    "vue-router": "^4.5.1"
+    "vue-router": "^4.5.1",
+    "world-atlas": "^2.0.2"
   },
   "devDependencies": {
-    "@vue/test-utils": "^2.4.6",
     "@types/node": "^24.12.0",
+    "@types/topojson-client": "^3.1.5",
     "@vitejs/plugin-vue": "^6.0.5",
+    "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.9.0",
     "jsdom": "^26.1.0",
     "openapi-typescript": "^7.13.0",

@@ -10,6 +10,8 @@ public record FlightApiOptions
 
     public int MaxRetryDelaySeconds { get; init; } = 30;
 
+    public int MaxSchedulePages { get; init; } = 10;
+
     public string BaseUrl { get; init; } = "https://api.flightapi.io/";
 
     public string ApiKey { get; init; } = string.Empty;

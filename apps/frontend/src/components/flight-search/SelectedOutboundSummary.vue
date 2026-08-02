@@ -44,9 +44,12 @@ const emit = defineEmits<{
     </div>
 
     <div v-if="result.priceOptions[0]" class="selected-outbound-fare">
-      <strong>
-        {{ formatPrice(result.priceOptions[0].totalPrice.amount, result.priceOptions[0].totalPrice.currency) }}
-      </strong>
+      <div class="selected-outbound-price">
+        <span>Outbound only · return not included</span>
+        <strong>
+          {{ formatPrice(result.priceOptions[0].totalPrice.amount, result.priceOptions[0].totalPrice.currency) }}
+        </strong>
+      </div>
       <a
         v-if="primaryBookingLink"
         :href="primaryBookingLink.url"

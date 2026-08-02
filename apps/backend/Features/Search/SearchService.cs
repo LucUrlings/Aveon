@@ -572,6 +572,10 @@ public sealed class SearchService(
         var globalFilters = BuildGlobalFilterMetadata(canonicalResults, filterLegIndex);
         var baseFilteredResults = ApplyBaseFilters(canonicalResults, query, filterLegIndex).ToList();
         var filteredResults = ApplyFinalFilters(baseFilteredResults, query, filterLegIndex).ToList();
+        var stopFacetResults = ApplyFinalFilters(
+            ApplyBaseFilters(canonicalResults, query, filterLegIndex, applyStopFilter: false),
+            query,
+            filterLegIndex);
         var pagination = ApplyPagination(filteredResults, query, out var pagedResults);
         var returnedStopCounts = BuildStopCounts(pagedResults, filterLegIndex);
         var visibleProviderResultCount = filteredResults.Sum(result => result.PriceOptions.Count);
@@ -585,7 +589,7 @@ public sealed class SearchService(
                 returnedStopCounts.DirectFlightCount,
                 returnedStopCounts.OneStopFlightCount,
                 returnedStopCounts.TwoPlusStopFlightCount),
-            BuildFiltersMetadata(globalFilters, baseFilteredResults, filterLegIndex),
+            BuildFiltersMetadata(globalFilters, baseFilteredResults, stopFacetResults, filterLegIndex),
             pagination);
     }
 
@@ -1175,7 +1179,8 @@ public sealed class SearchService(
     private static List<SearchResult> ApplyBaseFilters(
         IEnumerable<SearchResult> results,
         SearchResultsQuery query,
-        int filterLegIndex)
+        int filterLegIndex,
+        bool applyStopFilter = true)
     {
         var providers = query.GetProviders();
         var airlines = query.GetAirlines();
@@ -1205,7 +1210,7 @@ public sealed class SearchService(
             })
             .Where(result => result is not null)
             .Cast<SearchResult>()
-            .Where(result => MatchesStopFilters(result, query, filterLegIndex))
+            .Where(result => !applyStopFilter || MatchesStopFilters(result, query, filterLegIndex))
             .Where(result => MatchesAirlineFilters(result, airlines, filterLegIndex))
             .Where(result => MatchesAirportFilters(result, departureAirports, arrivalAirports, filterLegIndex))
             .Where(result => MatchesTimeFilters(result, departureTimeRange, arrivalTimeRange, returnDepartureTimeRange, returnArrivalTimeRange))
@@ -1264,6 +1269,7 @@ public sealed class SearchService(
     private static SearchFiltersMetadata BuildFiltersMetadata(
         SearchFiltersMetadata globalFilters,
         List<SearchResult> baseFilteredResults,
+        List<SearchResult> stopFacetResults,
         int filterLegIndex) =>
         globalFilters with
         {
@@ -1271,7 +1277,8 @@ public sealed class SearchService(
             DepartureTimeMinutes = BuildTimeRange(baseFilteredResults, 0, leg => leg.DepartureLocalTime),
             ArrivalTimeMinutes = BuildTimeRange(baseFilteredResults, 0, leg => leg.ArrivalLocalTime),
             ReturnDepartureTimeMinutes = BuildTimeRange(baseFilteredResults, 1, leg => leg.DepartureLocalTime),
-            ReturnArrivalTimeMinutes = BuildTimeRange(baseFilteredResults, 1, leg => leg.ArrivalLocalTime)
+            ReturnArrivalTimeMinutes = BuildTimeRange(baseFilteredResults, 1, leg => leg.ArrivalLocalTime),
+            Stops = BuildStopFilterMetadata(stopFacetResults, filterLegIndex)
         };
 
     private static List<SearchFilterOptionCount> BuildProviderCounts(IEnumerable<SearchResult> results) =>
@@ -1341,11 +1348,18 @@ public sealed class SearchService(
 
     private static SearchStopFilterMetadata BuildStopFilterMetadata(IEnumerable<SearchResult> results, int legIndex)
     {
-        var stopCounts = BuildStopCounts(results, legIndex);
+        var resultList = results.ToList();
+        var stopCounts = BuildStopCounts(resultList, legIndex);
+        var minimumAvailableStops = resultList.Count == 0
+            ? (int?)null
+            : resultList.Min(result => result.Legs.Count <= legIndex
+                ? 0
+                : Math.Max(result.Legs[legIndex].Segments.Count - 1, 0));
         return new SearchStopFilterMetadata(
             stopCounts.DirectFlightCount,
             stopCounts.OneStopFlightCount,
-            stopCounts.TwoPlusStopFlightCount);
+            stopCounts.TwoPlusStopFlightCount,
+            minimumAvailableStops);
     }
 
     private static bool MatchesStopFilters(SearchResult result, SearchResultsQuery query, int legIndex)
@@ -1358,6 +1372,11 @@ public sealed class SearchService(
         var stopCount = result.Legs.Count <= legIndex
             ? 0
             : Math.Max(result.Legs[legIndex].Segments.Count - 1, 0);
+
+        if (query.ExactStops.HasValue)
+        {
+            return stopCount == Math.Max(query.ExactStops.Value, 0);
+        }
 
         return stopCount switch
         {

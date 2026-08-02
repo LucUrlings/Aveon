@@ -73,6 +73,18 @@
   justify-content: end;
 }
 
+.selected-outbound-price {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+}
+
+.selected-outbound-price span {
+  color: var(--warning);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
 .selected-outbound-fare a,
 .compact-return-links a,
 .compact-other-fares a {
@@ -339,6 +351,10 @@
   .compact-return-links,
   .compact-return-actions {
     justify-content: start;
+    justify-items: start;
+  }
+
+  .selected-outbound-price {
     justify-items: start;
   }
 

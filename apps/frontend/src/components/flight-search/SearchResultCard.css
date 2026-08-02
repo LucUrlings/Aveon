@@ -177,6 +177,10 @@
   align-items: center;
 }
 
+.one-way-leg-summary {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) auto;
+}
+
 .leg-route,
 .leg-times {
   margin: 0;
@@ -330,6 +334,49 @@
   font-weight: 700;
 }
 
+.price-scope-label,
+.other-fare-scope {
+  color: var(--warning);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.price-scope-label {
+  max-width: 220px;
+  text-align: right;
+}
+
+.outbound-choice-button {
+  min-width: 180px;
+  border: 0;
+  border-radius: 10px;
+  padding: 9px 14px;
+  background: var(--brand);
+  color: white;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 7px 16px rgba(79, 70, 229, 0.2);
+  transition: background-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.outbound-choice-button:hover {
+  background: var(--brand-strong);
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.26);
+  transform: translateY(-1px);
+}
+
+.outbound-choice-button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.outbound-choice-button.active {
+  background: var(--ink-strong);
+}
+
 .primary-fare-link,
 .other-fare-item a {
   color: var(--brand-strong);
@@ -464,6 +511,15 @@
 
   .price-block {
     justify-items: start;
+  }
+
+  .price-scope-label {
+    text-align: left;
+  }
+
+  .outbound-choice-button {
+    width: 100%;
+    min-width: 0;
   }
 
   .other-fare-item {

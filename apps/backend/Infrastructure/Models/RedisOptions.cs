@@ -10,5 +10,13 @@ public record RedisOptions
 
     public int AirportDataTtlMinutes { get; init; } = 10080;
 
+    public int ExploreRoutesTtlMinutes { get; init; } = 10080;
+
+    public int HeroRoutesTtlMinutes { get; init; } = 43200;
+
+    public int ExploreRoutesRetentionMinutes { get; init; } = 43200;
+
+    public int HeroRoutesRetentionMinutes { get; init; } = 129600;
+
     public int SearchSessionTtlMinutes { get; init; } = 30;
 }

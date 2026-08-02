@@ -586,6 +586,67 @@ public sealed class SearchServiceTests
     }
 
     [Fact]
+    public async Task GetSearchAsync_FiltersToAnExactStopCount_AndReportsTheMinimumAvailable()
+    {
+        var results = new List<SearchResult>
+        {
+            CreateResultWithStopCount("two-stops", 2),
+            CreateResultWithStopCount("three-stops", 3)
+        };
+        var stored = new SearchSessionResponse(
+            "search-connections",
+            "completed",
+            2,
+            2,
+            0,
+            new SearchResponse(
+                results,
+                new SearchMetadata(2, 2, 2, 0, 0, 2),
+                new SearchFiltersMetadata([], [], [], [], new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0, 0)),
+                new SearchPagination(1, 2, 2, 1)),
+            null);
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        await store.SetAsync(stored, CancellationToken.None);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
+
+        var response = await service.GetSearchAsync(
+            "search-connections",
+            new SearchResultsQuery { ExactStops = 2 },
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Equal("two-stops", Assert.Single(response!.Response.Results).Id);
+        Assert.Equal(2, response.Response.Filters.Stops.MinimumAvailableStops);
+        Assert.Equal(2, response.Response.Filters.Stops.TwoPlusStop);
+    }
+
+    [Fact]
+    public async Task GetSearchAsync_RecalculatesStopFacetCountsAfterOtherFilters()
+    {
+        var store = new FlakySearchSessionStore(failingCalls: []);
+        await store.SetAsync(CreateStoredSession(), CancellationToken.None);
+        var service = CreateSearchService(store, new SuccessfulFlightSearchProvider());
+
+        var response = await service.GetSearchAsync(
+            "search-1",
+            new SearchResultsQuery
+            {
+                Direct = true,
+                OneStop = false,
+                TwoPlusStop = false,
+                Providers = "FlightApi:Air France"
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Empty(response!.Response.Results);
+        Assert.Equal(0, response.Response.Filters.Stops.Direct);
+        Assert.Equal(1, response.Response.Filters.Stops.OneStop);
+        Assert.Equal(0, response.Response.Filters.Stops.TwoPlusStop);
+        Assert.Equal(1, response.Response.Filters.Stops.MinimumAvailableStops);
+    }
+
+    [Fact]
     public async Task GetSearchAsync_AppliesPagination_WhenRequested()
     {
         var store = new FlakySearchSessionStore(failingCalls: []);
@@ -933,6 +994,32 @@ public sealed class SearchServiceTests
             ],
             totalDurationMinutes,
             priceOptions);
+
+    private static SearchResult CreateResultWithStopCount(string id, int stopCount)
+    {
+        var departure = new DateTime(2026, 5, 15, 8, 0, 0);
+        var segments = Enumerable.Range(0, stopCount + 1)
+            .Select(index => CreateSegment(
+                "Test Airline",
+                "TA",
+                $"{stopCount}{index}",
+                index == 0 ? "DUB" : $"X{index}",
+                index == stopCount ? "AMS" : $"X{index + 1}",
+                departure.AddHours(index),
+                departure.AddHours(index + 1),
+                60))
+            .ToList();
+
+        return CreateResult(
+            id,
+            "DUB",
+            "AMS",
+            departure,
+            departure.AddHours(stopCount + 1),
+            (stopCount + 1) * 60,
+            segments,
+            [CreatePriceOption($"{id}-price", "FlightApi:Test", 100m + stopCount)]);
+    }
 
     private static SearchResult CreateRoundTripResult(
         string id,

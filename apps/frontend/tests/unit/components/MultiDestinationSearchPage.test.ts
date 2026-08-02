@@ -1,7 +1,10 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import MultiDestinationSearchPage from '../../../src/pages/MultiDestinationSearchPage.vue'
 import AirportGroupPicker from '../../../src/components/flight-search/AirportGroupPicker.vue'
+
+const { routeQuery } = vi.hoisted(() => ({ routeQuery: {} as Record<string, string> }))
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: routeQuery }) }))
 
 describe('MultiDestinationSearchPage', () => {
   it('uses the shared airport-group picker in both advanced modes', async () => {
@@ -52,5 +55,16 @@ describe('MultiDestinationSearchPage', () => {
     expect(add.attributes('disabled')).toBeDefined()
     await add.trigger('click')
     expect(wrapper.findAll('fieldset.ordered-leg')).toHaveLength(8)
+  })
+
+  it('opens ordered mode with an adjacent-leg route prefill', () => {
+    Object.assign(routeQuery, { mode: 'ordered', route: 'DUB,AMS,JFK', prefill: 'true' })
+    const wrapper = mount(MultiDestinationSearchPage)
+
+    const editors = wrapper.findAll('fieldset.ordered-leg')
+    expect(editors).toHaveLength(2)
+    expect(wrapper.text()).toContain('DUB')
+    expect(wrapper.text()).toContain('JFK')
+    delete routeQuery.mode; delete routeQuery.route; delete routeQuery.prefill
   })
 })

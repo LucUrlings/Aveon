@@ -66,6 +66,7 @@ const selectedOutboundLegId = ref<string | null>(null)
 const selectedOutboundResult = ref<SearchResult | null>(null)
 const selectedReturnLegId = ref<string | null>(null)
 const returnRanking = ref<ReturnRanking>('best')
+const automaticExactStops = ref<number | null>(null)
 const searchDates = useSearchDates(() => {
   returnDepartureTimeRange.value = [0, 1439]
   returnArrivalTimeRange.value = [0, 1439]
@@ -85,6 +86,7 @@ const {
 } = searchDates
 let hasMounted = false
 let shouldInitializeResultStageFilters = false
+let hasSelectedBestAvailableStops = false
 
 const sessionState = useSearchSession({
   buildQuery: () => buildSearchResultsQuery(),
@@ -108,6 +110,8 @@ const sessionState = useSearchSession({
     selectedOutboundResult.value = null
     selectedReturnLegId.value = null
     returnRanking.value = 'best'
+    automaticExactStops.value = null
+    hasSelectedBestAvailableStops = false
   },
   onSearchAccepted: () => {
     isSearchCollapsed.value = true
@@ -190,7 +194,7 @@ const availableMaxDurationMinutes = computed(() => {
   return response.value.filters.durationMinutes.max
 })
 
-const { hasHydratedFiltersFromUrl, initialize: initializeRouteState } = useSearchRouteState({
+const { hasHydratedFiltersFromUrl, initialize: initializeRouteState, consumePrefill } = useSearchRouteState({
   originAirports,
   destinationAirports,
   selectedDepartureDates,
@@ -228,6 +232,10 @@ const { hasHydratedFiltersFromUrl, initialize: initializeRouteState } = useSearc
     hasMounted = true
   },
 })
+const submitSearch = () => {
+  consumePrefill()
+  return searchFlights()
+}
 
 const filteredResults = computed(() => selectedOutboundLegId.value
   ? rankReturnOptions(loadedResults.value, returnRanking.value)
@@ -292,6 +300,16 @@ const loadedStopCounts = computed(() => {
   }
 
   return counts
+})
+
+const displayedStopCounts = computed(() => {
+  const stops = response.value?.filters.stops ?? { direct: 0, oneStop: 0, twoPlusStop: 0 }
+  return {
+    ...stops,
+    twoPlusStop: automaticExactStops.value !== null
+      ? response.value?.pagination.totalResults ?? 0
+      : stops.twoPlusStop,
+  }
 })
 
 const compactSearchSummary = computed(() => {
@@ -402,6 +420,10 @@ const buildSearchResultsQuery = (): SearchResultsQuery => {
     pageSize: DEFAULT_PAGE_SIZE,
   }
 
+  if (automaticExactStops.value !== null) {
+    query.exactStops = automaticExactStops.value
+  }
+
   const explicitProviders = getExplicitSelection(selectedProviders.value, providerFilters.value)
   if (explicitProviders.length > 0) {
     query.providers = explicitProviders
@@ -471,10 +493,36 @@ watch(
     syncSelectedFiltersToAvailable(selectedDepartureAirports, departureAirportFilters.value, previousDepartureAirportFilters, shouldResetFilters)
     syncSelectedFiltersToAvailable(selectedArrivalAirports, arrivalAirportFilters.value, previousArrivalAirportFilters, shouldResetFilters)
     syncMaxDurationToAvailable(shouldResetFilters)
+
+    if (nextResponse && searchSession.value?.status !== 'running' && !hasSelectedBestAvailableStops) {
+      const hasDefaultStopSelection = includeDirectFlights.value
+        && !includeOneStopFlights.value
+        && !includeTwoPlusStopFlights.value
+      const minimumStops = nextResponse.filters.stops.minimumAvailableStops
+
+      if (hasDefaultStopSelection && minimumStops !== null && minimumStops !== undefined && minimumStops > 0) {
+        includeDirectFlights.value = false
+        includeOneStopFlights.value = minimumStops === 1
+        includeTwoPlusStopFlights.value = minimumStops >= 2
+        automaticExactStops.value = minimumStops >= 2 ? minimumStops : null
+      }
+
+      hasSelectedBestAvailableStops = true
+    }
+
     hasHydratedFiltersFromUrl.value = false
     if (nextResponse) shouldInitializeResultStageFilters = false
   },
   { immediate: true },
+)
+
+watch(
+  [includeDirectFlights, includeOneStopFlights, includeTwoPlusStopFlights],
+  ([direct, oneStop, twoPlusStop]) => {
+    if (automaticExactStops.value !== null && (direct || oneStop || !twoPlusStop)) {
+      automaticExactStops.value = null
+    }
+  },
 )
 
 watch(
@@ -563,6 +611,8 @@ const resetFiltersForResultStage = () => {
   arrivalTimeRange.value = [0, 1439]
   returnDepartureTimeRange.value = [0, 1439]
   returnArrivalTimeRange.value = [0, 1439]
+  automaticExactStops.value = null
+  hasSelectedBestAvailableStops = false
   shouldInitializeResultStageFilters = true
 }
 
@@ -660,7 +710,7 @@ const swapLocations = () => {
         :origin-has-searched-suggestions="originHasSearchedSuggestions"
         :destination-has-searched-suggestions="destinationHasSearchedSuggestions"
         :cabin-options="cabinOptions"
-        @submit="searchFlights"
+        @submit="submitSearch"
         @toggle-collapse="isSearchCollapsed = !isSearchCollapsed"
         @confirm-origin-input="confirmOriginInput"
         @confirm-destination-input="confirmDestinationInput"
@@ -683,6 +733,8 @@ const swapLocations = () => {
         v-if="response"
         :trip-type="tripType"
         :selected-outbound-leg-id="selectedOutboundLegId"
+        :automatic-exact-stops="automaticExactStops"
+        :stop-counts="displayedStopCounts"
         v-model:include-direct-flights="includeDirectFlights"
         v-model:include-one-stop-flights="includeOneStopFlights"
         v-model:include-two-plus-stop-flights="includeTwoPlusStopFlights"

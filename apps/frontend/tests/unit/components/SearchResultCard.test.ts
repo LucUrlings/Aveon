@@ -254,8 +254,12 @@ describe('SearchResultCard', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('Choose outbound')
-    await wrapper.get('.leg-filter-button').trigger('click')
+    expect(wrapper.text()).toContain('Choose this outbound')
+    expect(wrapper.text()).toContain('Outbound only · return not included')
+    expect(wrapper.text()).toContain('View outbound fare')
+    expect(wrapper.get('.price-block').find('.outbound-choice-button').exists()).toBe(true)
+    expect(wrapper.find('.leg-summary .outbound-choice-button').exists()).toBe(false)
+    await wrapper.get('.outbound-choice-button').trigger('click')
 
     expect(wrapper.emitted('filterLeg')).toEqual([
       [{ legId: 'direct-leg-1', legIndex: 0 }],
@@ -283,6 +287,7 @@ describe('SearchResultCard', () => {
 
     expect(wrapper.text()).toContain('Selected outbound')
     expect(wrapper.text()).toContain('AMS → DUB')
+    expect(wrapper.text()).toContain('Outbound only · return not included')
     expect(wrapper.text()).toContain('EUR 120.00')
 
     await wrapper.get('button').trigger('click')

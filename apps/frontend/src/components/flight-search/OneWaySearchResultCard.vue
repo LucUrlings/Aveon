@@ -74,19 +74,8 @@ const emit = defineEmits<{
         :key="`${result.id}-${legIndex}`"
         class="leg-block"
       >
-        <div class="leg-summary">
+        <div class="leg-summary one-way-leg-summary">
           <p class="leg-route">{{ leg.originAirport }} → {{ leg.destinationAirport }}</p>
-          <span class="leg-actions">
-            <button
-              v-if="showOutboundSelection"
-              class="leg-filter-button"
-              :class="{ active: selectedOutboundLegId === leg.id }"
-              type="button"
-              @click="emit('filterLeg', { legId: leg.id, legIndex: 0 })"
-            >
-              {{ selectedOutboundLegId === leg.id ? 'Selected outbound' : 'Choose outbound' }}
-            </button>
-          </span>
           <span class="leg-times">{{ formatDateTime(leg.departureLocalTime) }} to {{ formatDateTime(leg.arrivalLocalTime) }}</span>
           <strong>{{ formatDuration(leg.durationMinutes) }}</strong>
         </div>
@@ -112,10 +101,20 @@ const emit = defineEmits<{
           <span>{{ formatDuration(result.totalDurationMinutes) }}</span>
         </div>
         <div class="price-block">
+          <span v-if="showOutboundSelection" class="price-scope-label">Outbound only · return not included</span>
           <strong>
             {{ result.priceOptions[0].totalPrice.currency }}
             {{ result.priceOptions[0].totalPrice.amount.toFixed(2) }}
           </strong>
+          <button
+            v-if="showOutboundSelection && result.legs[0]"
+            class="outbound-choice-button"
+            :class="{ active: selectedOutboundLegId === result.legs[0].id }"
+            type="button"
+            @click="emit('filterLeg', { legId: result.legs[0].id, legIndex: 0 })"
+          >
+            {{ selectedOutboundLegId === result.legs[0].id ? 'Outbound selected' : 'Choose this outbound' }}
+          </button>
           <a
             v-if="primaryBookingLink"
             class="primary-fare-link"
@@ -123,7 +122,7 @@ const emit = defineEmits<{
             target="_blank"
             rel="noreferrer"
           >
-            {{ primaryBookingLink.label || 'View fare' }}
+            {{ showOutboundSelection ? 'View outbound fare' : (primaryBookingLink.label || 'View fare') }}
           </a>
         </div>
       </div>
@@ -152,6 +151,7 @@ const emit = defineEmits<{
             <div>
               <strong>{{ formatProviderName(option.provider) }}</strong>
               <span>{{ option.totalPrice.currency }} {{ option.totalPrice.amount.toFixed(2) }}</span>
+              <small v-if="showOutboundSelection" class="other-fare-scope">Outbound only · return not included</small>
             </div>
             <div class="other-fare-links">
               <a

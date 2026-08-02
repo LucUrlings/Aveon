@@ -1,4 +1,5 @@
 using backend.Features.Airports;
+using backend.Features.Explore;
 using backend.Features.ItinerarySearch;
 using backend.Features.ItinerarySearch.Models;
 using backend.Features.Search;
@@ -37,7 +38,7 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddOptions<FlightApiOptions>()
     .Bind(builder.Configuration.GetSection(FlightApiOptions.SectionName))
     .Validate(options => options.MaxConcurrentRequests > 0, "FlightApi:MaxConcurrentRequests must be positive.")
-    .Validate(options => options.MaxRetryAttempts > 0 && options.MaxRetryDelaySeconds > 0, "FlightAPI retry limits must be positive.")
+    .Validate(options => options.MaxRetryAttempts > 0 && options.MaxRetryDelaySeconds > 0 && options.MaxSchedulePages > 0, "FlightAPI retry and schedule-page limits must be positive.")
     .ValidateOnStart();
 builder.Services.Configure<RedisOptions>(
     builder.Configuration.GetSection(RedisOptions.SectionName));
@@ -82,6 +83,7 @@ builder.Services.ConfigureApplicationCookie(options =>
     };
 });
 builder.Services.AddScoped<IAirportService, AirportService>();
+builder.Services.AddScoped<IExploreRouteService, ExploreRouteService>();
 builder.Services.AddScoped<ISearchLimitResolver, SearchLimitResolver>();
 builder.Services.AddSingleton<IFlightApiRequestGate, FlightApiRequestGate>();
 builder.Services.AddSingleton<IProviderRequestCoalescer, ProviderRequestCoalescer>();
@@ -101,6 +103,8 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(serviceProvider =>
     return ConnectionMultiplexer.Connect(options.ConnectionString);
 });
 builder.Services.AddSingleton<IProviderResponseCache, RedisProviderResponseCache>();
+builder.Services.AddSingleton<IExploreRouteCache, RedisExploreRouteCache>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHttpClient<FlightApiClient>((serviceProvider, client) =>
 {
     var options = serviceProvider
@@ -111,6 +115,7 @@ builder.Services.AddHttpClient<FlightApiClient>((serviceProvider, client) =>
 });
 builder.Services.AddScoped<IFlightSearchProvider>(serviceProvider => serviceProvider.GetRequiredService<FlightApiClient>());
 builder.Services.AddScoped<IAirportLookupProvider>(serviceProvider => serviceProvider.GetRequiredService<FlightApiClient>());
+builder.Services.AddScoped<IAirportScheduleProvider>(serviceProvider => serviceProvider.GetRequiredService<FlightApiClient>());
 
 builder.Services.AddCors(options =>
 {

@@ -40,6 +40,17 @@ export const router = createRouter({
       },
     },
     {
+      path: '/explore',
+      name: 'explore',
+      component: () => import('./pages/ExplorePage.vue'),
+      meta: {
+        seo: {
+          title: 'Explore direct flight destinations · Aveon',
+          description: 'Choose an airport and explore its current direct-flight network on an interactive globe before continuing to flight search.',
+        },
+      },
+    },
+    {
       path: '/about',
       name: 'about',
       component: () => import('./pages/AboutPage.vue'),

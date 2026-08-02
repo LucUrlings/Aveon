@@ -11,6 +11,8 @@ public record SearchResultsQuery
 
     public bool? TwoPlusStop { get; init; }
 
+    public int? ExactStops { get; init; }
+
     public string? Providers { get; init; }
 
     public string? Airlines { get; init; }
@@ -37,7 +39,7 @@ public record SearchResultsQuery
 
     public int? PageSize { get; init; }
 
-    public bool HasStopFilter => Direct.HasValue || OneStop.HasValue || TwoPlusStop.HasValue;
+    public bool HasStopFilter => Direct.HasValue || OneStop.HasValue || TwoPlusStop.HasValue || ExactStops.HasValue;
 
     public bool IsPaginationRequested => Page.HasValue || PageSize.HasValue;
 

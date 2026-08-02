@@ -78,6 +78,7 @@ export type SearchStopFilterMetadata = {
   direct: number
   oneStop: number
   twoPlusStop: number
+  minimumAvailableStops?: number | null
 }
 
 export type SearchFiltersMetadata = {
@@ -111,6 +112,7 @@ export type SearchResultsQuery = {
   direct?: boolean
   oneStop?: boolean
   twoPlusStop?: boolean
+  exactStops?: number
   providers?: string[]
   airlines?: string[]
   departureAirports?: string[]

@@ -4,6 +4,7 @@ using backend.Infrastructure.Providers.FlightApi.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -17,7 +18,7 @@ public sealed class FlightApiClient(
     IProviderResponseCache providerResponseCache,
     IFlightApiRequestGate requestGate,
     IProviderRequestCoalescer requestCoalescer,
-    ILogger<FlightApiClient> logger) : IFlightSearchProvider, IAirportLookupProvider
+    ILogger<FlightApiClient> logger) : IFlightSearchProvider, IAirportLookupProvider, IAirportScheduleProvider
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -216,7 +217,33 @@ public sealed class FlightApiClient(
         }
     }
 
-    private async Task<T> GetLiveResponseAsync<T>(string path, CancellationToken cancellationToken)
+    public async Task<FlightApiScheduleResponse> SearchDepartureScheduleAsync(
+        string originAirport,
+        int page,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            throw new InvalidOperationException("FlightApi:ApiKey is not configured.");
+        }
+
+        var origin = originAirport.Trim().ToUpperInvariant();
+        var normalizedPage = Math.Max(page, 1);
+        var path = $"schedule/{_options.ApiKey}?mode=departures&iata={Uri.EscapeDataString(origin)}&page={normalizedPage}";
+        logger.LogInformation(
+            "Calling live FlightAPI departure schedule for {OriginAirport}, page {Page} (cache miss or refresh)",
+            origin,
+            normalizedPage);
+        return await GetLiveResponseAsync<FlightApiScheduleResponse>(
+            path,
+            cancellationToken,
+            retryTransientScheduleBadRequest: true);
+    }
+
+    private async Task<T> GetLiveResponseAsync<T>(
+        string path,
+        CancellationToken cancellationToken,
+        bool retryTransientScheduleBadRequest = false)
         where T : new()
     {
         var maximumAttempts = Math.Max(_options.MaxRetryAttempts, 1);
@@ -224,38 +251,56 @@ public sealed class FlightApiClient(
         for (var attempt = 1; attempt <= maximumAttempts; attempt += 1)
         {
             TimeSpan? retryDelay = null;
+            HttpStatusCode? retryStatusCode = null;
             using (await requestGate.AcquireAsync(cancellationToken))
             {
                 requestGate.RecordLiveCall();
                 using var response = await httpClient.GetAsync(path, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
-                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                if (!response.IsSuccessStatusCode)
                 {
-                    requestGate.RecordThrottledResponse();
-                    if (attempt < maximumAttempts)
+                    var summary = await ReadErrorSummaryAsync(response, cancellationToken);
+                    var isThrottled = response.StatusCode == HttpStatusCode.TooManyRequests;
+                    var isTransientScheduleFailure = retryTransientScheduleBadRequest
+                        && IsTransientScheduleBadRequest(response.StatusCode, summary);
+
+                    if (isThrottled)
+                    {
+                        requestGate.RecordThrottledResponse();
+                    }
+
+                    if ((isThrottled || isTransientScheduleFailure) && attempt < maximumAttempts)
                     {
                         retryDelay = GetRetryDelay(response, attempt, _options.MaxRetryDelaySeconds);
+                        retryStatusCode = response.StatusCode;
+                    }
+                    else
+                    {
+                        throw new FlightApiResponseException(response.StatusCode, summary, ProviderRequestId(response));
                     }
                 }
-
-                if (retryDelay is null)
+                else
                 {
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        var summary = await ReadErrorSummaryAsync(response, cancellationToken);
-                        var providerRequestId = ProviderRequestId(response);
-                        throw new FlightApiResponseException(response.StatusCode, summary, providerRequestId);
-                    }
                     return await response.Content.ReadFromJsonAsync<T>(SerializerOptions, cancellationToken) ?? new T();
                 }
             }
 
-            logger.LogWarning("FlightApi returned HTTP 429; retrying attempt {Attempt} of {MaximumAttempts} after {Delay}", attempt + 1, maximumAttempts, retryDelay);
+            logger.LogWarning(
+                "FlightApi returned retryable HTTP {StatusCode}; retrying attempt {Attempt} of {MaximumAttempts} after {Delay}",
+                (int)retryStatusCode!.Value,
+                attempt + 1,
+                maximumAttempts,
+                retryDelay);
             await Task.Delay(retryDelay.Value, cancellationToken);
         }
 
         throw new InvalidOperationException("FlightApi retry loop completed without a response.");
     }
+
+    private static bool IsTransientScheduleBadRequest(HttpStatusCode statusCode, string summary) =>
+        statusCode == HttpStatusCode.BadRequest
+        && summary.Contains("Something went wrong", StringComparison.OrdinalIgnoreCase)
+        && summary.Contains("try again", StringComparison.OrdinalIgnoreCase);
 
     private async Task<string> ReadErrorSummaryAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {

@@ -95,11 +95,13 @@ export const useSearchRouteState = (options: SearchRouteStateOptions) => {
   const route = useRoute()
   const router = useRouter()
   const hasHydratedFiltersFromUrl = ref(false)
+  const prefillOnly = ref(false)
   let isReady = false
   let isSyncingRoute = false
 
   const applyUrlState = () => {
     const query = route.query
+    prefillOnly.value = getQueryString(query.prefill) === 'true'
     const origins = parseCodeListParam(getQueryString(query.origins))
     const destinations = parseCodeListParam(getQueryString(query.destinations))
     const departureDates = parseDateListParam(getQueryString(query.dates))
@@ -165,6 +167,7 @@ export const useSearchRouteState = (options: SearchRouteStateOptions) => {
       if (options.selectedOutboundLegId.value) query.outboundLegId = options.selectedOutboundLegId.value
       if (options.selectedReturnLegId.value) query.returnLegId = options.selectedReturnLegId.value
     }
+    if (prefillOnly.value) query.prefill = 'true'
     return query
   }
 
@@ -179,6 +182,7 @@ export const useSearchRouteState = (options: SearchRouteStateOptions) => {
   }
 
   const syncSearchFromRoute = () => {
+    if (prefillOnly.value) return
     const routeSearchKey = getSearchRequestKeyFromQuery(route.query)
     if (routeSearchKey && routeSearchKey !== options.lastExecutedSearchKey.value) void options.search()
   }
@@ -212,5 +216,11 @@ export const useSearchRouteState = (options: SearchRouteStateOptions) => {
     syncSearchFromRoute()
   }
 
-  return { hasHydratedFiltersFromUrl, initialize }
+  const consumePrefill = () => {
+    if (!prefillOnly.value) return
+    prefillOnly.value = false
+    void updateRouteState()
+  }
+
+  return { hasHydratedFiltersFromUrl, initialize, consumePrefill }
 }

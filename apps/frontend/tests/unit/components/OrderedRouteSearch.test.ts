@@ -154,4 +154,49 @@ describe('OrderedRouteSearch', () => {
     expect(wrapper.get('.route-search-progress .progress-spinner').attributes('aria-hidden')).toBe('true')
     wrapper.unmount()
   })
+
+  it('hydrates adjacent ordered legs without searching and consumes prefill after an edit', async () => {
+    window.history.replaceState({}, '', '/multi-destination?mode=ordered&route=DUB,AMS,JFK&prefill=true')
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      providerCallLimit: 25, maxOptimizedDestinations: 5, maxAirportsPerGroup: 5, maxTripDays: 31, maxOrderedLegs: 8,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(OrderedRouteSearch, { props: { prefillRoute: ['DUB', 'AMS', 'JFK'] } })
+    await flushPromises()
+
+    const editors = wrapper.findAllComponents(OrderedLegEditor)
+    expect(editors).toHaveLength(2)
+    expect(editors[0].props('modelValue')).toMatchObject({ from: [{ code: 'DUB' }], to: [{ code: 'AMS' }] })
+    expect(editors[1].props('modelValue')).toMatchObject({ from: [{ code: 'AMS' }], to: [{ code: 'JFK' }] })
+    const firstDate = Date.parse(`${editors[0].props('modelValue').departureDate}T00:00:00Z`)
+    const secondDate = Date.parse(`${editors[1].props('modelValue').departureDate}T00:00:00Z`)
+    expect(secondDate - firstDate).toBe(86_400_000)
+    expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false)
+    expect(window.location.search).toContain('prefill=true')
+
+    editors[1].vm.$emit('update:modelValue', { ...editors[1].props('modelValue'), departureDate: '2026-09-20' })
+    await wrapper.vm.$nextTick()
+    expect(window.location.search).toBe('?mode=ordered')
+    wrapper.unmount()
+  })
+
+  it('consumes an ordered prefill on submit and sends every generated adjacent leg', async () => {
+    window.history.replaceState({}, '', '/multi-destination?mode=ordered&route=DUB,AMS,JFK&prefill=true')
+    const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => Promise.resolve(new Response(JSON.stringify(url.includes('/configuration')
+      ? { providerCallLimit: 25, maxOptimizedDestinations: 5, maxAirportsPerGroup: 5, maxTripDays: 31, maxOrderedLegs: 8 }
+      : { searchId: 'prefilled-ordered', mode: 'ordered', status: 'completed', phase: 'completed', progress: 100, results: [], warnings: [], coverage: { mode: 'exhaustive', liveProviderCallsUsed: 2, providerCallLimit: 25, cacheHits: 0, candidatesEvaluated: 2, candidatesPruned: 0 }, orderedLegs: [] }
+    ), { status: options?.method === 'POST' ? 202 : 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(OrderedRouteSearch, { props: { prefillRoute: ['DUB', 'AMS', 'JFK'] } })
+    await flushPromises()
+
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    const postCall = fetchMock.mock.calls.find(([, options]) => options?.method === 'POST')!
+    const request = JSON.parse(postCall[1].body)
+    expect(request.legs.map((leg: { from: { airportCodes: string[] }; to: { airportCodes: string[] } }) => [leg.from.airportCodes[0], leg.to.airportCodes[0]])).toEqual([['DUB', 'AMS'], ['AMS', 'JFK']])
+    expect(window.location.search).toBe('?mode=ordered')
+    wrapper.unmount()
+  })
 })
