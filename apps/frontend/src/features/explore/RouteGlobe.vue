@@ -10,6 +10,7 @@ const props = withDefaults(defineProps<{
   interactive?: boolean
   autoRotate?: boolean
   allowZoom?: boolean
+  overview?: boolean
   selectedDestination?: ExploreAirport | null
   hoveredDestination?: ExploreAirport | null
   committedPath?: ExploreAirport[]
@@ -17,6 +18,7 @@ const props = withDefaults(defineProps<{
   interactive: true,
   autoRotate: true,
   allowZoom: true,
+  overview: false,
   selectedDestination: null,
   hoveredDestination: null,
   committedPath: () => [],
@@ -48,6 +50,12 @@ const resize = () => {
   if (!globe || !host.value) return
   globe.width(Math.max(host.value.clientWidth, 280)).height(Math.max(host.value.clientHeight, 320))
 }
+
+const initialPointOfView = (routes?: ExploreRoutesResponse | null) => props.overview
+  ? { lat: 18, lng: 0, altitude: 2.8 }
+  : routes
+    ? { lat: routes.origin.latitude, lng: routes.origin.longitude, altitude: 2.05 }
+    : { lat: 18, lng: 0, altitude: 2.15 }
 
 const configureData = () => {
   if (!globe) return
@@ -178,9 +186,7 @@ onMounted(async () => {
       .polygonCapColor(() => 'rgba(82, 111, 158, .78)')
       .polygonSideColor(() => 'rgba(38, 57, 94, .3)')
       .polygonStrokeColor(() => 'rgba(173, 216, 230, .42)')
-      .pointOfView(props.routes
-        ? { lat: props.routes.origin.latitude, lng: props.routes.origin.longitude, altitude: 2.05 }
-        : { lat: 18, lng: 0, altitude: 2.15 })
+      .pointOfView(initialPointOfView(props.routes))
     const material = globe.globeMaterial()
     material.color.set('#111a38')
     material.emissive.set('#080d20')
@@ -206,7 +212,7 @@ onMounted(async () => {
 
 watch(() => props.routes, routes => {
   configureData()
-  if (routes && globe) globe.pointOfView({ lat: routes.origin.latitude, lng: routes.origin.longitude, altitude: 2.05 }, 700)
+  if (routes && globe) globe.pointOfView(initialPointOfView(routes), 700)
 }, { deep: true })
 watch(() => [props.selectedDestination, props.committedPath], configureData, { deep: true })
 watch(() => props.hoveredDestination, airport => {

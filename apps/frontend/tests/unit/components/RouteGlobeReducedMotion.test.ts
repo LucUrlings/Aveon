@@ -124,6 +124,21 @@ describe('RouteGlobe reduced motion', () => {
     expect(fixture.controls.autoRotate).toBe(true)
   })
 
+  it('keeps an overview camera for the homepage as route data arrives', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    const fixture = createGlobe()
+    globeFactory.mockReturnValue(fixture.globe)
+    const wrapper = mount(RouteGlobe, { props: { routes, overview: true } })
+    await flushPromises()
+
+    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 18, lng: 0, altitude: 2.8 })
+
+    await wrapper.setProps({ routes: { ...routes, destinations: [...routes.destinations, { code: 'JFK', name: 'John F. Kennedy', city: 'New York', country: 'United States', latitude: 40.64, longitude: -73.78 }] } })
+
+    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 18, lng: 0, altitude: 2.8 }, 700)
+    wrapper.unmount()
+  })
+
   it('emphasizes the prospective leg, dims other current arcs, and preserves committed arcs', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     const fixture = createGlobe()

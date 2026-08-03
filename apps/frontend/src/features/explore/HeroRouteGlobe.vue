@@ -17,7 +17,7 @@ onBeforeUnmount(() => controller.abort())
 
 <template>
   <div class="hero-globe">
-    <RouteGlobe :routes="routes" :interactive="false" :allow-zoom="false" />
+    <RouteGlobe :routes="routes" :interactive="false" :allow-zoom="false" overview />
     <div v-if="!routes" class="hero-globe-status" :class="{ failed }" role="status"><strong>{{ failed ? 'Route preview unavailable' : 'Loading routes…' }}</strong><small>{{ failed ? 'Open Explore to choose an airport.' : 'The map is ready while the random hub catches up.' }}</small></div>
     <div v-if="routes" class="hero-globe-caption"><span>Live preview</span><strong>{{ routes.origin.city }} · {{ routes.origin.code }}</strong><small>{{ routes.destinations.length }} current direct destinations</small></div>
     <RouterLink class="hero-globe-link" to="/explore">Explore routes <span aria-hidden="true">→</span></RouterLink>
