@@ -363,6 +363,7 @@ public sealed class AirportCatalogRefreshServiceTests
         public int DeleteAbandonedStagingCallCount { get; private set; }
 
         public Task<IReadOnlyDictionary<string, AirportCatalogEntry>> GetByIataCodesAsync(IEnumerable<string> iataCodes, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<string, AirportCatalogEntry>> GetByIdentifiersAsync(IEnumerable<string> identifiers, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<AirportCatalogMetadata?> GetMetadataAsync(CancellationToken cancellationToken) => Task.FromResult(Metadata);
         public Task<bool> IsLiveCatalogIntactAsync(int expectedRowCount, IReadOnlyCollection<string> requiredIataCodes, CancellationToken cancellationToken) => Task.FromResult(LiveCatalogIntact);
         public Task<bool> HasStagingRowsAsync(CancellationToken cancellationToken) => Task.FromResult(HasStagingRows);

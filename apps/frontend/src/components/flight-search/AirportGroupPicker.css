@@ -75,6 +75,14 @@
   background: rgba(79, 70, 229, 0.14);
 }
 
+.airport-chip-label {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .airport-chip-remove {
   display: inline-grid;
   width: 0;

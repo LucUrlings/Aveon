@@ -313,8 +313,8 @@ const displayedStopCounts = computed(() => {
 })
 
 const compactSearchSummary = computed(() => {
-  const origins = originAirports.value.map((airport) => airport.code).join(', ')
-  const destinations = destinationAirports.value.map((airport) => airport.code).join(', ')
+  const origins = originAirports.value.map((airport) => airport.name ? `${airport.name} (${airport.code})` : airport.code).join(', ')
+  const destinations = destinationAirports.value.map((airport) => airport.name ? `${airport.name} (${airport.code})` : airport.code).join(', ')
   const dateSummary = selectedDepartureDates.value.join(', ')
   const returnSummary = tripType.value === 'return' && selectedReturnDates.value.length > 0
     ? ` returning ${selectedReturnDates.value.join(', ')}`

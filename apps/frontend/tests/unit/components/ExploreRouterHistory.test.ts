@@ -46,7 +46,7 @@ describe('Explore router history', () => {
     await forward
     await flushPromises()
     expect(router.currentRoute.value.query.path).toBe('DUB,AMS')
-    expect(wrapper.get('.route-tray').text()).toContain('DUB→AMS')
+    expect(wrapper.get('.route-tray').text()).toContain('Dublin→Amsterdam')
 
     const backward = new Promise<void>(resolve => { const remove = router.afterEach(() => { remove(); resolve() }) })
     router.back()

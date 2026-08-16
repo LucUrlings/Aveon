@@ -3,6 +3,7 @@ namespace backend.Infrastructure.Airports;
 public interface IAirportCatalogRepository
 {
     Task<IReadOnlyDictionary<string, AirportCatalogEntry>> GetByIataCodesAsync(IEnumerable<string> iataCodes, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<string, AirportCatalogEntry>> GetByIdentifiersAsync(IEnumerable<string> identifiers, CancellationToken cancellationToken);
     Task<AirportCatalogMetadata?> GetMetadataAsync(CancellationToken cancellationToken);
     Task<bool> IsLiveCatalogIntactAsync(int expectedRowCount, IReadOnlyCollection<string> requiredIataCodes, CancellationToken cancellationToken);
     Task<bool> HasStagingRowsAsync(CancellationToken cancellationToken);

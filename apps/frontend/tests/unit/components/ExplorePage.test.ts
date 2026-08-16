@@ -5,7 +5,7 @@ import { localDateWithOffset } from '../../../src/features/explore/localDate'
 import RouteGlobe from '../../../src/features/explore/RouteGlobe.vue'
 import ExplorePage from '../../../src/pages/ExplorePage.vue'
 
-const { getExploreRoutes, getItinerarySearchCapabilities, push, replace, focusDestination, routeState } = vi.hoisted(() => ({ getExploreRoutes: vi.fn(), getItinerarySearchCapabilities: vi.fn(), push: vi.fn(), replace: vi.fn(), focusDestination: vi.fn(), routeState: { current: null as any } }))
+const { getExploreRoutes, getItinerarySearchCapabilities, push, replace, routeState } = vi.hoisted(() => ({ getExploreRoutes: vi.fn(), getItinerarySearchCapabilities: vi.fn(), push: vi.fn(), replace: vi.fn(), routeState: { current: null as any } }))
 
 vi.mock('../../../src/features/explore/api', () => ({ getExploreRoutes }))
 vi.mock('../../../src/features/itinerary-search/api', () => ({ getItinerarySearchCapabilities }))
@@ -18,8 +18,6 @@ vi.mock('../../../src/features/explore/RouteGlobe.vue', () => ({
   default: {
     props: ['routes', 'selectedDestination', 'hoveredDestination', 'committedPath'],
     emits: ['select', 'hover'],
-    expose: ['focusDestination'],
-    methods: { focusDestination },
     template: '<button class="globe-destination" @click="$emit(\'select\', routes.destinations[0])">Globe destination</button>',
   },
 }))
@@ -55,14 +53,13 @@ describe('ExplorePage', () => {
     expect(wrapper.get('.destination-browser').text()).toContain('Amsterdam')
     await wrapper.get('.globe-destination').trigger('click')
     expect(push).not.toHaveBeenCalled()
-    expect(wrapper.get('.route-selection').text()).toContain('DUB → AMS')
+    expect(wrapper.get('.route-selection').text()).toContain('Dublin → Amsterdam')
     const globeColumnHtml = wrapper.get('.globe-column').html()
     expect(globeColumnHtml.indexOf('route-selection')).toBeLessThan(globeColumnHtml.indexOf('globe-destination'))
     await wrapper.get('.primary-selection').trigger('click')
     expect(push).toHaveBeenCalledWith({ path: '/search', query: { origins: 'DUB', destinations: 'AMS', dates: expect.any(String), prefill: 'true' } })
 
     await wrapper.get('.randomize-button').trigger('click')
-    expect(focusDestination).toHaveBeenCalled()
     expect(wrapper.get('.route-selection').text()).toContain('Selected direct route')
     vi.restoreAllMocks()
   })
@@ -108,7 +105,7 @@ describe('ExplorePage', () => {
     await flushPromises()
 
     expect(getExploreRoutes).toHaveBeenLastCalledWith('AMS', undefined, expect.any(AbortSignal))
-    expect(wrapper.get('.route-tray').text()).toContain('DUB→AMS')
+    expect(wrapper.get('.route-tray').text()).toContain('Dublin→Amsterdam')
     expect(wrapper.get('#routes-heading').text()).toContain('Amsterdam connects directly')
   })
 
@@ -169,10 +166,10 @@ describe('ExplorePage', () => {
 
     expect(push).not.toHaveBeenCalled()
     expect(destinationButton.attributes('aria-pressed')).toBe('true')
-    expect(wrapper.get('.route-selection').text()).toContain('DUB → AMS')
+    expect(wrapper.get('.route-selection').text()).toContain('Dublin → Amsterdam')
   })
 
-  it('replaces and clears candidates while exposing list focus to the globe', async () => {
+  it('replaces candidates, clears a candidate, and clears the complete route and URL', async () => {
     const wrapper = mount(ExplorePage)
     wrapper.getComponent(AirportGroupPicker).vm.$emit('addAirport', { code: 'DUB', name: 'Dublin Airport', displayLabel: 'Dublin Airport (DUB)' })
     await flushPromises()
@@ -183,14 +180,22 @@ describe('ExplorePage', () => {
     await destinations[0].trigger('blur')
     expect(wrapper.getComponent(RouteGlobe).props('hoveredDestination')).toBeNull()
     await destinations[0].trigger('click')
-    expect(wrapper.get('.route-selection').text()).toContain('DUB → AMS')
+    expect(wrapper.get('.route-selection').text()).toContain('Dublin → Amsterdam')
     await destinations[1].trigger('click')
-    expect(wrapper.get('.route-selection').text()).toContain('DUB → JFK')
-    expect(wrapper.get('.route-selection').text()).not.toContain('DUB → AMS')
+    expect(wrapper.get('.route-selection').text()).toContain('Dublin → New York')
+    expect(wrapper.get('.route-selection').text()).not.toContain('Dublin → Amsterdam')
     const clear = wrapper.findAll('.selection-actions button').find(button => button.text() === 'Clear selection')!
     await clear.trigger('click')
     expect(wrapper.find('.route-selection').exists()).toBe(false)
-    expect(destinations.every(button => button.attributes('aria-pressed') === 'false')).toBe(true)
+    expect(wrapper.find('.route-tray').exists()).toBe(true)
+    expect(wrapper.find('.airport-chip').exists()).toBe(true)
+    expect(wrapper.find('.explore-results').exists()).toBe(true)
+
+    await wrapper.get('.tray-clear').trigger('click')
+    expect(wrapper.find('.route-tray').exists()).toBe(false)
+    expect(wrapper.find('.airport-chip').exists()).toBe(false)
+    expect(wrapper.find('.explore-results').exists()).toBe(false)
+    expect(replace).toHaveBeenLastCalledWith({ path: '/explore' })
   })
 
   it('commits onward exploration to URL state and exposes recovery controls', async () => {
@@ -202,7 +207,7 @@ describe('ExplorePage', () => {
     await onward.trigger('click')
 
     expect(push).toHaveBeenCalledWith({ path: '/explore', query: { path: 'DUB,AMS', date: expect.any(String) } })
-    expect(wrapper.get('.route-tray').text()).toContain('DUB')
+    expect(wrapper.get('.route-tray').text()).toContain('Dublin')
   })
 
   it('hydrates URL paths, restores an earlier path, and hands a preview to Build my route', async () => {
@@ -218,7 +223,7 @@ describe('ExplorePage', () => {
 
     expect(getExploreRoutes).toHaveBeenCalledWith('DUB', expect.any(String), expect.any(AbortSignal))
     expect(getExploreRoutes).toHaveBeenCalledWith('AMS', undefined, expect.any(AbortSignal))
-    expect(wrapper.get('.route-tray').text()).toContain('DUB→AMS')
+    expect(wrapper.get('.route-tray').text()).toContain('Dublin→Amsterdam')
     await wrapper.get('.destination-browser li button').trigger('click')
     await wrapper.get('.primary-selection').trigger('click')
     expect(push).toHaveBeenCalledWith({ path: '/multi-destination', query: { mode: 'ordered', route: 'DUB,AMS,JFK', departureDate: expect.any(String), source: 'explore', prefill: 'true' } })
@@ -267,7 +272,7 @@ describe('ExplorePage', () => {
     await flushPromises()
 
     expect(wrapper.get('[role="alert"]').text()).toContain('Onward schedule unavailable')
-    expect(wrapper.get('.route-tray').text()).toContain('DUB→AMS')
+    expect(wrapper.get('.route-tray').text()).toContain('Dublin→Amsterdam')
   })
 
   it('announces stale schedule data after moving to an onward origin', async () => {
@@ -282,7 +287,7 @@ describe('ExplorePage', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('latest cached schedule')
-    expect(wrapper.get('.route-tray').text()).toContain('DUB→AMS')
+    expect(wrapper.get('.route-tray').text()).toContain('Dublin→Amsterdam')
   })
 
   it('rejects route cycles and keeps the committed builder handoff at the leg limit', async () => {

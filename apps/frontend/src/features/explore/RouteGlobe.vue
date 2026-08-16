@@ -11,6 +11,8 @@ const props = withDefaults(defineProps<{
   autoRotate?: boolean
   allowZoom?: boolean
   overview?: boolean
+  renderScale?: number
+  pixelRatioCap?: number
   selectedDestination?: ExploreAirport | null
   hoveredDestination?: ExploreAirport | null
   committedPath?: ExploreAirport[]
@@ -19,18 +21,22 @@ const props = withDefaults(defineProps<{
   autoRotate: true,
   allowZoom: true,
   overview: false,
+  renderScale: 1,
+  pixelRatioCap: 1.5,
   selectedDestination: null,
   hoveredDestination: null,
   committedPath: () => [],
 })
 
-const emit = defineEmits<{ select: [airport: ExploreAirport]; hover: [airport: ExploreAirport | null] }>()
+const emit = defineEmits<{ select: [airport: ExploreAirport] }>()
 const host = ref<HTMLElement | null>(null)
 const unavailable = ref(false)
 const ready = ref(false)
 let globe: GlobeInstance | null = null
 let resizeObserver: ResizeObserver | null = null
+let visibilityObserver: IntersectionObserver | null = null
 let reducedMotion: MediaQueryList | null = null
+let isVisible = true
 
 type GlobePoint = ExploreAirport & { origin: boolean; committed: boolean }
 type GlobeArc = {
@@ -48,16 +54,69 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({ 
 
 const resize = () => {
   if (!globe || !host.value) return
-  globe.width(Math.max(host.value.clientWidth, 280)).height(Math.max(host.value.clientHeight, 320))
+  const renderScale = Math.min(Math.max(props.renderScale, .5), 1)
+  globe
+    .width(Math.round(Math.max(host.value.clientWidth, 280) * renderScale))
+    .height(Math.round(Math.max(host.value.clientHeight, 320) * renderScale))
 }
 
 const initialPointOfView = (routes?: ExploreRoutesResponse | null) => props.overview
   ? routes
-    ? { lat: routes.origin.latitude, lng: routes.origin.longitude, altitude: 2.8 }
-    : { lat: 18, lng: 0, altitude: 2.8 }
+    ? { lat: routes.origin.latitude, lng: routes.origin.longitude, altitude: 2.15 }
+    : { lat: 18, lng: 0, altitude: 2.2 }
   : routes
     ? { lat: routes.origin.latitude, lng: routes.origin.longitude, altitude: 2.05 }
     : { lat: 18, lng: 0, altitude: 2.15 }
+
+const emphasizedDestinationCode = () => props.hoveredDestination?.code ?? props.selectedDestination?.code
+
+const configureAppearance = () => {
+  if (!globe) return
+  globe
+    .pointLat('latitude')
+    .pointLng('longitude')
+    .pointColor(point => {
+      const airport = point as GlobePoint
+      if (airport.code === props.selectedDestination?.code) return '#f59e0b'
+      return airport.origin ? '#f59e0b' : airport.committed ? '#a78bfa' : '#22d3ee'
+    })
+    .pointRadius(point => (point as GlobePoint).origin || (point as GlobePoint).code === props.selectedDestination?.code ? .55 : .28)
+    .pointAltitude(point => (point as GlobePoint).origin ? .025 : .012)
+    .pointLabel(point => {
+      const airport = point as GlobePoint
+      return `<strong>${escapeHtml(airport.city)} (${escapeHtml(airport.code)})</strong><br>${escapeHtml(airport.name)}`
+    })
+    .arcStartLat('startLat')
+    .arcStartLng('startLng')
+    .arcEndLat('endLat')
+    .arcEndLng('endLng')
+    .arcColor((arc: object) => {
+      const value = arc as GlobeArc
+      const emphasizedCode = emphasizedDestinationCode()
+      if (value.layer === 'route') {
+        if (value.committed) return 'rgba(167,139,250,.28)'
+        return value.destination.code === emphasizedCode ? 'rgba(245,158,11,.3)' : 'rgba(79,70,229,.2)'
+      }
+      if (value.committed) return ['rgba(167,139,250,.88)', 'rgba(245,158,11,.95)']
+      return ['rgba(245,158,11,.8)', 'rgba(34,211,238,1)']
+    })
+    .arcStroke((arc: object) => {
+      const value = arc as GlobeArc
+      if (value.layer === 'animation') return .8
+      if (value.committed || value.destination.code === emphasizedDestinationCode()) return .52
+      return .28
+    })
+    .arcAltitudeAutoScale(.22)
+    .arcDashLength((arc: object) => reducedMotion?.matches || (arc as GlobeArc).layer === 'route' ? 1 : .45)
+    .arcDashGap((arc: object) => reducedMotion?.matches || (arc as GlobeArc).layer === 'route' ? 0 : 1.4)
+    .arcDashInitialGap(0)
+    .arcDashAnimateTime((arc: object) => reducedMotion?.matches || (arc as GlobeArc).layer === 'route' ? 0 : 2000)
+    .arcsTransitionDuration(0)
+    .onPointClick(point => {
+      const airport = point as GlobePoint
+      if (props.interactive && !airport.origin) emit('select', airport)
+    })
+}
 
 const configureData = () => {
   if (!globe) return
@@ -84,64 +143,13 @@ const configureData = () => {
     const destination = props.committedPath[index]
     routeArcs.push({ startLat: from.latitude, startLng: from.longitude, endLat: destination.latitude, endLng: destination.longitude, destination, committed: true })
   }
-  const emphasizedCode = props.hoveredDestination?.code ?? props.selectedDestination?.code
+  const emphasizedCode = emphasizedDestinationCode()
   const arcs = routeArcs.flatMap<GlobeArc>(arc => {
     const isEmphasized = arc.committed || arc.destination.code === emphasizedCode
-    return isEmphasized
-      ? [{ ...arc, layer: 'route' }, { ...arc, layer: 'animation' }]
-      : [{ ...arc, layer: 'animation' }]
+    const routeArc = { ...arc, layer: 'route' as const }
+    return isEmphasized ? [routeArc, { ...arc, layer: 'animation' as const }] : [routeArc]
   })
-  globe
-    .pointsData(points)
-    .pointLat('latitude')
-    .pointLng('longitude')
-    .pointColor(point => {
-      const airport = point as GlobePoint
-      if (airport.code === props.selectedDestination?.code) return '#f59e0b'
-      return airport.origin ? '#f59e0b' : airport.committed ? '#a78bfa' : '#22d3ee'
-    })
-    .pointRadius(point => (point as GlobePoint).origin || (point as GlobePoint).code === props.selectedDestination?.code ? .55 : .28)
-    .pointAltitude(point => (point as GlobePoint).origin ? .025 : .012)
-    .pointLabel(point => {
-      const airport = point as GlobePoint
-      return `<strong>${escapeHtml(airport.city)} (${escapeHtml(airport.code)})</strong><br>${escapeHtml(airport.name)}`
-    })
-    .arcsData(arcs)
-    .arcStartLat('startLat')
-    .arcStartLng('startLng')
-    .arcEndLat('endLat')
-    .arcEndLng('endLng')
-    .arcColor((arc: object) => {
-      const value = arc as GlobeArc
-      if (value.layer === 'route') {
-        return value.committed ? 'rgba(167,139,250,.28)' : 'rgba(245,158,11,.3)'
-      }
-      if (value.committed) return ['rgba(167,139,250,.88)', 'rgba(245,158,11,.95)']
-      if (value.destination.code === emphasizedCode) return ['rgba(245,158,11,.8)', 'rgba(34,211,238,1)']
-      if (emphasizedCode) return ['rgba(79,70,229,.05)', 'rgba(34,211,238,.08)']
-      return ['rgba(79,70,229,.35)', 'rgba(34,211,238,.8)']
-    })
-    .arcStroke((arc: object) => {
-      const value = arc as GlobeArc
-      if (value.layer === 'route') return value.committed ? .52 : .6
-      if (value.committed || value.destination.code === emphasizedCode) return .8
-      return emphasizedCode ? .12 : .45
-    })
-    .arcAltitudeAutoScale(.22)
-    .arcDashLength((arc: object) => reducedMotion?.matches || (arc as GlobeArc).layer === 'route' ? 1 : .45)
-    .arcDashGap((arc: object) => reducedMotion?.matches || (arc as GlobeArc).layer === 'route' ? 0 : 1.4)
-    .arcDashInitialGap(0)
-    .arcDashAnimateTime((arc: object) => reducedMotion?.matches || (arc as GlobeArc).layer === 'route' ? 0 : 2000)
-    .arcsTransitionDuration(0)
-    .onPointClick(point => {
-      const airport = point as GlobePoint
-      if (props.interactive && !airport.origin) emit('select', airport)
-    })
-  const hoverableGlobe = globe as GlobeInstance & { onPointHover?: (handler: (point: object | null) => void) => GlobeInstance }
-  hoverableGlobe.onPointHover?.(point => {
-      const airport = point as GlobePoint | null
-      emit('hover', airport && !airport.origin ? airport : null)
-  })
+  globe.pointsData(points).arcsData(arcs)
 }
 
 const setRotation = () => {
@@ -157,19 +165,11 @@ const pauseRotation = () => {
   if (globe) globe.controls().autoRotate = false
 }
 
-const focusDestination = (airport: ExploreAirport) => {
-  globe?.pointOfView({ lat: airport.latitude, lng: airport.longitude, altitude: 1.65 }, 900)
+const syncRendering = () => {
+  if (!globe) return
+  if (!isVisible || document.visibilityState === 'hidden') globe.pauseAnimation()
+  else globe.resumeAnimation()
 }
-
-const panToDestination = (airport: ExploreAirport) => {
-  pauseRotation()
-  globe?.pointOfView(
-    { lat: airport.latitude, lng: airport.longitude, altitude: 1.65 },
-    reducedMotion?.matches ? 0 : 450,
-  )
-}
-
-defineExpose({ focusDestination })
 
 onMounted(async () => {
   try {
@@ -177,6 +177,7 @@ onMounted(async () => {
     const { default: Globe } = await import('globe.gl')
     if (!host.value) return
     globe = new Globe(host.value, { animateIn: !reducedMotion.matches })
+    globe.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, props.pixelRatioCap))
     globe
       .backgroundColor('rgba(0,0,0,0)')
       .showAtmosphere(true)
@@ -194,6 +195,7 @@ onMounted(async () => {
     material.emissive.set('#080d20')
     material.emissiveIntensity = .45
     material.shininess = .6
+    configureAppearance()
     configureData()
     setRotation()
     await nextTick()
@@ -203,6 +205,14 @@ onMounted(async () => {
       resizeObserver = new ResizeObserver(resize)
       resizeObserver.observe(host.value)
     }
+    if ('IntersectionObserver' in window) {
+      visibilityObserver = new IntersectionObserver(entries => {
+        isVisible = entries.at(-1)?.isIntersecting ?? true
+        syncRendering()
+      })
+      visibilityObserver.observe(host.value)
+    }
+    document.addEventListener('visibilitychange', syncRendering)
     host.value.addEventListener('pointerdown', pauseRotation)
     if (props.allowZoom) host.value.addEventListener('wheel', pauseRotation, { passive: true })
     host.value.addEventListener('pointerleave', setRotation)
@@ -215,18 +225,16 @@ onMounted(async () => {
 watch(() => props.routes, routes => {
   configureData()
   if (routes && globe) globe.pointOfView(initialPointOfView(routes), 700)
-}, { deep: true })
-watch(() => [props.selectedDestination, props.committedPath], configureData, { deep: true })
-watch(() => props.hoveredDestination, airport => {
-  configureData()
-  if (airport) panToDestination(airport)
-  else setRotation()
-}, { deep: true, flush: 'sync' })
+})
+watch(() => [props.selectedDestination?.code, props.committedPath.map(airport => airport.code).join(',')], configureData)
+watch(() => props.hoveredDestination?.code, configureData)
 watch(() => props.autoRotate, setRotation)
 watch(() => props.allowZoom, setRotation)
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  visibilityObserver?.disconnect()
+  document.removeEventListener('visibilitychange', syncRendering)
   host.value?.removeEventListener('pointerdown', pauseRotation)
   host.value?.removeEventListener('wheel', pauseRotation)
   host.value?.removeEventListener('pointerleave', setRotation)
@@ -241,12 +249,12 @@ onBeforeUnmount(() => {
     <Transition name="globe-loading">
       <div v-if="!ready && !unavailable" class="globe-loading" role="status"><span aria-hidden="true" /><strong>Drawing route map…</strong></div>
     </Transition>
-    <div v-if="unavailable" class="globe-fallback" role="img" :aria-label="routes ? `Routes from ${routes.origin.city}` : 'World route map'"><span>◎</span><strong>{{ routes?.origin.code ?? 'Explore' }}</strong><small>{{ routes ? `${routes.destinations.length} current direct destinations` : 'Loading the route map' }}</small></div>
+    <div v-if="unavailable" class="globe-fallback" role="img" :aria-label="routes ? `Routes from ${routes.origin.city}` : 'World route map'"><span>◎</span><strong>{{ routes?.origin.name ?? 'Explore' }}</strong><small>{{ routes ? `${routes.origin.city} (${routes.origin.code}) · ${routes.destinations.length} current direct destinations` : 'Loading the route map' }}</small></div>
   </div>
 </template>
 
 <style scoped>
-.globe-shell, .globe-canvas { width: 100%; height: 100%; min-height: 360px; }.globe-shell { position: relative; overflow: hidden; border-radius: 26px; background: radial-gradient(circle at 50% 45%, rgba(79, 70, 229, .18), transparent 58%); }.globe-canvas { opacity: 0; transition: opacity .45s ease; }.globe-canvas--ready { opacity: 1; }.globe-canvas :deep(canvas) { display: block; cursor: grab; }.globe-canvas :deep(canvas:active) { cursor: grabbing; }.globe-loading { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: 12px; background: radial-gradient(circle at 50% 45%, rgba(79,70,229,.2), rgba(247,248,255,.94) 64%); color: var(--ink-strong); }.globe-loading span { width: 38px; height: 38px; border: 3px solid rgba(79,70,229,.18); border-top-color: var(--brand); border-radius: 50%; animation: globe-spin .8s linear infinite; }.globe-loading-enter-active, .globe-loading-leave-active { transition: opacity .4s ease; }.globe-loading-enter-from, .globe-loading-leave-to { opacity: 0; }.globe-fallback { display: grid; min-height: 360px; place-content: center; justify-items: center; gap: 8px; color: var(--muted); text-align: center; }.globe-fallback span { display: grid; width: 190px; height: 190px; place-items: center; border: 1px solid rgba(99, 102, 241, .3); border-radius: 50%; background: radial-gradient(circle at 35% 30%, #28336c, #10162f 68%); color: #67e8f9; font-size: 7rem; box-shadow: 0 0 50px rgba(79, 70, 229, .2); }.globe-fallback strong { color: var(--ink-strong); font-size: 1.25rem; }@keyframes globe-spin { to { transform: rotate(360deg); } }
+.globe-shell, .globe-canvas { width: 100%; height: 100%; min-height: 360px; }.globe-shell { position: relative; overflow: hidden; border-radius: 26px; background: radial-gradient(circle at 50% 45%, rgba(79, 70, 229, .18), transparent 58%); }.globe-canvas { opacity: 0; transition: opacity .45s ease; }.globe-canvas--ready { opacity: 1; }.globe-canvas :deep(canvas) { display: block; width: 100% !important; height: 100% !important; cursor: grab; }.globe-canvas :deep(canvas:active) { cursor: grabbing; }.globe-loading { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: 12px; background: radial-gradient(circle at 50% 45%, rgba(79,70,229,.2), rgba(247,248,255,.94) 64%); color: var(--ink-strong); }.globe-loading span { width: 38px; height: 38px; border: 3px solid rgba(79,70,229,.18); border-top-color: var(--brand); border-radius: 50%; animation: globe-spin .8s linear infinite; }.globe-loading-enter-active, .globe-loading-leave-active { transition: opacity .4s ease; }.globe-loading-enter-from, .globe-loading-leave-to { opacity: 0; }.globe-fallback { display: grid; min-height: 360px; place-content: center; justify-items: center; gap: 8px; color: var(--muted); text-align: center; }.globe-fallback span { display: grid; width: 190px; height: 190px; place-items: center; border: 1px solid rgba(99, 102, 241, .3); border-radius: 50%; background: radial-gradient(circle at 35% 30%, #28336c, #10162f 68%); color: #67e8f9; font-size: 7rem; box-shadow: 0 0 50px rgba(79, 70, 229, .2); }.globe-fallback strong { color: var(--ink-strong); font-size: 1.25rem; }@keyframes globe-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .globe-canvas, .globe-loading-enter-active, .globe-loading-leave-active { transition: none; }.globe-loading span { animation: none; } }
 @media (max-width: 640px) { .globe-shell, .globe-canvas, .globe-fallback { min-height: 320px; } }
 </style>

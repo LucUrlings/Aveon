@@ -6,7 +6,7 @@
   backdrop-filter: blur(18px) saturate(160%);
 }
 .navbar {
-  width: min(1480px, 100%); min-height: 66px; margin: 0 auto; padding: 10px 24px;
+  width: min(var(--content-max), 100%); min-height: 66px; margin: 0 auto; padding: 10px 24px;
   display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 24px;
 }
 .navbar-brand { min-width: 0; display: flex; align-items: center; gap: 10px; color: var(--ink-strong); text-decoration: none; }

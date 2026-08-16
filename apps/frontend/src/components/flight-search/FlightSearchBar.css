@@ -135,7 +135,7 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
   gap: 8px;
   align-items: start;
-  max-width: 1200px;
+  max-width: none;
 }
 
 .field {

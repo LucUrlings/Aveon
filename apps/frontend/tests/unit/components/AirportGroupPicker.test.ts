@@ -19,6 +19,7 @@ describe('AirportGroupPicker', () => {
 
     await wrapper.setProps({ airports: [airport], suggestions: [] })
     expect(wrapper.get('.airport-input-shell').find('.airport-chip').exists()).toBe(true)
+    expect(wrapper.get('.airport-chip-label').text()).toBe('Dublin (DUB)')
     expect(wrapper.get('.airport-chip').attributes('aria-label')).toContain('Remove Dublin')
     expect(wrapper.get('.airport-chip-remove').text()).toBe('×')
     expect(wrapper.get('.airport-chip-remove').attributes('aria-hidden')).toBe('true')

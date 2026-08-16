@@ -7,7 +7,7 @@ import OrderedRouteSearch from '../features/itinerary-search/OrderedRouteSearch.
 const route = useRoute()
 const activeTab = ref<'optimize' | 'ordered'>(route.query.mode === 'optimize' ? 'optimize' : 'ordered')
 const prefillRoute = computed(() => route.query.prefill === 'true' && typeof route.query.route === 'string'
-  ? route.query.route.split(',').map(code => code.trim().toUpperCase()).filter(code => /^[A-Z]{3}$/.test(code))
+  ? route.query.route.split(',').map(code => code.trim().toUpperCase()).filter(code => /^[A-Z]{3,4}$/.test(code))
   : [])
 const prefillDepartureDate = computed(() => route.query.source === 'explore' && typeof route.query.departureDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(route.query.departureDate)
   ? route.query.departureDate
@@ -45,7 +45,7 @@ watch(() => route.query.mode, mode => { activeTab.value = mode === 'optimize' ? 
 </template>
 
 <style scoped>
-.advanced-page { width: min(1000px, 100%); margin: 0 auto; padding: 48px 24px 72px; }
+.advanced-page { width: min(var(--content-max), 100%); box-sizing: border-box; margin: 0 auto; padding: 48px 24px 72px; }
 .advanced-page header { max-width: 720px; }
 .advanced-page h1 { margin: 0; color: var(--ink-strong); }
 .advanced-page header p:last-child { color: var(--muted); }

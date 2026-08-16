@@ -33,7 +33,7 @@ import AppNavbar from './components/AppNavbar.vue'
 .skip-link:focus { transform: translateY(0); }
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 .app-footer { margin-top: auto; border-top: 1px solid var(--border); background: rgba(255, 255, 255, 0.78); }
-.app-footer-inner { width: min(1480px, 100%); margin: 0 auto; padding: 24px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px 30px; color: var(--muted); font-size: 0.82rem; }
+.app-footer-inner { width: min(var(--content-max), 100%); margin: 0 auto; padding: 24px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px 30px; color: var(--muted); font-size: 0.82rem; }
 .app-footer-inner p { margin: 0; }
 .footer-brand { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-strong); font-weight: 800; text-decoration: none; }
 .footer-brand-mark { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; background: var(--ink-strong); color: #fff; font-size: 0.76rem; }

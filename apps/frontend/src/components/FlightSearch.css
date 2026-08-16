@@ -14,7 +14,7 @@
 .progress-shell,
 .results-grid,
 .error-message {
-  width: min(1480px, 100%);
+  width: min(var(--content-max), 100%);
   margin: 0 auto;
 }
 

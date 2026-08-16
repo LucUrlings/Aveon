@@ -13,7 +13,7 @@
 .return-section,
 .fare-types,
 .guide-note {
-  width: min(1180px, 100%);
+  width: min(var(--content-max), 100%);
   margin-left: auto;
   margin-right: auto;
 }

@@ -74,7 +74,7 @@ const handleKeydown = (event: KeyboardEvent) => {
           :title="`Remove ${airport.displayLabel}`"
           @click="emit('removeAirport', airport.code)"
         >
-          <span>{{ airport.code }}</span>
+          <span class="airport-chip-label">{{ airport.displayLabel }}</span>
           <span class="airport-chip-remove" aria-hidden="true">×</span>
         </button>
         <input

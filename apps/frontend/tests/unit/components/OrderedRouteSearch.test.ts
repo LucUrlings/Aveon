@@ -180,6 +180,57 @@ describe('OrderedRouteSearch', () => {
     wrapper.unmount()
   })
 
+  it('resolves four-letter airport identifiers to named booking-code options', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      const body = url.includes('/configuration')
+        ? { providerCallLimit: 25, maxOptimizedDestinations: 5, maxAirportsPerGroup: 5, maxTripDays: 31, maxOrderedLegs: 8 }
+        : url.includes('EIDW')
+          ? { airports: [{ code: 'DUB', name: 'Dublin Airport', displayLabel: 'Dublin Airport (DUB)' }] }
+          : { airports: [{ code: 'AMS', name: 'Amsterdam Airport Schiphol', displayLabel: 'Amsterdam Airport Schiphol (AMS)' }] }
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(OrderedRouteSearch, { props: { prefillRoute: ['EIDW', 'EHAM'] } })
+    await flushPromises()
+
+    expect(wrapper.getComponent(OrderedLegEditor).props('modelValue')).toMatchObject({
+      from: [{ code: 'DUB', name: 'Dublin Airport' }],
+      to: [{ code: 'AMS', name: 'Amsterdam Airport Schiphol' }],
+    })
+    expect(wrapper.text()).toContain('Dublin Airport (DUB)')
+    expect(wrapper.text()).toContain('Amsterdam Airport Schiphol (AMS)')
+    wrapper.unmount()
+  })
+
+  it('preserves route edits made while four-letter airport identifiers resolve', async () => {
+    const pending = new Map<string, (response: Response) => void>()
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/configuration')) return Promise.resolve(new Response(JSON.stringify({
+        providerCallLimit: 25, maxOptimizedDestinations: 5, maxAirportsPerGroup: 5, maxTripDays: 31, maxOrderedLegs: 8,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      const identifier = url.includes('EIDW') ? 'EIDW' : 'EHAM'
+      return new Promise<Response>(resolve => pending.set(identifier, resolve))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const wrapper = mount(OrderedRouteSearch, { props: { prefillRoute: ['EIDW', 'EHAM'] } })
+    await wrapper.vm.$nextTick()
+
+    const editor = wrapper.getComponent(OrderedLegEditor)
+    editor.vm.$emit('update:modelValue', { ...editor.props('modelValue'), departureDate: '2026-09-20' })
+    await wrapper.vm.$nextTick()
+
+    pending.get('EIDW')!(new Response(JSON.stringify({ airports: [{ code: 'DUB', name: 'Dublin Airport', displayLabel: 'Dublin Airport (DUB)' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    pending.get('EHAM')!(new Response(JSON.stringify({ airports: [{ code: 'AMS', name: 'Amsterdam Airport Schiphol', displayLabel: 'Amsterdam Airport Schiphol (AMS)' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    await flushPromises()
+
+    expect(wrapper.getComponent(OrderedLegEditor).props('modelValue')).toMatchObject({
+      departureDate: '2026-09-20',
+      from: [{ code: 'DUB', name: 'Dublin Airport' }],
+      to: [{ code: 'AMS', name: 'Amsterdam Airport Schiphol' }],
+    })
+    wrapper.unmount()
+  })
+
   it('consumes an ordered prefill on submit and sends every generated adjacent leg', async () => {
     window.history.replaceState({}, '', '/multi-destination?mode=ordered&route=DUB,AMS,JFK&prefill=true')
     const fetchMock = vi.fn().mockImplementation((url: string, options?: RequestInit) => Promise.resolve(new Response(JSON.stringify(url.includes('/configuration')

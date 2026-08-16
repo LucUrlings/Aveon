@@ -6,6 +6,7 @@ import ItineraryResultCard from './ItineraryResultCard.vue'
 import OrderedLegEditor, { type OrderedLegModel } from './OrderedLegEditor.vue'
 import type { ItineraryResultsQuery, ItinerarySearchSession, OrderedLegSearchStatus, OrderedTripRequest, Ranking } from './types'
 import { trackItineraryEvent } from './analytics'
+import { fetchAirportSuggestions } from '../flight-search/api'
 import type { AirportOption } from '../flight-search/types'
 
 const props = withDefaults(defineProps<{
@@ -43,6 +44,7 @@ const lastHydratedPrefill = ref('')
 const reportedSessions = new Set<string>()
 let timer: number | undefined
 let controller: AbortController | null = null
+let prefillHydration = 0
 const isRunning = computed(() => session.value?.status === 'running')
 const lastDepartureDate = computed(() => legs.value.at(-1)?.departureDate ?? '')
 const addDays = (value: string, days: number) => {
@@ -86,6 +88,7 @@ const everyLegHasFares = computed(() => routeSummary.value.length > 0 && routeSu
 const noCompleteItinerary = computed(() => session.value?.warnings.some(warning => warning.code === 'noCompleteItinerary') ?? false)
 const orderedPhaseLabel = computed(() => session.value?.status === 'running' ? 'Searching your route' : session.value?.status === 'failed' ? 'Route search failed' : 'Route search complete')
 const airportCodes = (values: string[]) => values.join(' / ')
+const airportNames = (airports: AirportOption[]) => airports.map(airport => airport.displayLabel || airport.name || airport.code).join(' / ')
 const legStatusLabel = (leg: OrderedLegSearchStatus) => {
   if (leg.status === 'faresFound') return `${leg.faresFound} fare${leg.faresFound === 1 ? '' : 's'} found`
   if (leg.status === 'noFares') return 'No fares found'
@@ -116,25 +119,25 @@ const removePrefillFromUrl = () => {
 }
 const markFormDirty = () => { formDirty.value = true; removePrefillFromUrl() }
 const updateLeg = (index: number, leg: OrderedLegModel) => {
-  removePrefillFromUrl()
+  markFormDirty()
   const route = [...legs.value]
   route[index] = leg
   legs.value = reconnectRoute(route)
 }
 const addLeg = () => {
-  removePrefillFromUrl()
+  markFormDirty()
   if (legs.value.length >= maxEditableLegs.value) return
   legs.value = reconnectRoute([...legs.value, createLeg()])
 }
 const removeLeg = (index: number) => {
-  removePrefillFromUrl()
+  markFormDirty()
   const route = [...legs.value]
   if (index === 0 && route[1]) route[1] = { ...route[1], from: [...route[0].from], fromLabel: route[0].fromLabel }
   legs.value = reconnectRoute(route.filter((_, position) => position !== index))
 }
 const group = (id: string, label: string, airports: OrderedLegModel['from']) => ({ id, label: label.trim(), airportCodes: airports.map(airport => airport.code) })
 const toggleReturn = () => {
-  removePrefillFromUrl()
+  markFormDirty()
   if (returnToStart.value && !returnDate.value) returnDate.value = addDays(lastDepartureDate.value, 1)
 }
 
@@ -154,6 +157,7 @@ const submit = async () => {
   removePrefillFromUrl()
   error.value = ''
   if (legs.value.some(leg => !leg.departureDate || leg.from.length === 0 || leg.to.length === 0)) { error.value = 'Add a date and at least one airport to both ends of every flight.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'route_fields' }); return }
+  if (legs.value.some(leg => [...leg.from, ...leg.to].some(airport => !/^[A-Z]{3}$/.test(airport.code)))) { error.value = 'A four-letter airport identifier could not be resolved to its three-letter booking code. Select the airport from the suggestions and try again.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'airport_identifier' }); return }
   if (returnToStart.value && (!returnDate.value || returnDate.value < lastDepartureDate.value)) { error.value = 'Choose a return date on or after the final outbound flight.'; trackItineraryEvent('validation_failure', { mode: 'ordered', stage: 'return_date' }); return }
   submitting.value = true
   controller?.abort(); controller = new AbortController()
@@ -172,29 +176,53 @@ const submit = async () => {
 
 watch(query, () => { if (session.value?.searchId) refresh(false) }, { deep: true })
 watch(() => props.prefillRoute, codes => {
-  const normalized = codes.map(code => code.trim().toUpperCase()).filter(code => /^[A-Z]{3}$/.test(code))
+  const normalized = codes.map(code => code.trim().toUpperCase()).filter(code => /^[A-Z]{3,4}$/.test(code))
   const key = normalized.join(',')
   if (normalized.length < 2 || new Set(normalized).size !== normalized.length || key === lastHydratedPrefill.value) return
-  const allowed = normalized.slice(0, maxOrderedLegs.value + 1)
-  const option = (code: string): AirportOption => ({ code, name: null, displayLabel: code })
-  const start = new Date(); start.setDate(start.getDate() + 1)
-  legs.value = allowed.slice(0, -1).map((code, index) => {
-    const departure = new Date(start); departure.setDate(start.getDate() + index)
-    return {
-      id: `ordered-prefill-${index + 1}`,
-      fromLabel: code,
-      toLabel: allowed[index + 1],
-      from: [option(code)],
-      to: [option(allowed[index + 1])],
-      departureDate: props.exploreHandoff
-        ? index === 0 ? props.prefillDepartureDate : ''
-        : departure.toISOString().slice(0, 10),
-      continuity: 'sameAirport',
-    }
-  })
+  const hydration = ++prefillHydration
+  const allowedIdentifiers = normalized.slice(0, maxOrderedLegs.value + 1)
+  const applyPrefill = (airports: AirportOption[]) => {
+    const start = new Date(); start.setDate(start.getDate() + 1)
+    legs.value = airports.slice(0, -1).map((airport, index) => {
+      const departure = new Date(start); departure.setDate(start.getDate() + index)
+      return {
+        id: `ordered-prefill-${index + 1}`,
+        fromLabel: airport.displayLabel,
+        toLabel: airports[index + 1].displayLabel,
+        from: [airport],
+        to: [airports[index + 1]],
+        departureDate: props.exploreHandoff
+          ? index === 0 ? props.prefillDepartureDate : ''
+          : departure.toISOString().slice(0, 10),
+        continuity: 'sameAirport',
+      }
+    })
+  }
+  const placeholders = allowedIdentifiers.map(code => ({ code, name: null, displayLabel: code }))
+  applyPrefill(placeholders)
   lastHydratedPrefill.value = key
   prefillActive.value = true
   formDirty.value = false
+  void Promise.all(allowedIdentifiers.map(async identifier => {
+    try {
+      const matches = await fetchAirportSuggestions(identifier)
+      return matches.find(airport => airport.code === identifier) ?? matches[0] ?? null
+    } catch {
+      return null
+    }
+  })).then(resolved => {
+    if (hydration !== prefillHydration || searchStarted.value || resolved.some(airport => airport === null)) return
+    const replacements = new Map(allowedIdentifiers.map((identifier, index) => [identifier, resolved[index] as AirportOption]))
+    const resolveAirports = (airports: AirportOption[]) => airports.map(airport => replacements.get(airport.code) ?? airport)
+    const resolveLabel = (label: string) => replacements.get(label)?.displayLabel ?? label
+    legs.value = reconnectRoute(legs.value.map(leg => ({
+      ...leg,
+      from: resolveAirports(leg.from),
+      to: resolveAirports(leg.to),
+      fromLabel: resolveLabel(leg.fromLabel),
+      toLabel: resolveLabel(leg.toLabel),
+    })))
+  })
 }, { immediate: true, deep: true })
 onBeforeUnmount(() => { if (formDirty.value && !searchStarted.value) trackItineraryEvent('form_abandonment', { mode: 'ordered' }); if (timer) window.clearTimeout(timer); controller?.abort() })
 onMounted(async () => {
@@ -217,7 +245,7 @@ onMounted(async () => {
         <p>Only the first leave date was checked in Explore. Choose dates for every later flight. An onward route may not operate or return fares on the dates you select here.</p>
       </aside>
       <div class="mode-introduction"><strong>Keep this exact route order</strong><p>Enter each stop once. Every new destination automatically continues from the one above it; Aveon searches the airport combinations and dates without rearranging your stops.</p></div>
-      <OrderedLegEditor v-for="(leg, index) in legs" :key="leg.id" :model-value="leg" :index="index" :removable="legs.length > 1" :max-airports="maxAirportsPerGroup" @update:model-value="updateLeg(index, $event)" @remove="removeLeg(index)" />
+      <OrderedLegEditor v-for="(leg, index) in legs" :key="`${leg.id}:${leg.from.map(airport => airport.code).join(',')}:${leg.to.map(airport => airport.code).join(',')}`" :model-value="leg" :index="index" :removable="legs.length > 1" :max-airports="maxAirportsPerGroup" @update:model-value="updateLeg(index, $event)" @remove="removeLeg(index)" />
       <button type="button" class="secondary-action add-destination-action" :disabled="legs.length >= maxEditableLegs" @click="addLeg">
         <span class="add-icon" aria-hidden="true">+</span>
         <span><strong>Add another flight to this route</strong><small>Continue from the current destination to one more place.</small></span>
@@ -231,7 +259,7 @@ onMounted(async () => {
           <label>Return date<input v-model="returnDate" type="date" :min="lastDepartureDate" required /></label>
           <div class="generated-return" aria-label="Generated return leg">
             <span>Return home</span>
-            <strong>{{ airportCodes(legs.at(-1)?.to.map(airport => airport.code) ?? []) || 'Final destination' }} → {{ airportCodes(legs[0]?.from.map(airport => airport.code) ?? []) || 'Starting point' }}</strong>
+            <strong>{{ airportNames(legs.at(-1)?.to ?? []) || 'Final destination' }} → {{ airportNames(legs[0]?.from ?? []) || 'Starting point' }}</strong>
             <small>This final leg is searched and reported separately, so you can see if its fares are missing or its provider calls fail.</small>
           </div>
         </div>
@@ -259,7 +287,7 @@ onMounted(async () => {
       <ol class="route-summary" aria-label="Route leg search status">
         <li v-for="(leg, index) in routeSummary" :key="leg.legId" :class="`leg-status leg-status--${leg.status}`">
           <span class="leg-number">{{ index + 1 }}</span>
-          <div class="leg-route"><strong>{{ airportCodes(leg.fromAirportCodes) }} → {{ airportCodes(leg.toAirportCodes) }}</strong><span>{{ leg.departureDate }}</span></div>
+          <div class="leg-route"><strong>{{ leg.fromLabel }} → {{ leg.toLabel }}</strong><span>{{ airportCodes(leg.fromAirportCodes) }} → {{ airportCodes(leg.toAirportCodes) }} · {{ leg.departureDate }}</span></div>
           <div class="leg-outcome"><strong>{{ legStatusLabel(leg) }}</strong><span v-if="leg.airportPairsScheduled > 0">{{ leg.airportPairsCompleted }} of {{ leg.airportPairsScheduled }} selected pairs checked<span v-if="leg.failedPairs > 0"> · {{ leg.failedPairs }} failed</span><span v-if="leg.airportPairsScheduled < leg.airportPairsPlanned"> · {{ leg.airportPairsPlanned }} possible</span></span></div>
         </li>
       </ol>

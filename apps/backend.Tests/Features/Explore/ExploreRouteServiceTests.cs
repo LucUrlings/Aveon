@@ -636,6 +636,18 @@ public sealed class ExploreRouteServiceTests
             return Task.FromResult(result);
         }
 
+        public Task<IReadOnlyDictionary<string, AirportCatalogEntry>> GetByIdentifiersAsync(IEnumerable<string> identifiers, CancellationToken cancellationToken)
+        {
+            var requested = identifiers.Select(identifier => identifier.ToUpperInvariant()).ToHashSet(StringComparer.Ordinal);
+            var result = new Dictionary<string, AirportCatalogEntry>(StringComparer.Ordinal);
+            foreach (var airport in _airports.Where(airport => requested.Contains(airport.Iata) || airport.Icao is not null && requested.Contains(airport.Icao)))
+            {
+                result[airport.Iata] = airport;
+                if (airport.Icao is not null) result[airport.Icao] = airport;
+            }
+            return Task.FromResult<IReadOnlyDictionary<string, AirportCatalogEntry>>(result);
+        }
+
         public void SetAirportName(string code, string name) => _airports.Single(airport => airport.Iata == code).Name = name;
 
         public Task<AirportCatalogMetadata?> GetMetadataAsync(CancellationToken cancellationToken) => Task.FromResult<AirportCatalogMetadata?>(null);

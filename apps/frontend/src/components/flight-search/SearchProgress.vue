@@ -43,7 +43,7 @@ const progressPercentage = computed(() => {
 
 <style scoped>
 .progress-shell {
-  width: min(1480px, 100%);
+  width: min(var(--content-max), 100%);
   margin: 0 auto 10px;
   padding: 10px 12px;
   border: 1px solid var(--border);

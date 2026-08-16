@@ -2,7 +2,7 @@
   flex: 1; padding: 64px 24px 80px; color: var(--ink);
   background: radial-gradient(circle at 12% 2%, rgba(79, 70, 229, 0.12), transparent 28%), radial-gradient(circle at 92% 18%, rgba(8, 145, 178, 0.1), transparent 24%), linear-gradient(180deg, #f8faff 0%, var(--page) 70%);
 }
-.about-hero, .about-section, .principles-section, .creator-card { width: min(1180px, 100%); margin-left: auto; margin-right: auto; }
+.about-hero, .about-section, .principles-section, .creator-card { width: min(var(--content-max), 100%); margin-left: auto; margin-right: auto; }
 .about-hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr); align-items: center; gap: 80px; min-height: 480px; }
 .about-hero-copy { max-width: 760px; }
 .about-eyebrow { margin: 0 0 12px; color: var(--brand); font-size: 0.72rem; font-weight: 850; letter-spacing: 0.16em; text-transform: uppercase; }

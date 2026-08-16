@@ -18,9 +18,16 @@ const routes = {
 const createGlobe = () => {
   const controls = { autoRotate: true, autoRotateSpeed: 0, enablePan: true, enableZoom: true }
   const material = { color: { set: vi.fn() }, emissive: { set: vi.fn() }, emissiveIntensity: 0, shininess: 0 }
-  const globe: Record<string, any> = { controls: () => controls, globeMaterial: () => material, _destructor: vi.fn() }
+  const renderer = { setPixelRatio: vi.fn() }
+  const globe: Record<string, any> = {
+    controls: () => controls,
+    globeMaterial: () => material,
+    renderer: () => renderer,
+    pauseAnimation: vi.fn(),
+    resumeAnimation: vi.fn(),
+    _destructor: vi.fn(),
+  }
   let pointClick: ((point: unknown) => void) | undefined
-  let pointHover: ((point: unknown) => void) | undefined
   for (const method of [
     'backgroundColor', 'showAtmosphere', 'atmosphereColor', 'atmosphereAltitude', 'showGraticules', 'polygonsData',
     'polygonAltitude', 'polygonCapColor', 'polygonSideColor', 'polygonStrokeColor', 'pointOfView',
@@ -29,8 +36,8 @@ const createGlobe = () => {
     'arcDashLength', 'arcDashGap', 'arcDashInitialGap', 'arcDashAnimateTime', 'arcsTransitionDuration', 'width', 'height',
   ]) globe[method] = vi.fn(() => globe)
   globe.onPointClick = vi.fn((callback: (point: unknown) => void) => { pointClick = callback; return globe })
-  globe.onPointHover = vi.fn((callback: (point: unknown) => void) => { pointHover = callback; return globe })
-  return { globe, controls, clickPoint: (point: unknown) => pointClick?.(point), hoverPoint: (point: unknown) => pointHover?.(point) }
+  globe.onPointHover = vi.fn(() => globe)
+  return { globe, controls, renderer, clickPoint: (point: unknown) => pointClick?.(point) }
 }
 
 describe('RouteGlobe reduced motion', () => {
@@ -53,14 +60,14 @@ describe('RouteGlobe reduced motion', () => {
     expect(fixture.globe._destructor).toHaveBeenCalledOnce()
   })
 
-  it('configures route data, handles selection and focus, pauses rotation, resizes, and cleans up', async () => {
+  it('configures static route data, handles selection, pauses rotation, resizes, and cleans up', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     const observe = vi.fn()
     const disconnect = vi.fn()
     vi.stubGlobal('ResizeObserver', class { observe = observe; disconnect = disconnect })
     const fixture = createGlobe()
     globeFactory.mockReturnValue(fixture.globe)
-    const wrapper = mount(RouteGlobe, { props: { routes } })
+    const wrapper = mount(RouteGlobe, { props: { routes, renderScale: .78, pixelRatioCap: 1 } })
     await flushPromises()
 
     expect(fixture.globe.pointsData).toHaveBeenCalledWith(expect.arrayContaining([
@@ -68,8 +75,10 @@ describe('RouteGlobe reduced motion', () => {
       expect.objectContaining({ code: 'AMS', origin: false }),
     ]))
     expect(fixture.globe.arcsData).toHaveBeenCalledWith([
-      expect.objectContaining({ startLat: 53.42, startLng: -6.27, endLat: 52.31, endLng: 4.76, layer: 'animation' }),
+      expect.objectContaining({ startLat: 53.42, startLng: -6.27, endLat: 52.31, endLng: 4.76, layer: 'route' }),
     ])
+    expect(fixture.renderer.setPixelRatio).toHaveBeenCalledWith(1)
+    expect(fixture.globe.onPointHover).not.toHaveBeenCalled()
     expect(fixture.globe.polygonsData).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ type: 'Feature' })]))
     const animationTime = fixture.globe.arcDashAnimateTime.mock.calls.at(-1)?.[0] as (arc: { layer: string }) => number
     expect(animationTime({ layer: 'animation' })).toBe(2000)
@@ -79,18 +88,13 @@ describe('RouteGlobe reduced motion', () => {
     expect(fixture.controls.autoRotate).toBe(true)
     expect(fixture.controls.enableZoom).toBe(true)
     expect(observe).toHaveBeenCalledOnce()
-    expect(fixture.globe.width).toHaveBeenCalledWith(280)
-    expect(fixture.globe.height).toHaveBeenCalledWith(320)
+    expect(fixture.globe.width).toHaveBeenCalledWith(218)
+    expect(fixture.globe.height).toHaveBeenCalledWith(250)
 
     fixture.clickPoint(routes.destinations[0])
     expect(wrapper.emitted('select')?.[0]).toEqual([routes.destinations[0]])
     fixture.clickPoint({ ...routes.origin, origin: true })
     expect(wrapper.emitted('select')).toHaveLength(1)
-    fixture.hoverPoint({ ...routes.destinations[0], origin: false })
-    expect(wrapper.emitted('hover')?.[0]).toEqual([expect.objectContaining({ code: 'AMS' })])
-    fixture.hoverPoint(null)
-    expect(wrapper.emitted('hover')?.[1]).toEqual([null])
-
     const jfk = { code: 'JFK', name: 'John F. Kennedy', city: 'New York', country: 'United States', latitude: 40.64, longitude: -73.78 }
     await wrapper.setProps({ selectedDestination: routes.destinations[0], committedPath: [routes.origin, routes.destinations[0], jfk] })
     const latestArcs = fixture.globe.arcsData.mock.calls.at(-1)?.[0]
@@ -103,9 +107,6 @@ describe('RouteGlobe reduced motion', () => {
     expect(fixture.controls.autoRotate).toBe(true)
     await wrapper.get('.globe-canvas').trigger('wheel')
     expect(fixture.controls.autoRotate).toBe(false)
-    ;(wrapper.vm as unknown as { focusDestination: (airport: typeof routes.destinations[number]) => void }).focusDestination(routes.destinations[0])
-    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 52.31, lng: 4.76, altitude: 1.65 }, 900)
-
     wrapper.unmount()
     expect(disconnect).toHaveBeenCalledOnce()
     expect(fixture.globe._destructor).toHaveBeenCalledOnce()
@@ -131,11 +132,11 @@ describe('RouteGlobe reduced motion', () => {
     const wrapper = mount(RouteGlobe, { props: { routes, overview: true } })
     await flushPromises()
 
-    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 53.42, lng: -6.27, altitude: 2.8 })
+    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 53.42, lng: -6.27, altitude: 2.15 })
 
     await wrapper.setProps({ routes: { ...routes, origin: { code: 'DXB', name: 'Dubai International', city: 'Dubai', country: 'United Arab Emirates', latitude: 25.25, longitude: 55.36 }, destinations: [...routes.destinations, { code: 'JFK', name: 'John F. Kennedy', city: 'New York', country: 'United States', latitude: 40.64, longitude: -73.78 }] } })
 
-    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 25.25, lng: 55.36, altitude: 2.8 }, 700)
+    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 25.25, lng: 55.36, altitude: 2.15 }, 700)
     wrapper.unmount()
   })
 
@@ -157,14 +158,14 @@ describe('RouteGlobe reduced motion', () => {
 
     expect(color(selected).join(' ')).toContain('rgba(245,158,11,.8)')
     expect(color(selectedRoute)).toBe('rgba(245,158,11,.3)')
-    expect(color(other).join(' ')).toContain('rgba(79,70,229,.05)')
+    expect(color(other)).toBe('rgba(79,70,229,.2)')
     expect(color(committed).join(' ')).toContain('rgba(167,139,250,.88)')
     expect(stroke(selected)).toBeGreaterThan(stroke(other))
     expect(stroke(committed)).toBeGreaterThan(stroke(other))
     wrapper.unmount()
   })
 
-  it('restarts the emphasized route immediately and pans to a hovered destination', async () => {
+  it('animates only a selected route without installing hover handlers or panning the camera', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     const fixture = createGlobe()
     globeFactory.mockReturnValue(fixture.globe)
@@ -173,17 +174,14 @@ describe('RouteGlobe reduced motion', () => {
     fixture.globe.arcsData.mockClear()
     fixture.globe.pointOfView.mockClear()
 
-    await wrapper.setProps({ hoveredDestination: routes.destinations[0] })
+    await wrapper.setProps({ selectedDestination: routes.destinations[0] })
 
     const arcs = fixture.globe.arcsData.mock.calls.at(-1)?.[0] as Array<{ destination: typeof routes.destinations[number]; layer: string }>
     expect(arcs.filter(arc => arc.destination.code === 'AMS').map(arc => arc.layer)).toEqual(['route', 'animation'])
     expect(fixture.globe.arcsTransitionDuration).toHaveBeenLastCalledWith(0)
     expect(fixture.globe.arcDashInitialGap).toHaveBeenLastCalledWith(0)
-    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 52.31, lng: 4.76, altitude: 1.65 }, 450)
-    expect(fixture.controls.autoRotate).toBe(false)
-
-    await wrapper.setProps({ hoveredDestination: null })
-    expect(fixture.controls.autoRotate).toBe(true)
+    expect(fixture.globe.onPointHover).not.toHaveBeenCalled()
+    expect(fixture.globe.pointOfView).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

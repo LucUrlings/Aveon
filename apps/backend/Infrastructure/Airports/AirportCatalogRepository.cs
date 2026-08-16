@@ -5,6 +5,30 @@ namespace backend.Infrastructure.Airports;
 
 public sealed class AirportCatalogRepository(AppDbContext dbContext) : IAirportCatalogRepository
 {
+    public async Task<IReadOnlyDictionary<string, AirportCatalogEntry>> GetByIdentifiersAsync(
+        IEnumerable<string> identifiers,
+        CancellationToken cancellationToken)
+    {
+        var codes = identifiers
+            .Select(code => code.Trim().ToUpperInvariant())
+            .Where(code => code.Length is 3 or 4)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (codes.Length == 0) return new Dictionary<string, AirportCatalogEntry>(StringComparer.Ordinal);
+
+        var airports = await dbContext.Airports
+            .AsNoTracking()
+            .Where(airport => codes.Contains(airport.Iata) || (airport.Icao != null && codes.Contains(airport.Icao)))
+            .ToListAsync(cancellationToken);
+        var result = new Dictionary<string, AirportCatalogEntry>(StringComparer.Ordinal);
+        foreach (var airport in airports)
+        {
+            result[airport.Iata] = airport;
+            if (!string.IsNullOrWhiteSpace(airport.Icao)) result[airport.Icao] = airport;
+        }
+        return result;
+    }
+
     public async Task<IReadOnlyDictionary<string, AirportCatalogEntry>> GetByIataCodesAsync(
         IEnumerable<string> iataCodes,
         CancellationToken cancellationToken)
