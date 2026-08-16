@@ -6,7 +6,7 @@ Repository-wide setup, backend configuration, deployment, and product behavior a
 
 ## Product routes
 
-- `/` — product overview with a random-hub direct-route globe.
+- `/` — product overview with a fast cached random-hub direct-route globe and a page-one preview while a completely cold cache warms in the background.
 - `/search` — flexible one-way and return search across airport groups and dates.
 - `/explore` — interactive direct-route discovery with onward-path building.
 - `/multi-destination` — ordered Build my route and bounded Optimize my trip flows.
@@ -38,7 +38,7 @@ config/seoFiles.ts       Build-time robots.txt and sitemap generation
 
 `RouteGlobe.vue` lazy-loads Globe.gl and uses locally bundled World Atlas TopoJSON data. It supports destination markers, animated and solid route arcs, hover/focus emphasis, camera movement, committed-path display, responsive fixed heights, reduced-motion behavior, WebGL cleanup, and a non-WebGL fallback. The homepage reuses it in preview mode with zoom and destination selection disabled.
 
-The Explore page reuses the normal airport autocomplete, keeps URL-backed committed paths, verifies every restored scheduled edge, and only navigates to Search or Build my route after an explicit action. Search and ordered-route prefills never start provider calls automatically.
+The Explore page reuses the normal airport autocomplete, requires an exact first leave date, keeps URL-backed committed paths, and only navigates to Search or Build my route after an explicit action. Search receives that exact date. Build my route receives only the first date, leaves later dates for the traveler, and warns that onward route suggestions may not operate or return fares. Explore itself never requests prices, and neither prefill starts provider calls automatically.
 
 ## Development
 

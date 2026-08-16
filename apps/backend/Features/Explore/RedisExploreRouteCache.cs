@@ -14,25 +14,25 @@ public sealed class RedisExploreRouteCache(
     private readonly IDatabase _database = redis.GetDatabase();
     private readonly RedisOptions _options = options.Value;
 
-    public async Task<ExploreRouteCacheEntry?> GetAsync(string origin, ExploreCacheProfile profile, CancellationToken cancellationToken)
+    public async Task<ExploreScheduleCacheEntry?> GetAsync(string origin, ExploreCacheProfile profile, CancellationToken cancellationToken, DateOnly? departureDate = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var value = await _database.StringGetAsync(Key(origin, profile));
+        var value = await _database.StringGetAsync(BuildKey(origin, profile, departureDate));
         return value.IsNullOrEmpty
             ? null
-            : JsonSerializer.Deserialize<ExploreRouteCacheEntry>(value.ToString(), SerializerOptions);
+            : JsonSerializer.Deserialize<ExploreScheduleCacheEntry>(value.ToString(), SerializerOptions);
     }
 
-    public async Task SetAsync(string origin, ExploreCacheProfile profile, ExploreRouteCacheEntry entry, CancellationToken cancellationToken)
+    public async Task SetAsync(string origin, ExploreCacheProfile profile, ExploreScheduleCacheEntry entry, CancellationToken cancellationToken, DateOnly? departureDate = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var retentionMinutes = RetentionMinutes(profile, _options);
         var payload = JsonSerializer.Serialize(entry, SerializerOptions);
-        await _database.StringSetAsync(Key(origin, profile), payload, TimeSpan.FromMinutes(retentionMinutes));
+        await _database.StringSetAsync(BuildKey(origin, profile, departureDate), payload, TimeSpan.FromMinutes(retentionMinutes));
     }
 
-    private static string Key(string origin, ExploreCacheProfile profile) =>
-        $"explore:routes:{profile.ToString().ToLowerInvariant()}:{origin.Trim().ToUpperInvariant()}";
+    internal static string BuildKey(string origin, ExploreCacheProfile profile, DateOnly? departureDate) =>
+        $"explore:routes:v2:{profile.ToString().ToLowerInvariant()}:{origin.Trim().ToUpperInvariant()}:{departureDate?.ToString("yyyy-MM-dd") ?? "rolling"}";
 
     internal static int RetentionMinutes(ExploreCacheProfile profile, RedisOptions options) => Math.Max(
         profile == ExploreCacheProfile.Hero ? options.HeroRoutesRetentionMinutes : options.ExploreRoutesRetentionMinutes,

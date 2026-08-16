@@ -4,7 +4,7 @@ namespace backend.Features.Explore;
 
 public interface IExploreRouteCache
 {
-    Task<ExploreRouteCacheEntry?> GetAsync(string origin, ExploreCacheProfile profile, CancellationToken cancellationToken);
+    Task<ExploreScheduleCacheEntry?> GetAsync(string origin, ExploreCacheProfile profile, CancellationToken cancellationToken, DateOnly? departureDate = null);
 
-    Task SetAsync(string origin, ExploreCacheProfile profile, ExploreRouteCacheEntry entry, CancellationToken cancellationToken);
+    Task SetAsync(string origin, ExploreCacheProfile profile, ExploreScheduleCacheEntry entry, CancellationToken cancellationToken, DateOnly? departureDate = null);
 }

@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AirportGroupPicker from '../../../src/components/flight-search/AirportGroupPicker.vue'
+import { localDateWithOffset } from '../../../src/features/explore/localDate'
 import RouteGlobe from '../../../src/features/explore/RouteGlobe.vue'
 import ExplorePage from '../../../src/pages/ExplorePage.vue'
 
@@ -43,10 +44,13 @@ describe('ExplorePage', () => {
   it('loads an origin, previews destinations, and only hands off after an explicit action', async () => {
     vi.spyOn(Math, 'random').mockReturnValue(0)
     const wrapper = mount(ExplorePage)
+    const leaveDate = wrapper.get('.leave-date input')
+    expect(leaveDate.attributes('min')).toBe(localDateWithOffset(0))
+    expect(leaveDate.attributes('max')).toBe(localDateWithOffset(365))
     wrapper.getComponent(AirportGroupPicker).vm.$emit('addAirport', { code: 'DUB', name: 'Dublin Airport', displayLabel: 'Dublin Airport (DUB)' })
     await flushPromises()
 
-    expect(getExploreRoutes).toHaveBeenCalledWith('DUB', expect.any(AbortSignal))
+    expect(getExploreRoutes).toHaveBeenCalledWith('DUB', expect.any(String), expect.any(AbortSignal))
     expect(wrapper.get('#routes-heading').text()).toContain('2 destinations')
     expect(wrapper.get('.destination-browser').text()).toContain('Amsterdam')
     await wrapper.get('.globe-destination').trigger('click')
@@ -55,7 +59,7 @@ describe('ExplorePage', () => {
     const globeColumnHtml = wrapper.get('.globe-column').html()
     expect(globeColumnHtml.indexOf('route-selection')).toBeLessThan(globeColumnHtml.indexOf('globe-destination'))
     await wrapper.get('.primary-selection').trigger('click')
-    expect(push).toHaveBeenCalledWith({ path: '/search', query: { origins: 'DUB', destinations: 'AMS', prefill: 'true' } })
+    expect(push).toHaveBeenCalledWith({ path: '/search', query: { origins: 'DUB', destinations: 'AMS', dates: expect.any(String), prefill: 'true' } })
 
     await wrapper.get('.randomize-button').trigger('click')
     expect(focusDestination).toHaveBeenCalled()
@@ -103,7 +107,7 @@ describe('ExplorePage', () => {
     await wrapper.get('[role="alert"] button').trigger('click')
     await flushPromises()
 
-    expect(getExploreRoutes).toHaveBeenLastCalledWith('AMS', expect.any(AbortSignal))
+    expect(getExploreRoutes).toHaveBeenLastCalledWith('AMS', undefined, expect.any(AbortSignal))
     expect(wrapper.get('.route-tray').text()).toContain('DUB→AMS')
     expect(wrapper.get('#routes-heading').text()).toContain('Amsterdam connects directly')
   })
@@ -115,8 +119,8 @@ describe('ExplorePage', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('latest cached schedule')
-    expect(wrapper.text()).toContain('this map is partial')
-    expect(wrapper.text()).toContain('Schedule window: 2026-07-28 through 2026-08-07')
+    expect(wrapper.text()).toContain('Some scheduled destinations could not be included, so this map is partial.')
+    expect(wrapper.text()).toContain('Direct departures scheduled for')
     const destinationBrowser = wrapper.get('.destination-browser')
     expect(destinationBrowser.attributes('aria-labelledby')).toBe('destination-list-heading')
     expect(destinationBrowser.get('ul').exists()).toBe(true)
@@ -137,7 +141,7 @@ describe('ExplorePage', () => {
   it('keeps the newest airport request in control of the loading state', async () => {
     let resolveNewest!: (value: typeof network) => void
     getExploreRoutes
-      .mockImplementationOnce((_origin: string, signal: AbortSignal) => new Promise((_resolve, reject) => {
+      .mockImplementationOnce((_origin: string, _departureDate: string, signal: AbortSignal) => new Promise((_resolve, reject) => {
         signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })))
       }))
       .mockImplementationOnce(() => new Promise(resolve => { resolveNewest = resolve }))
@@ -197,7 +201,7 @@ describe('ExplorePage', () => {
     const onward = wrapper.findAll('.selection-actions button').find(button => button.text().includes('Explore onward'))!
     await onward.trigger('click')
 
-    expect(push).toHaveBeenCalledWith({ path: '/explore', query: { path: 'DUB,AMS' } })
+    expect(push).toHaveBeenCalledWith({ path: '/explore', query: { path: 'DUB,AMS', date: expect.any(String) } })
     expect(wrapper.get('.route-tray').text()).toContain('DUB')
   })
 
@@ -212,12 +216,12 @@ describe('ExplorePage', () => {
     const wrapper = mount(ExplorePage)
     await flushPromises()
 
-    expect(getExploreRoutes).toHaveBeenCalledWith('DUB', expect.any(AbortSignal))
-    expect(getExploreRoutes).toHaveBeenCalledWith('AMS', expect.any(AbortSignal))
+    expect(getExploreRoutes).toHaveBeenCalledWith('DUB', expect.any(String), expect.any(AbortSignal))
+    expect(getExploreRoutes).toHaveBeenCalledWith('AMS', undefined, expect.any(AbortSignal))
     expect(wrapper.get('.route-tray').text()).toContain('DUB→AMS')
     await wrapper.get('.destination-browser li button').trigger('click')
     await wrapper.get('.primary-selection').trigger('click')
-    expect(push).toHaveBeenCalledWith({ path: '/multi-destination', query: { mode: 'ordered', route: 'DUB,AMS,JFK', prefill: 'true' } })
+    expect(push).toHaveBeenCalledWith({ path: '/multi-destination', query: { mode: 'ordered', route: 'DUB,AMS,JFK', departureDate: expect.any(String), source: 'explore', prefill: 'true' } })
 
     routeState.current.query.path = 'DUB'
     await flushPromises()
@@ -245,9 +249,9 @@ describe('ExplorePage', () => {
     await flushPromises()
 
     await wrapper.get('[aria-label="Return to Dublin"]').trigger('click')
-    expect(push).toHaveBeenCalledWith({ path: '/explore', query: { path: 'DUB' } })
+    expect(push).toHaveBeenCalledWith({ path: '/explore', query: { path: 'DUB', date: expect.any(String) } })
     await wrapper.get('.tray-recovery').trigger('click')
-    expect(push).toHaveBeenCalledWith({ path: '/explore', query: { path: 'DUB,AMS' } })
+    expect(push).toHaveBeenCalledWith({ path: '/explore', query: { path: 'DUB,AMS', date: expect.any(String) } })
   })
 
   it('keeps a newly committed path visible when its onward network fails', async () => {
@@ -296,6 +300,6 @@ describe('ExplorePage', () => {
     const keepExploring = wrapper.findAll('.selection-actions button').find(button => button.text().includes('Keep exploring'))!
     expect(keepExploring.attributes('disabled')).toBeDefined()
     await wrapper.get('.primary-selection').trigger('click')
-    expect(push).toHaveBeenCalledWith({ path: '/multi-destination', query: { mode: 'ordered', route: 'DUB,AMS', prefill: 'true' } })
+    expect(push).toHaveBeenCalledWith({ path: '/multi-destination', query: { mode: 'ordered', route: 'DUB,AMS', departureDate: expect.any(String), source: 'explore', prefill: 'true' } })
   })
 })

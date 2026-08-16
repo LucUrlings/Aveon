@@ -47,7 +47,7 @@ public sealed record FlightApiScheduleDepartures
     public FlightApiSchedulePage? Page { get; init; }
 
     [JsonPropertyName("data")]
-    public List<FlightApiScheduleRow> Data { get; init; } = [];
+    public List<FlightApiScheduleRow>? Data { get; init; }
 }
 
 public sealed record FlightApiSchedulePage

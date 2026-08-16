@@ -67,4 +67,15 @@ describe('MultiDestinationSearchPage', () => {
     expect(wrapper.text()).toContain('JFK')
     delete routeQuery.mode; delete routeQuery.route; delete routeQuery.prefill
   })
+
+  it('warns an Explore handoff that onward dates and fares still need validation', () => {
+    Object.assign(routeQuery, { mode: 'ordered', route: 'DUB,AMS,JFK', departureDate: '2026-09-18', source: 'explore', prefill: 'true' })
+    const wrapper = mount(MultiDestinationSearchPage)
+
+    const editors = wrapper.findAll('fieldset.ordered-leg')
+    expect(wrapper.get('.explore-handoff-note').text()).toContain('may not operate or return fares')
+    expect(editors[0].get('input[type="date"]').element).toHaveProperty('value', '2026-09-18')
+    expect(editors[1].get('input[type="date"]').element).toHaveProperty('value', '')
+    for (const key of ['mode', 'route', 'departureDate', 'source', 'prefill']) delete routeQuery[key]
+  })
 })

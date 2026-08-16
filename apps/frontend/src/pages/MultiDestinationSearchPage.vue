@@ -9,6 +9,10 @@ const activeTab = ref<'optimize' | 'ordered'>(route.query.mode === 'optimize' ? 
 const prefillRoute = computed(() => route.query.prefill === 'true' && typeof route.query.route === 'string'
   ? route.query.route.split(',').map(code => code.trim().toUpperCase()).filter(code => /^[A-Z]{3}$/.test(code))
   : [])
+const prefillDepartureDate = computed(() => route.query.source === 'explore' && typeof route.query.departureDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(route.query.departureDate)
+  ? route.query.departureDate
+  : '')
+const exploreHandoff = computed(() => route.query.source === 'explore' && prefillRoute.value.length > 1)
 const modes = ['ordered', 'optimize'] as const
 const selectMode = (mode: typeof modes[number]) => { activeTab.value = mode }
 const moveMode = (current: typeof modes[number], direction: number) => {
@@ -36,7 +40,7 @@ watch(() => route.query.mode, mode => { activeTab.value = mode === 'optimize' ? 
 
     <section v-if="activeTab === 'optimize'" id="multi-destination-panel-optimize" role="tabpanel" aria-labelledby="multi-destination-tab-optimize" class="advanced-card advanced-card--full" tabindex="0"><OptimizedTripSearch /></section>
 
-    <section v-else id="multi-destination-panel-ordered" role="tabpanel" aria-labelledby="multi-destination-tab-ordered" class="advanced-card advanced-card--ordered" tabindex="0"><OrderedRouteSearch :prefill-route="prefillRoute" /></section>
+    <section v-else id="multi-destination-panel-ordered" role="tabpanel" aria-labelledby="multi-destination-tab-ordered" class="advanced-card advanced-card--ordered" tabindex="0"><OrderedRouteSearch :prefill-route="prefillRoute" :prefill-departure-date="prefillDepartureDate" :explore-handoff="exploreHandoff" /></section>
   </main>
 </template>
 

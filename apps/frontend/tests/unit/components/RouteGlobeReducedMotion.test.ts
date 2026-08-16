@@ -124,18 +124,18 @@ describe('RouteGlobe reduced motion', () => {
     expect(fixture.controls.autoRotate).toBe(true)
   })
 
-  it('keeps an overview camera for the homepage as route data arrives', async () => {
+  it('keeps the homepage overview camera centered on the source airport as route data arrives', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
     const fixture = createGlobe()
     globeFactory.mockReturnValue(fixture.globe)
     const wrapper = mount(RouteGlobe, { props: { routes, overview: true } })
     await flushPromises()
 
-    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 18, lng: 0, altitude: 2.8 })
+    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 53.42, lng: -6.27, altitude: 2.8 })
 
-    await wrapper.setProps({ routes: { ...routes, destinations: [...routes.destinations, { code: 'JFK', name: 'John F. Kennedy', city: 'New York', country: 'United States', latitude: 40.64, longitude: -73.78 }] } })
+    await wrapper.setProps({ routes: { ...routes, origin: { code: 'DXB', name: 'Dubai International', city: 'Dubai', country: 'United Arab Emirates', latitude: 25.25, longitude: 55.36 }, destinations: [...routes.destinations, { code: 'JFK', name: 'John F. Kennedy', city: 'New York', country: 'United States', latitude: 40.64, longitude: -73.78 }] } })
 
-    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 18, lng: 0, altitude: 2.8 }, 700)
+    expect(fixture.globe.pointOfView).toHaveBeenLastCalledWith({ lat: 25.25, lng: 55.36, altitude: 2.8 }, 700)
     wrapper.unmount()
   })
 

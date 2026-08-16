@@ -52,7 +52,9 @@ const resize = () => {
 }
 
 const initialPointOfView = (routes?: ExploreRoutesResponse | null) => props.overview
-  ? { lat: 18, lng: 0, altitude: 2.8 }
+  ? routes
+    ? { lat: routes.origin.latitude, lng: routes.origin.longitude, altitude: 2.8 }
+    : { lat: 18, lng: 0, altitude: 2.8 }
   : routes
     ? { lat: routes.origin.latitude, lng: routes.origin.longitude, altitude: 2.05 }
     : { lat: 18, lng: 0, altitude: 2.15 }

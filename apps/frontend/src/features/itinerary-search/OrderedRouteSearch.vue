@@ -8,7 +8,15 @@ import type { ItineraryResultsQuery, ItinerarySearchSession, OrderedLegSearchSta
 import { trackItineraryEvent } from './analytics'
 import type { AirportOption } from '../flight-search/types'
 
-const props = withDefaults(defineProps<{ prefillRoute?: string[] }>(), { prefillRoute: () => [] })
+const props = withDefaults(defineProps<{
+  prefillRoute?: string[]
+  prefillDepartureDate?: string
+  exploreHandoff?: boolean
+}>(), {
+  prefillRoute: () => [],
+  prefillDepartureDate: '',
+  exploreHandoff: false,
+})
 
 let sequence = 1
 const nextDate = () => {
@@ -101,6 +109,8 @@ const removePrefillFromUrl = () => {
     const url = new URL(window.location.href)
     url.searchParams.delete('prefill')
     url.searchParams.delete('route')
+    url.searchParams.delete('departureDate')
+    url.searchParams.delete('source')
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
   } catch { /* Unit-test and embedded URLs may not support history replacement. */ }
 }
@@ -176,7 +186,9 @@ watch(() => props.prefillRoute, codes => {
       toLabel: allowed[index + 1],
       from: [option(code)],
       to: [option(allowed[index + 1])],
-      departureDate: departure.toISOString().slice(0, 10),
+      departureDate: props.exploreHandoff
+        ? index === 0 ? props.prefillDepartureDate : ''
+        : departure.toISOString().slice(0, 10),
       continuity: 'sameAirport',
     }
   })
@@ -200,6 +212,10 @@ onMounted(async () => {
 <template>
   <section aria-label="Build my route form">
     <form class="ordered-form" @input="markFormDirty" @submit.prevent="submit">
+      <aside v-if="exploreHandoff" class="explore-handoff-note" role="note">
+        <strong>Complete the dates for this explored route</strong>
+        <p>Only the first leave date was checked in Explore. Choose dates for every later flight. An onward route may not operate or return fares on the dates you select here.</p>
+      </aside>
       <div class="mode-introduction"><strong>Keep this exact route order</strong><p>Enter each stop once. Every new destination automatically continues from the one above it; Aveon searches the airport combinations and dates without rearranging your stops.</p></div>
       <OrderedLegEditor v-for="(leg, index) in legs" :key="leg.id" :model-value="leg" :index="index" :removable="legs.length > 1" :max-airports="maxAirportsPerGroup" @update:model-value="updateLeg(index, $event)" @remove="removeLeg(index)" />
       <button type="button" class="secondary-action add-destination-action" :disabled="legs.length >= maxEditableLegs" @click="addLeg">
@@ -271,6 +287,7 @@ onMounted(async () => {
 
 <style scoped>
 .ordered-form { display: grid; gap: 16px; }
+.explore-handoff-note { padding: 13px 15px; border-left: 3px solid #d98b00; border-radius: 8px; background: #fff8e8; color: #714500; }.explore-handoff-note p { margin: 5px 0 0; line-height: 1.55; }
 .mode-introduction { padding: 14px 16px; border-radius: 10px; background: var(--brand-soft); color: var(--ink-strong); }
 .mode-introduction p { margin: 5px 0 0; color: var(--muted); }
 .secondary-action, .primary-action { justify-self: start; padding: 10px 14px; border-radius: 8px; cursor: pointer; }

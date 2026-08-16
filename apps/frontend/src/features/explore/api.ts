@@ -12,8 +12,11 @@ const readRoutes = async (response: Response): Promise<ExploreRoutesResponse> =>
   return response.json() as Promise<ExploreRoutesResponse>
 }
 
-export const getExploreRoutes = async (origin: string, signal?: AbortSignal) =>
-  readRoutes(await fetch(`${apiBaseUrl}/api/v1/explore/routes?origin=${encodeURIComponent(origin)}`, { credentials: 'include', signal }))
+export const getExploreRoutes = async (origin: string, departureDate?: string, signal?: AbortSignal) => {
+  const params = new URLSearchParams({ origin })
+  if (departureDate) params.set('departureDate', departureDate)
+  return readRoutes(await fetch(`${apiBaseUrl}/api/v1/explore/routes?${params}`, { credentials: 'include', signal }))
+}
 
 export const getHeroRoutes = async (signal?: AbortSignal) =>
   readRoutes(await fetch(`${apiBaseUrl}/api/v1/explore/hero`, { credentials: 'include', signal }))

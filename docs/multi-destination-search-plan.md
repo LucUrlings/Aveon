@@ -113,7 +113,7 @@ The result includes the score inputs so the frontend can explain why an itinerar
 The application exposes dedicated entry points:
 
 - `/search` contains `One way` and `Return`.
-- `/explore` maps the current direct destinations from one airport and can hand a selected route to Search or Build my route.
+- `/explore` maps exact-date direct destinations for the first leg, offers rolling onward route suggestions, and can hand a selected route plus its first leave date to Search or Build my route.
 - `/multi-destination` contains `Build my route` and `Optimize my trip`; Build my route is the default tab.
 
 The existing one-way and return experiences remain operational throughout development.
@@ -562,7 +562,7 @@ Acceptance gate:
 ### Post-milestone integration completed on 2026-08-02
 
 - Explore can prefill a one-leg normal search without automatically starting provider calls.
-- Explore can hand an observed airport chain to Build my route, which creates adjacent ordered legs with progressive default dates and waits for explicit submission.
+- Explore can hand an airport chain to Build my route with its exact first leave date. Later dates remain empty, an availability warning explains that onward suggestions may not operate or return fares, and the form waits for explicit submission.
 - Normal search automatically falls back to the exact fewest available stop count when the default direct-only result set is empty; filter-aware stop counts remain visible and manual stop changes remove the automatic exact-stop constraint.
 - Return-search outbound cards and summaries explicitly identify prices that exclude the inbound fare and place the outbound-selection action next to the price.
 - FlightAPI departure-schedule calls use the same provider gate, retry policy, diagnostics, and single-instance constraint as all fare and autocomplete calls.

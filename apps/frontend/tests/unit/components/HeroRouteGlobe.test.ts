@@ -38,6 +38,18 @@ describe('HeroRouteGlobe', () => {
     expect(wrapper.get('.hero-globe-link').attributes('href')).toBe('/explore')
   })
 
+  it('labels a fast first-page response as a quick preview', async () => {
+    getHeroRoutes.mockResolvedValue({
+      origin: { code: 'DXB', name: 'Dubai International', city: 'Dubai', country: 'United Arab Emirates', latitude: 25.25, longitude: 55.36 },
+      destinations: [{ code: 'AMS', name: 'Amsterdam', city: 'Amsterdam', country: 'Netherlands', latitude: 52.31, longitude: 4.76 }],
+      observedFrom: '2026-08-04', observedTo: '2026-08-14', fetchedAt: '2026-08-09T12:00:00Z', isComplete: false, isStale: false,
+    })
+    const wrapper = mount(HeroRouteGlobe, { global: { stubs: { RouterLink: routerLinkStub, RouteGlobe: routeGlobeStub } } })
+    await flushPromises()
+
+    expect(wrapper.get('.hero-globe-caption').text()).toContain('1+ routes in this quick preview')
+  })
+
   it('announces the preview while its lazy request is loading', () => {
     getHeroRoutes.mockReturnValue(new Promise(() => {}))
     const wrapper = mount(HeroRouteGlobe, { global: { stubs: { RouterLink: routerLinkStub, RouteGlobe: routeGlobeStub } } })

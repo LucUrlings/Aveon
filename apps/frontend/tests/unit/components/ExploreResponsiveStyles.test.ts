@@ -10,6 +10,10 @@ describe('Explore responsive layout contracts', () => {
   it('collapses the homepage and Explore result grids at their documented breakpoints', () => {
     expect(homePageStyles).toContain('@media (max-width: 900px)')
     expect(homePageStyles).toContain('.home-hero { grid-template-columns: 1fr;')
+    expect(homePageStyles).toContain('isolation: isolate; }.mode-card > * { position: relative; z-index: 1; }')
+    expect(homePageStyles).toContain('.mode-card::after { position: absolute; z-index: 0;')
+    expect(homePageStyles).toContain('right: -165px; bottom: -165px; width: 260px; height: 260px;')
+    expect(homePageStyles).toContain("content: ''; pointer-events: none;")
     expect(explorePageSource).toContain('@media (max-width: 820px)')
     expect(explorePageSource).toContain('.origin-panel, .explore-grid { grid-template-columns: 1fr;')
     expect(explorePageSource).toContain('.explore-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); align-items: start;')

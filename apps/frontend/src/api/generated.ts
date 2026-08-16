@@ -4,6 +4,54 @@
  */
 
 export interface paths {
+    "/api/v1/explore/catalog/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AirportCatalogRefreshResult"];
+                        "application/json": components["schemas"]["AirportCatalogRefreshResult"];
+                        "text/json": components["schemas"]["AirportCatalogRefreshResult"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/Airports": {
         parameters: {
             query?: never;
@@ -42,27 +90,6 @@ export interface paths {
         head?: never;
         patch?: never;
         trace?: never;
-    };
-    "/api/v1/explore/routes": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
-        get: {
-            parameters: { query?: { origin?: string; }; header?: never; path?: never; cookie?: never; };
-            requestBody?: never;
-            responses: {
-                200: { headers: { [name: string]: unknown; }; content: { "text/plain": components["schemas"]["ExploreRoutesResponse"]; "application/json": components["schemas"]["ExploreRoutesResponse"]; "text/json": components["schemas"]["ExploreRoutesResponse"]; }; };
-                400: { headers: { [name: string]: unknown; }; content: { "text/plain": components["schemas"]["ValidationProblemDetails"]; "application/json": components["schemas"]["ValidationProblemDetails"]; "text/json": components["schemas"]["ValidationProblemDetails"]; }; };
-            };
-        };
-        put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never;
-    };
-    "/api/v1/explore/hero": {
-        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
-        get: {
-            parameters: { query?: never; header?: never; path?: never; cookie?: never; };
-            requestBody?: never;
-            responses: { 200: { headers: { [name: string]: unknown; }; content: { "text/plain": components["schemas"]["ExploreRoutesResponse"]; "application/json": components["schemas"]["ExploreRoutesResponse"]; "text/json": components["schemas"]["ExploreRoutesResponse"]; }; }; };
-        };
-        put?: never; post?: never; delete?: never; options?: never; head?: never; patch?: never; trace?: never;
     };
     "/api/v1/Auth/register": {
         parameters: {
@@ -230,6 +257,138 @@ export interface paths {
                         "text/plain": components["schemas"]["CurrentUserResponse"];
                         "application/json": components["schemas"]["CurrentUserResponse"];
                         "text/json": components["schemas"]["CurrentUserResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/explore/routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    origin?: string;
+                    departureDate?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExploreRoutesResponse"];
+                        "application/json": components["schemas"]["ExploreRoutesResponse"];
+                        "text/json": components["schemas"]["ExploreRoutesResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ValidationProblemDetails"];
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                        "text/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Bad Gateway */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/explore/hero": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ExploreRoutesResponse"];
+                        "application/json": components["schemas"]["ExploreRoutesResponse"];
+                        "text/json": components["schemas"]["ExploreRoutesResponse"];
+                    };
+                };
+                /** @description Bad Gateway */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
                     };
                 };
             };
@@ -608,6 +767,19 @@ export interface components {
             /** Format: int32 */
             requiredNights?: number;
         };
+        AirportCatalogRefreshResult: {
+            status?: components["schemas"]["AirportCatalogRefreshStatus"];
+            /** Format: int32 */
+            airportCount?: number;
+            /** Format: int32 */
+            rejectedRowCount?: number;
+            checksum?: string | null;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        AirportCatalogRefreshStatus: 0 | 1 | 2 | 3;
         AirportGroupRequest: {
             id?: string | null;
             label?: string | null;
@@ -620,28 +792,6 @@ export interface components {
             code?: string | null;
             name?: string | null;
             displayLabel?: string | null;
-        };
-        ExploreAirport: {
-            code?: string | null;
-            name?: string | null;
-            city?: string | null;
-            country?: string | null;
-            /** Format: double */
-            latitude?: number;
-            /** Format: double */
-            longitude?: number;
-        };
-        ExploreRoutesResponse: {
-            origin?: components["schemas"]["ExploreAirport"];
-            destinations?: components["schemas"]["ExploreAirport"][] | null;
-            /** Format: date */
-            observedFrom?: string;
-            /** Format: date */
-            observedTo?: string;
-            /** Format: date-time */
-            fetchedAt?: string;
-            isComplete?: boolean;
-            isStale?: boolean;
         };
         BookingOption: {
             label?: string | null;
@@ -661,6 +811,28 @@ export interface components {
             group?: components["schemas"]["AirportGroupRequest"] | null;
             stay?: components["schemas"]["StayRuleRequest"] | null;
             airportContinuity?: string | null;
+        };
+        ExploreAirport: {
+            code?: string | null;
+            name?: string | null;
+            city?: string | null;
+            country?: string | null;
+            /** Format: double */
+            latitude?: number;
+            /** Format: double */
+            longitude?: number;
+        };
+        ExploreRoutesResponse: {
+            origin?: components["schemas"]["ExploreAirport"] | null;
+            destinations?: components["schemas"]["ExploreAirport"][] | null;
+            /** Format: date */
+            observedFrom?: string;
+            /** Format: date */
+            observedTo?: string;
+            /** Format: date-time */
+            fetchedAt?: string;
+            isComplete?: boolean;
+            isStale?: boolean;
         };
         ItineraryFilterMetadata: {
             airlines?: components["schemas"]["ItineraryFilterOption"][] | null;
@@ -765,26 +937,6 @@ export interface components {
             abstractSchedules?: components["schemas"]["AbstractItinerarySchedule"][] | null;
             orderedLegs?: components["schemas"]["OrderedLegSearchStatus"][] | null;
         };
-        OrderedLegSearchStatus: {
-            legId?: string | null;
-            fromLabel?: string | null;
-            toLabel?: string | null;
-            fromAirportCodes?: string[] | null;
-            toAirportCodes?: string[] | null;
-            /** Format: date */
-            departureDate?: string;
-            status?: string | null;
-            /** Format: int32 */
-            airportPairsPlanned?: number;
-            /** Format: int32 */
-            airportPairsScheduled?: number;
-            /** Format: int32 */
-            airportPairsCompleted?: number;
-            /** Format: int32 */
-            faresFound?: number;
-            /** Format: int32 */
-            failedPairs?: number;
-        };
         ItinerarySegment: {
             marketingCarrierName?: string | null;
             marketingCarrierCode?: string | null;
@@ -825,8 +977,8 @@ export interface components {
             startDate?: string;
             /** Format: date */
             endDate?: string;
-            preserveDestinationOrder?: boolean;
             defaultAirportContinuity?: string | null;
+            preserveDestinationOrder?: boolean;
         } & (Omit<components["schemas"]["ItinerarySearchRequest"], "mode"> & {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -854,6 +1006,26 @@ export interface components {
             /** Format: date */
             departureDate?: string;
             airportContinuityWithPrevious?: string | null;
+        };
+        OrderedLegSearchStatus: {
+            legId?: string | null;
+            fromLabel?: string | null;
+            toLabel?: string | null;
+            fromAirportCodes?: string[] | null;
+            toAirportCodes?: string[] | null;
+            /** Format: date */
+            departureDate?: string;
+            status?: string | null;
+            /** Format: int32 */
+            airportPairsPlanned?: number;
+            /** Format: int32 */
+            airportPairsScheduled?: number;
+            /** Format: int32 */
+            airportPairsCompleted?: number;
+            /** Format: int32 */
+            faresFound?: number;
+            /** Format: int32 */
+            failedPairs?: number;
         };
         OrderedTripRequest: {
             legs?: components["schemas"]["OrderedLegRequest"][] | null;

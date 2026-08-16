@@ -22,7 +22,7 @@ The application feature flag is global. Audience staging must therefore be enfor
 ## Rollback
 
 1. Set `MULTI_DESTINATION_SEARCH_ENABLED=false` and redeploy or restart the single backend instance.
-2. Verify `/api/v1/itinerary-searches/configuration` returns `404`, the simple `/api/v1/searches` flow still passes its smoke check, and `/api/v1/explore/routes?origin=DUB` remains governed only by its own cache/provider availability rather than the multi-destination flag.
+2. Verify `/api/v1/itinerary-searches/configuration` returns `404`, the simple `/api/v1/searches` flow still passes its smoke check, and `/api/v1/explore/routes?origin=DUB&departureDate=2026-09-18` remains governed only by its own cache/provider availability rather than the multi-destination flag.
 3. Allow already-running worker calls to end within their configured timeout. Redis sessions expire automatically and no user record depends on them.
 4. Preserve aggregate metrics and sanitized logs for diagnosis; never export provider credentials or booking URLs.
 

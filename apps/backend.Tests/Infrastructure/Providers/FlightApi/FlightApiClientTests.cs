@@ -87,6 +87,20 @@ public sealed class FlightApiClientTests
     }
 
     [Fact]
+    public async Task SearchDepartureScheduleV2Async_CallsExactDateScheduleThroughTheSharedGate()
+    {
+        var handler = new RecordingHttpMessageHandler("""{"data":{"header":{"departureAirport":{"fs":"DUB"}},"flights":[{"airport":{"fs":"AMS","city":"Amsterdam"}}]}}""");
+        var gate = new RecordingGate();
+        var client = CreateClient(handler, new RecordingProviderResponseCache(), gate);
+
+        var response = await client.SearchDepartureScheduleV2Async(" dub ", new DateOnly(2026, 9, 18), 2, CancellationToken.None);
+
+        Assert.Equal("AMS", Assert.Single(response.Data!.Flights!).Airport?.Fs);
+        Assert.Equal("https://api.flightapi.io/schedule/v2/test-key?mode=dep&iata=DUB&year=2026&month=09&day=18&page=2", handler.LastRequestUri);
+        Assert.Equal((1, 1), (gate.Acquisitions, gate.Releases));
+    }
+
+    [Fact]
     public async Task SearchDepartureScheduleAsync_RetriesFlightApisGenericTransientBadRequest()
     {
         var handler = new TransientScheduleBadRequestHandler(2);
@@ -151,10 +165,11 @@ public sealed class FlightApiClientTests
             client.SearchOneWayAsync(CreateSearchRequest(), CancellationToken.None),
             client.SearchRoundTripAsync(new ProviderRoundTripSearchRequest("DUB", "AMS", new DateOnly(2026, 5, 15), new DateOnly(2026, 5, 20), 1, "economy"), CancellationToken.None),
             client.SearchAirportsAsync("Dublin", CancellationToken.None),
-            client.SearchDepartureScheduleAsync("DUB", 1, CancellationToken.None)
+            client.SearchDepartureScheduleAsync("DUB", 1, CancellationToken.None),
+            client.SearchDepartureScheduleV2Async("DUB", new DateOnly(2026, 5, 15), 1, CancellationToken.None)
         }));
 
-        Assert.Equal(11, handler.CallCount);
+        Assert.Equal(12, handler.CallCount);
         Assert.InRange(handler.MaximumConcurrentCalls, 1, 5);
     }
 
@@ -170,6 +185,7 @@ public sealed class FlightApiClientTests
         var cancellationClient = CreateClient(new CancelingHttpMessageHandler(), new RecordingProviderResponseCache(), cancellationGate);
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(30));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancellationClient.SearchOneWayAsync(CreateSearchRequest(), cancellation.Token));
+        await cancellationGate.WaitForReleaseAsync(TimeSpan.FromSeconds(1));
         Assert.Equal((1, 1), (cancellationGate.Acquisitions, cancellationGate.Releases));
     }
 
@@ -233,6 +249,91 @@ public sealed class FlightApiClientTests
 
         Assert.Equal(1, handler.CallCount);
         Assert.Equal((1, 1), (gate.Acquisitions, gate.Releases));
+    }
+
+    [Fact]
+    public async Task CoalescedWork_LeaderCancellationDoesNotCancelAnActiveFollower()
+    {
+        var coalescer = new ProviderRequestCoalescer();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var expected = new FlightApiOneWayResponse();
+        var factoryCalls = 0;
+        using var leaderCancellation = new CancellationTokenSource();
+
+        var leader = coalescer.RunAsync<FlightApiOneWayResponse>(
+            "shared-provider-request",
+            async sharedCancellationToken =>
+            {
+                Interlocked.Increment(ref factoryCalls);
+                started.TrySetResult();
+                await release.Task.WaitAsync(sharedCancellationToken);
+                return expected;
+            },
+            leaderCancellation.Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var follower = coalescer.RunAsync<FlightApiOneWayResponse>(
+            "shared-provider-request",
+            _ => throw new InvalidOperationException("The follower must join the existing request."),
+            CancellationToken.None);
+
+        leaderCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await leader);
+        release.TrySetResult();
+
+        Assert.Same(expected, await follower);
+        Assert.Equal(1, factoryCalls);
+    }
+
+    [Fact]
+    public async Task CoalescedWork_CancelsSharedOperationAfterLastWaiterLeaves()
+    {
+        var coalescer = new ProviderRequestCoalescer();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sharedCancellationObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var factoryCalls = 0;
+        using var leaderCancellation = new CancellationTokenSource();
+        using var followerCancellation = new CancellationTokenSource();
+
+        var leader = coalescer.RunAsync<FlightApiOneWayResponse>(
+            "abandoned-provider-request",
+            async sharedCancellationToken =>
+            {
+                Interlocked.Increment(ref factoryCalls);
+                started.TrySetResult();
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, sharedCancellationToken);
+                    throw new InvalidOperationException("The shared request unexpectedly completed.");
+                }
+                catch (OperationCanceledException) when (sharedCancellationToken.IsCancellationRequested)
+                {
+                    sharedCancellationObserved.TrySetResult();
+                    throw;
+                }
+            },
+            leaderCancellation.Token);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        var follower = coalescer.RunAsync<FlightApiOneWayResponse>(
+            "abandoned-provider-request",
+            _ => throw new InvalidOperationException("The follower must join the existing request."),
+            followerCancellation.Token);
+
+        leaderCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await leader);
+        Assert.False(sharedCancellationObserved.Task.IsCompleted);
+        followerCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await follower);
+
+        await sharedCancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.Equal(1, factoryCalls);
+
+        var replacementResult = new FlightApiOneWayResponse();
+        var replacement = await coalescer.RunAsync(
+            "abandoned-provider-request",
+            _ => Task.FromResult(replacementResult),
+            CancellationToken.None);
+        Assert.Same(replacementResult, replacement);
     }
 
     [Fact]
@@ -379,14 +480,30 @@ public sealed class FlightApiClientTests
 
     private sealed class RecordingGate : IFlightApiRequestGate
     {
-        public int Acquisitions { get; private set; }
-        public int Releases { get; private set; }
-        public int CacheHits { get; private set; }
-        public int ThrottledResponses { get; private set; }
-        public ValueTask<IDisposable> AcquireAsync(CancellationToken cancellationToken) { cancellationToken.ThrowIfCancellationRequested(); Acquisitions++; return ValueTask.FromResult<IDisposable>(new Release(() => Releases++)); }
-        public void RecordCacheHit() => CacheHits++;
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _acquisitions;
+        private int _releases;
+        private int _cacheHits;
+        private int _throttledResponses;
+
+        public int Acquisitions => Volatile.Read(ref _acquisitions);
+        public int Releases => Volatile.Read(ref _releases);
+        public int CacheHits => Volatile.Read(ref _cacheHits);
+        public int ThrottledResponses => Volatile.Read(ref _throttledResponses);
+        public ValueTask<IDisposable> AcquireAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Interlocked.Increment(ref _acquisitions);
+            return ValueTask.FromResult<IDisposable>(new Release(() =>
+            {
+                Interlocked.Increment(ref _releases);
+                _released.TrySetResult();
+            }));
+        }
+        public void RecordCacheHit() => Interlocked.Increment(ref _cacheHits);
         public void RecordLiveCall() { }
-        public void RecordThrottledResponse() => ThrottledResponses++;
+        public void RecordThrottledResponse() => Interlocked.Increment(ref _throttledResponses);
+        public Task WaitForReleaseAsync(TimeSpan timeout) => _released.Task.WaitAsync(timeout);
         private sealed class Release(Action action) : IDisposable { private Action? _action = action; public void Dispose() => Interlocked.Exchange(ref _action, null)?.Invoke(); }
     }
 

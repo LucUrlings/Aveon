@@ -23,6 +23,10 @@ public enum ExploreCacheProfile
     Hero
 }
 
-public sealed record ExploreRouteCacheEntry(
-    ExploreRoutesResponse Response,
-    DateTimeOffset FetchedAt);
+public sealed record ExploreScheduleCacheEntry(
+    string OriginCode,
+    List<string> DestinationCodes,
+    DateOnly ObservedFrom,
+    DateOnly ObservedTo,
+    DateTimeOffset FetchedAt,
+    bool IsComplete);

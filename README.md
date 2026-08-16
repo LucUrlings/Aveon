@@ -6,7 +6,7 @@ Most flight tools ask travellers to commit to one route and one pair of dates be
 
 Production: [aveon.lucurlings.nl](https://aveon.lucurlings.nl)
 
-The root URL is the product overview. Use `/search` for flexible one-way and return search, `/explore` to map the current direct destinations from one airport, or `/multi-destination` for ordered and optimized journeys. Existing shared root URLs containing search criteria are redirected to `/search` with their state intact.
+The root URL is the product overview. Use `/search` for flexible one-way and return search, `/explore` to map direct destinations for an exact first leave date and discover onward route suggestions, or `/multi-destination` for ordered and optimized journeys. Existing shared root URLs containing search criteria are redirected to `/search` with their state intact.
 
 Product roadmap: [Multi-Destination Travel Search Product Plan](docs/multi-destination-search-plan.md)
 
@@ -14,7 +14,7 @@ Explore roadmap and implementation contract: [Explore Routes and Homepage Globe 
 
 ## Implementation Status
 
-The multi-destination foundation, ordered-route search, feasibility engine, bounded optimizer, optimizer frontend, and release hardening are implemented. These correspond to Milestones 0–4 and 6 in the product plan. The direct-route Explore experience, onward discovery flow, and random-hub homepage globe are also implemented; their contract and remaining operational smoke-test item are tracked separately in the Explore plan.
+The multi-destination foundation, ordered-route search, feasibility engine, bounded optimizer, optimizer frontend, and release hardening are implemented. These correspond to Milestones 0–4 and 6 in the product plan. The direct-route Explore experience, onward discovery flow, random-hub homepage globe, and durable monthly airport catalogue are also implemented; their contract and remaining live-FlightAPI operational smoke-test item are tracked separately in the Explore plan.
 
 The former Milestone 5 investigated FlightAPI Multi Trip bundled fares. The configured FlightAPI subscription does not provide that API, so the experimental implementation was removed and the work is explicitly deferred. Current multi-destination results are assembled from independently bookable one-way fares.
 
@@ -51,7 +51,7 @@ Aveon currently integrates with FlightAPI. It does not process payments, issue t
 ## Technology
 
 - Frontend: Vue 3, Vue Router, Vite, TypeScript, Vitest, Globe.gl, TopoJSON, and World Atlas
-- Backend: ASP.NET Core 10, Entity Framework Core, and ASP.NET Core Identity
+- Backend: ASP.NET Core 10, Entity Framework Core, ASP.NET Core Identity, and CsvHelper
 - Database: PostgreSQL
 - Cache and search sessions: Redis
 - Flight data: FlightAPI
@@ -69,6 +69,7 @@ apps/
       ItinerarySearch/
       Search/
     Infrastructure/
+      Airports/
       Auth/
       Caching/
       Persistence/
@@ -116,13 +117,16 @@ See the in-product [How search works](https://aveon.lucurlings.nl/how-it-works) 
 
 ### Explore routes
 
-- The Explore page reads every permitted page of FlightAPI's rolling departure schedule for one airport and deduplicates codeshares into unique direct destinations.
+- The Explore page asks for an exact first leave date, bounded from today through 365 days ahead, and filters direct destinations with FlightAPI Schedule v2. Schedule v1 supplies rolling route codes for the homepage and undated onward suggestions.
+- Airport names, cities, countries, and globe coordinates come from an `airportsdata` catalogue in PostgreSQL. The backend validates and atomically refreshes it about once a month; a failed refresh leaves the previous catalogue active.
+- The homepage prefers an already cached random-hub network and warms other selected hubs sequentially in the background. On a completely cold deployment it displays page one as a quick preview instead of blocking on the complete multi-page schedule.
+- Redis stores only observed origin/destination codes and schedule metadata. Each response batch-enriches those codes from PostgreSQL, so corrected catalogue data appears without clearing schedule caches.
 - Route networks are cached for seven days; homepage hub previews are cached for thirty days, with retained stale data used when FlightAPI is temporarily unavailable.
 - Country outlines come from a locally bundled low-resolution world topology, so the globe remains a recognizable map without third-party tile or texture requests.
 - Schedule calls share the same process-wide FlightAPI gate as airport autocomplete and every fare-search mode.
-- Selecting a destination previews and highlights that direct leg without navigating. The traveler can explicitly search its fares, or commit the stop and keep exploring; multi-leg paths hand off to ordered Build my route without starting a provider request.
+- Selecting a destination previews and highlights that direct leg without navigating. The traveler can explicitly open Search with the first date prefilled, or commit the stop and keep exploring; multi-leg paths hand off to ordered Build my route with only that first date filled and without starting a provider request. A warning explains that onward dates may not operate or return fares.
 - Hovering or focusing a destination immediately restarts its highlighted arc, keeps a faint complete route underneath, pauses rotation, and pans toward the airport. Loading, result replacement, selection cards, route breadcrumbs, and filtered destinations transition without blank-map flicker; reduced-motion preferences disable nonessential animation.
-- The route map describes recently observed scheduled service, not guaranteed fares or every seasonal route.
+- Explore never fetches prices. The exact-date first leg and rolling onward suggestions describe scheduled service, not guaranteed fare availability.
 
 ## Important Code Areas
 
@@ -134,6 +138,7 @@ See the in-product [How search works](https://aveon.lucurlings.nl/how-it-works) 
 - Bounded priced optimizer: [`OptimizedItinerarySearchRunner.cs`](apps/backend/Features/ItinerarySearch/OptimizedItinerarySearchRunner.cs)
 - Search API: [`SearchController.cs`](apps/backend/Features/Search/SearchController.cs)
 - Explore API and route aggregation: [`ExploreRouteService.cs`](apps/backend/Features/Explore/ExploreRouteService.cs)
+- Airport catalogue import and validation: [`Infrastructure/Airports`](apps/backend/Infrastructure/Airports)
 - Global provider concurrency: [`FlightApiRequestGate.cs`](apps/backend/Infrastructure/Providers/FlightApi/FlightApiRequestGate.cs)
 - Identical live-request coalescing: [`ProviderRequestCoalescer.cs`](apps/backend/Infrastructure/Providers/FlightApi/ProviderRequestCoalescer.cs)
 - Guest and account limits: [`SearchLimitResolver.cs`](apps/backend/Features/Search/SearchLimitResolver.cs)
@@ -165,7 +170,7 @@ See the in-product [How search works](https://aveon.lucurlings.nl/how-it-works) 
 
 ## FlightAPI deployment constraint
 
-All FlightAPI operations—including airport autocomplete, departure-schedule pages, one-way, round-trip, and multi-destination edge searches—must issue live HTTP requests through the singleton `FlightApiRequestGate`. The configured allowance defaults to five concurrent requests across the whole backend process and can be raised when the FlightAPI subscription permits it. Cache hits bypass the gate, identical concurrent cache misses share one in-flight request, and retries reacquire one permit per live attempt while remaining bounded by the caller cancellation/timeout.
+All FlightAPI operations—including airport autocomplete, departure-schedule pages, one-way, round-trip, and multi-destination edge searches—must issue live HTTP requests through the singleton `FlightApiRequestGate`. The configured allowance defaults to five concurrent requests across the whole backend process and can be raised when the FlightAPI subscription permits it. Cache hits bypass the gate, identical concurrent cache misses share one in-flight request, and retries reacquire one permit per live attempt. Each waiter may cancel independently: shared work continues while another waiter still needs it and is canceled once no waiters remain.
 
 Aveon currently supports one backend application instance. Horizontal scaling is not safe until the process-local gate is replaced by a Redis-backed distributed lease or the provider allowance is divided explicitly between instances.
 
@@ -265,6 +270,11 @@ Important settings:
 | `REDIS_EXPLORE_ROUTES_RETENTION_MINUTES` | Explore stale-cache retention | `43200` |
 | `REDIS_HERO_ROUTES_RETENTION_MINUTES` | Homepage stale-cache retention | `129600` |
 | `REDIS_SEARCH_SESSION_TTL_MINUTES` | Search-session lifetime | `30` |
+| `AIRPORT_CATALOG_REFRESH_ENABLED` | Enable the startup and periodic airport-catalogue refresh worker | `true` |
+| `AIRPORT_CATALOG_SOURCE_URL` | Stable upstream catalogue URL used for provenance and pre-revision failure metadata | `airportsdata` raw CSV |
+| `AIRPORT_CATALOG_REVISION_API_URL` | GitHub commits query for the latest commit affecting `airports.csv` | `airportsdata` commits API |
+| `AIRPORT_CATALOG_REVISION_DOWNLOAD_URL_TEMPLATE` | HTTPS raw-file template pinned with the discovered `{revision}` SHA | `airportsdata` commit-pinned CSV |
+| `AIRPORT_CATALOG_REFRESH_AGE_DAYS` | Age after which the catalogue is checked again | `30` |
 | `SEARCH_ANONYMOUS_MAX_SEARCH_COMBINATIONS` | Guest search limit | `15` |
 | `SEARCH_USER_MAX_SEARCH_COMBINATIONS` | Registered-user search limit | `100` |
 | `SEARCH_EXECUTION_TIMEOUT_MINUTES` | Simple-search worker timeout | `10` |
@@ -284,11 +294,21 @@ AVEON_PUBLIC_URL=https://aveon.lucurlings.nl
 
 Development cache lifetimes in `appsettings.Development.json` are intentionally longer than the production defaults.
 
+### Airport catalogue operations
+
+The backend checks the PostgreSQL catalogue at startup and every 24 hours. Once the last successful confirmation is at least 30 days old—or the stored revision is missing/legacy, or the live row count/required hubs no longer match that confirmation—it asks GitHub for the latest commit that changed `airportsdata/airports.csv`. That commit SHA is the stored source revision. If it matches the stored SHA and the live catalogue is intact, the backend records the confirmation without downloading the CSV. A changed SHA, missing catalogue, or damaged live catalogue triggers a download from the raw URL pinned to that exact SHA; a changed SHA whose bytes have the same checksum updates only the metadata.
+
+Imports are protected by a PostgreSQL advisory lock, which also makes it safe to delete staging batches abandoned by a terminated importer. A downloaded file is parsed fully before live data changes, checked for malformed quoting, database text-length boundaries, duplicate IATA codes, invalid coordinates, missing homepage hubs, implausible size, and an exact greater-than-ten-percent row drop (including non-round catalogue sizes), then promoted from staging in one transaction. Revision lookup, download, parsing, validation, or database failures are recorded and retain the previous live catalogue. There is deliberately no fallback to an unpinned branch download when GitHub cannot supply a valid revision; caller cancellation also retains the catalogue but is not misreported as a source failure.
+
+Administrators can force the guarded recovery path with `POST /api/v1/explore/catalog/refresh`. A forced refresh always downloads the commit-pinned CSV and performs validation, staging, and transactional replacement, even when its SHA and checksum are unchanged; it never bypasses import safety checks. The endpoint requires an authenticated account with the `Admin` role. Import status is stored in `airport_catalog_metadata`; `airports` is the live catalogue and `airport_catalog_staging` should be empty outside an active refresh. A missing initial catalogue makes Explore return a temporary `503` until a valid import completes. Do not manually truncate the live table to recover from a failed refresh.
+
+The source dataset and required notice are documented in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
 See [multi-destination rollout and rollback](docs/multi-destination-rollout.md) before changing the feature state. The feature is enabled by default and can be disabled without affecting simple search.
 
 ## Observability and Analytics
 
-Backend instruments use the `Aveon.FlightApi` and `Aveon.ItinerarySearch` meters. They report provider concurrency, queued work, cache hits, throttling, active searches, completion status, coverage, duration, result counts, and live provider-call counts.
+Backend instruments use the `Aveon.FlightApi` and `Aveon.ItinerarySearch` meters. They report provider concurrency, queued work, cache hits, throttling, active searches, completion status, coverage, duration, result counts, and live provider-call counts. Structured airport-catalogue logs report due/locked/unchanged states, import duration, checksums, imported and rejected row counts, failures, and missing enrichment codes without logging dataset bodies.
 
 Lifecycle logs use structured fields and deliberately omit API keys, booking URLs, and booking tokens. Frontend analytics cover form abandonment, validation failure, completed searches, bounded coverage, result selection, and booking clicks. Analytics properties are allow-listed and do not include search IDs, selected airports, or booking URLs.
 
@@ -357,11 +377,11 @@ ghcr.io/lucurlings/aveon:latest
 - Prices and availability can change between discovery and booking.
 - Synthetic returns are separate bookings and can have different provider terms.
 - Multi-destination itineraries currently use separately bookable one-way fares; FlightAPI bundled Multi Trip fares are deferred.
-- Explore uses the provider's rolling Schedule API v1 window and therefore does not represent every seasonal route or prove fare availability.
+- Explore uses Schedule v2 for its exact-date first leg, Schedule v1 for homepage and rolling onward route codes, and the monthly PostgreSQL catalogue for airport metadata. It never proves fare availability.
 - Bounded optimized coverage does not guarantee the globally cheapest possible route.
 - Search history and saved itineraries are not currently persisted for users.
 - The frontend is a client-rendered Vue application. Static metadata and structured files provide the initial SEO surface, while route metadata is updated in the browser.
 
 ## License
 
-See [`LICENSE`](LICENSE).
+See [`LICENSE`](LICENSE). Third-party data notices are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

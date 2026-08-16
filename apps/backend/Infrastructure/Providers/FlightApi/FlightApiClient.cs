@@ -62,10 +62,10 @@ public sealed class FlightApiClient(
 
         try
         {
-            var result = await requestCoalescer.RunAsync(cacheKey, async () =>
+            var result = await requestCoalescer.RunAsync(cacheKey, async sharedCancellationToken =>
             {
-                var live = await GetLiveResponseAsync<FlightApiOneWayResponse>(path, cancellationToken);
-                await providerResponseCache.SetAsync(cacheKey, live, cancellationToken);
+                var live = await GetLiveResponseAsync<FlightApiOneWayResponse>(path, sharedCancellationToken);
+                await providerResponseCache.SetAsync(cacheKey, live, sharedCancellationToken);
                 return live;
             }, cancellationToken);
             stopwatch.Stop();
@@ -128,10 +128,10 @@ public sealed class FlightApiClient(
 
         try
         {
-            var result = await requestCoalescer.RunAsync(cacheKey, async () =>
+            var result = await requestCoalescer.RunAsync(cacheKey, async sharedCancellationToken =>
             {
-                var live = await GetLiveResponseAsync<FlightApiOneWayResponse>(path, cancellationToken);
-                await providerResponseCache.SetAsync(cacheKey, live, cancellationToken);
+                var live = await GetLiveResponseAsync<FlightApiOneWayResponse>(path, sharedCancellationToken);
+                await providerResponseCache.SetAsync(cacheKey, live, sharedCancellationToken);
                 return live;
             }, cancellationToken);
             stopwatch.Stop();
@@ -191,10 +191,10 @@ public sealed class FlightApiClient(
 
         try
         {
-            var result = await requestCoalescer.RunAsync(cacheKey, async () =>
+            var result = await requestCoalescer.RunAsync(cacheKey, async sharedCancellationToken =>
             {
-                var live = await GetLiveResponseAsync<FlightApiCodeLookupResponse>(path, cancellationToken);
-                await providerResponseCache.SetAsync(cacheKey, live, cancellationToken);
+                var live = await GetLiveResponseAsync<FlightApiCodeLookupResponse>(path, sharedCancellationToken);
+                await providerResponseCache.SetAsync(cacheKey, live, sharedCancellationToken);
                 return live;
             }, cancellationToken);
             stopwatch.Stop();
@@ -235,6 +235,31 @@ public sealed class FlightApiClient(
             origin,
             normalizedPage);
         return await GetLiveResponseAsync<FlightApiScheduleResponse>(
+            path,
+            cancellationToken,
+            retryTransientScheduleBadRequest: true);
+    }
+
+    public async Task<FlightApiScheduleV2Response> SearchDepartureScheduleV2Async(
+        string originAirport,
+        DateOnly departureDate,
+        int page,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            throw new InvalidOperationException("FlightApi:ApiKey is not configured.");
+        }
+
+        var origin = originAirport.Trim().ToUpperInvariant();
+        var normalizedPage = Math.Clamp(page, 1, 4);
+        var path = $"schedule/v2/{_options.ApiKey}?mode=dep&iata={Uri.EscapeDataString(origin)}&year={departureDate:yyyy}&month={departureDate:MM}&day={departureDate:dd}&page={normalizedPage}";
+        logger.LogInformation(
+            "Calling live FlightAPI v2 departure schedule for {OriginAirport} on {DepartureDate}, page {Page} (cache miss or refresh)",
+            origin,
+            departureDate,
+            normalizedPage);
+        return await GetLiveResponseAsync<FlightApiScheduleV2Response>(
             path,
             cancellationToken,
             retryTransientScheduleBadRequest: true);

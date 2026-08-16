@@ -5,6 +5,7 @@ using backend.Features.ItinerarySearch.Models;
 using backend.Features.Search;
 using backend.Features.Search.Models;
 using backend.Infrastructure.Auth;
+using backend.Infrastructure.Airports;
 using backend.Infrastructure.Caching;
 using backend.Infrastructure.Models;
 using backend.Infrastructure.Persistence;
@@ -42,6 +43,18 @@ builder.Services.AddOptions<FlightApiOptions>()
     .ValidateOnStart();
 builder.Services.Configure<RedisOptions>(
     builder.Configuration.GetSection(RedisOptions.SectionName));
+builder.Services.AddOptions<AirportCatalogOptions>()
+    .Bind(builder.Configuration.GetSection(AirportCatalogOptions.SectionName))
+    .Validate(options => Uri.TryCreate(options.SourceUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps, "AirportCatalog:SourceUrl must be an absolute HTTPS URL.")
+    .Validate(options => Uri.TryCreate(options.RevisionApiUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps, "AirportCatalog:RevisionApiUrl must be an absolute HTTPS URL.")
+    .Validate(options => options.RevisionDownloadUrlTemplate.Contains("{revision}", StringComparison.Ordinal)
+        && Uri.TryCreate(options.RevisionDownloadUrlTemplate.Replace("{revision}", new string('a', 40), StringComparison.Ordinal), UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps,
+        "AirportCatalog:RevisionDownloadUrlTemplate must be an absolute HTTPS URL containing {revision}.")
+    .Validate(options => options.RefreshAgeDays > 0 && options.CheckIntervalHours > 0 && options.DownloadTimeoutSeconds > 0, "Airport catalogue refresh timing must be positive.")
+    .Validate(options => options.MaximumDownloadBytes > 0 && options.MinimumAirportCount > 0 && options.MaximumRowDropPercent is >= 0 and < 100, "Airport catalogue import safety limits are invalid.")
+    .Validate(options => options.RequiredIataCodes.Length > 0 && options.RequiredIataCodes.All(code => code is { Length: 3 }), "Airport catalogue required hubs must be three-letter IATA codes.")
+    .ValidateOnStart();
 builder.Services.AddOptions<SearchOptions>()
     .Bind(builder.Configuration.GetSection(SearchOptions.SectionName))
     .Validate(options => options.ExecutionTimeoutMinutes > 0, "Search:ExecutionTimeoutMinutes must be positive.")
@@ -83,6 +96,14 @@ builder.Services.ConfigureApplicationCookie(options =>
     };
 });
 builder.Services.AddScoped<IAirportService, AirportService>();
+builder.Services.AddScoped<IAirportCatalogRepository, AirportCatalogRepository>();
+builder.Services.AddSingleton<AirportCatalogCsvParser>();
+builder.Services.AddSingleton<AirportCatalogValidator>();
+builder.Services.AddSingleton<IAirportCatalogRefreshLock, PostgresAirportCatalogRefreshLock>();
+builder.Services.AddHttpClient<IAirportCatalogRefreshService, AirportCatalogRefreshService>();
+builder.Services.AddHostedService<AirportCatalogRefreshWorker>();
+builder.Services.AddSingleton<IHeroRouteWarmupQueue, HeroRouteWarmupQueue>();
+builder.Services.AddHostedService<HeroRouteWarmupWorker>();
 builder.Services.AddScoped<IExploreRouteService, ExploreRouteService>();
 builder.Services.AddScoped<ISearchLimitResolver, SearchLimitResolver>();
 builder.Services.AddSingleton<IFlightApiRequestGate, FlightApiRequestGate>();
