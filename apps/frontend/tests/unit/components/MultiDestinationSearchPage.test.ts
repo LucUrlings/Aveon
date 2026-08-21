@@ -1,41 +1,29 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import MultiDestinationSearchPage from '../../../src/pages/MultiDestinationSearchPage.vue'
 import AirportGroupPicker from '../../../src/components/flight-search/AirportGroupPicker.vue'
+import BuildRoutePage from '../../../src/pages/BuildRoutePage.vue'
+import OptimizeTripPage from '../../../src/pages/OptimizeTripPage.vue'
 
 const { routeQuery } = vi.hoisted(() => ({ routeQuery: {} as Record<string, string> }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: routeQuery }) }))
 
-describe('MultiDestinationSearchPage', () => {
-  it('uses the shared airport-group picker in both advanced modes', async () => {
-    const wrapper = mount(MultiDestinationSearchPage)
+describe('multi-destination pages', () => {
+  it('gives the ordered builder and optimizer separate pages without mode tabs', () => {
+    const builder = mount(BuildRoutePage)
+    const optimizer = mount(OptimizeTripPage)
 
-    expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(2)
-    expect(wrapper.get('[aria-label="Build my route form"]').exists()).toBe(true)
-
-    const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs.map(tab => tab.text())).toEqual(['Build my route', 'Optimize my trip'])
-    await tabs[1].trigger('click')
-
-    expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(2)
-    expect(wrapper.get('[aria-label="Optimize my trip form"]').exists()).toBe(true)
-  })
-
-  it('exposes keyboard-operable tabs with associated tab panels', async () => {
-    const wrapper = mount(MultiDestinationSearchPage)
-    const ordered = wrapper.get('#multi-destination-tab-ordered')
-
-    expect(ordered.attributes('aria-controls')).toBe('multi-destination-panel-ordered')
-    expect(wrapper.get('[role="tabpanel"]').attributes('aria-labelledby')).toBe('multi-destination-tab-ordered')
-    await ordered.trigger('keydown', { key: 'ArrowRight' })
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.get('#multi-destination-tab-optimize').attributes('aria-selected')).toBe('true')
-    expect(wrapper.get('[role="tabpanel"]').attributes('aria-labelledby')).toBe('multi-destination-tab-optimize')
+    expect(builder.get('h1').text()).toContain('exact multi-destination route')
+    expect(builder.get('[aria-label="Build my route form"]').exists()).toBe(true)
+    expect(optimizer.get('h1').text()).toContain('Compare complete multi-destination journeys')
+    expect(optimizer.get('[aria-label="Optimize my trip form"]').exists()).toBe(true)
+    expect(builder.find('[role="tablist"]').exists()).toBe(false)
+    expect(optimizer.find('[role="tablist"]').exists()).toBe(false)
+    expect(builder.findAllComponents(AirportGroupPicker)).toHaveLength(2)
+    expect(optimizer.findAllComponents(AirportGroupPicker)).toHaveLength(2)
   })
 
   it('adds only one new airport picker for each connected ordered destination', async () => {
-    const wrapper = mount(MultiDestinationSearchPage)
+    const wrapper = mount(BuildRoutePage)
     expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(2)
     await wrapper.get('button.secondary-action').trigger('click')
     expect(wrapper.findAllComponents(AirportGroupPicker)).toHaveLength(3)
@@ -46,7 +34,7 @@ describe('MultiDestinationSearchPage', () => {
   })
 
   it('caps the ordered route builder at eight legs', async () => {
-    const wrapper = mount(MultiDestinationSearchPage)
+    const wrapper = mount(BuildRoutePage)
     const add = wrapper.get('button.secondary-action')
 
     for (let index = 1; index < 8; index += 1) await add.trigger('click')
@@ -57,25 +45,25 @@ describe('MultiDestinationSearchPage', () => {
     expect(wrapper.findAll('fieldset.ordered-leg')).toHaveLength(8)
   })
 
-  it('opens ordered mode with an adjacent-leg route prefill', () => {
-    Object.assign(routeQuery, { mode: 'ordered', route: 'DUB,AMS,JFK', prefill: 'true' })
-    const wrapper = mount(MultiDestinationSearchPage)
+  it('opens the route builder with an adjacent-leg route prefill', () => {
+    Object.assign(routeQuery, { route: 'DUB,AMS,JFK', prefill: 'true' })
+    const wrapper = mount(BuildRoutePage)
 
     const editors = wrapper.findAll('fieldset.ordered-leg')
     expect(editors).toHaveLength(2)
     expect(wrapper.text()).toContain('DUB')
     expect(wrapper.text()).toContain('JFK')
-    delete routeQuery.mode; delete routeQuery.route; delete routeQuery.prefill
+    delete routeQuery.route; delete routeQuery.prefill
   })
 
   it('warns an Explore handoff that onward dates and fares still need validation', () => {
-    Object.assign(routeQuery, { mode: 'ordered', route: 'DUB,AMS,JFK', departureDate: '2026-09-18', source: 'explore', prefill: 'true' })
-    const wrapper = mount(MultiDestinationSearchPage)
+    Object.assign(routeQuery, { route: 'DUB,AMS,JFK', departureDate: '2026-09-18', source: 'explore', prefill: 'true' })
+    const wrapper = mount(BuildRoutePage)
 
     const editors = wrapper.findAll('fieldset.ordered-leg')
     expect(wrapper.get('.explore-handoff-note').text()).toContain('may not operate or return fares')
     expect(editors[0].get('input[type="date"]').element).toHaveProperty('value', '2026-09-18')
     expect(editors[1].get('input[type="date"]').element).toHaveProperty('value', '')
-    for (const key of ['mode', 'route', 'departureDate', 'source', 'prefill']) delete routeQuery[key]
+    for (const key of ['route', 'departureDate', 'source', 'prefill']) delete routeQuery[key]
   })
 })

@@ -55,6 +55,8 @@ describe('product shell', () => {
     expect(wrapper.get('.navbar-links a[href="/"]').text()).toBe('Home')
     expect(wrapper.get('.navbar-links a[href="/search"]').text()).toBe('Search')
     expect(wrapper.get('.navbar-links a[href="/explore"]').text()).toBe('Explore')
+    expect(wrapper.get('.navbar-links a[href="/build-route"]').text()).toBe('Build route')
+    expect(wrapper.get('.navbar-links a[href="/optimize-trip"]').text()).toBe('Optimize trip')
     expect(wrapper.get('.navbar-links').text()).toContain('Search')
     expect(wrapper.get('.navbar-links').text()).toContain('How it works')
     expect(wrapper.get('.navbar-links').text()).toContain('About')
@@ -76,7 +78,7 @@ describe('product shell', () => {
     expect(wrapper.get('.about-primary-action').attributes('href')).toBe('/search')
   })
 
-  it('presents the index as a product landing page with both search modes', () => {
+  it('presents the index as a product landing page with all search modes', () => {
     const wrapper = mount(HomePage, {
       global: { stubs: { RouterLink: routerLinkStub, HeroRouteGlobe: true } },
     })
@@ -84,10 +86,13 @@ describe('product shell', () => {
     expect(wrapper.get('h1').text()).toContain('Compare flights across flexible airports, dates, and destinations')
     expect(wrapper.get('.hero-actions a[href="/search"]').text()).toContain('Search flights')
     expect(wrapper.get('.hero-actions a[href="/explore"]').text()).toContain('Explore destinations')
-    expect(wrapper.get('.hero-actions a[href="/multi-destination"]').text()).toContain('Plan multiple destinations')
+    expect(wrapper.get('.hero-actions a[href="/build-route"]').text()).toContain('Build a route')
     expect(wrapper.get('.mode-grid').text()).toContain('One-way and return')
     expect(wrapper.get('.mode-grid').text()).toContain('Explore direct destinations')
-    expect(wrapper.get('.mode-grid').text()).toContain('Ordered or optimized')
+    expect(wrapper.get('.mode-grid').text()).toContain('Build my route')
+    expect(wrapper.get('.mode-grid').text()).toContain('Optimize my trip')
+    expect(wrapper.get('.mode-grid a[href="/build-route"]').exists()).toBe(true)
+    expect(wrapper.get('.mode-grid a[href="/optimize-trip"]').exists()).toBe(true)
     expect(wrapper.get('.home-explainer').text()).toContain('metasearch product, not a booking engine')
     expect(wrapper.findComponent({ name: 'HeroRouteGlobe' }).exists()).toBe(true)
   })

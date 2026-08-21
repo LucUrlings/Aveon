@@ -16,8 +16,8 @@ public sealed class SearchLimitResolverTests
 
         var limit = resolver.Resolve(new ClaimsPrincipal());
 
-        Assert.Equal(15, limit.MaxSearchCombinations);
-        Assert.Equal("Search exceeds the guest limit of 15 combinations. Sign up or log in to search up to 100 combinations.", limit.ExceededMessage);
+        Assert.Equal(75, limit.MaxSearchCombinations);
+        Assert.Equal("Search exceeds the guest limit of 75 combinations. Sign up or log in to search up to 200 combinations.", limit.ExceededMessage);
     }
 
     [Fact]
@@ -27,8 +27,8 @@ public sealed class SearchLimitResolverTests
 
         var limit = resolver.Resolve(CreatePrincipal(ApplicationRoles.User));
 
-        Assert.Equal(100, limit.MaxSearchCombinations);
-        Assert.Equal("Search exceeds the limit of 100 combinations.", limit.ExceededMessage);
+        Assert.Equal(200, limit.MaxSearchCombinations);
+        Assert.Equal("Search exceeds the limit of 200 combinations.", limit.ExceededMessage);
     }
 
     [Fact]
@@ -45,8 +45,8 @@ public sealed class SearchLimitResolverTests
     private static SearchLimitResolver CreateResolver() =>
         new(Options.Create(new SearchOptions
         {
-            AnonymousMaxSearchCombinations = 15,
-            UserMaxSearchCombinations = 100,
+            AnonymousMaxSearchCombinations = 75,
+            UserMaxSearchCombinations = 200,
         }));
 
     private static ClaimsPrincipal CreatePrincipal(params string[] roles)

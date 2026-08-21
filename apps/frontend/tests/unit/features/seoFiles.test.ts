@@ -30,7 +30,9 @@ describe('frontend SEO file generation', () => {
     expect(sitemap).toContain('<loc>https://preview.example/search</loc>')
     expect(sitemap).toContain('<loc>https://preview.example/explore</loc>')
     expect(sitemap).toContain('<loc>https://preview.example/about</loc>')
-    expect(sitemap).toContain('<loc>https://preview.example/multi-destination</loc>')
+    expect(sitemap).toContain('<loc>https://preview.example/build-route</loc>')
+    expect(sitemap).toContain('<loc>https://preview.example/optimize-trip</loc>')
+    expect(sitemap).not.toContain('<loc>https://preview.example/multi-destination</loc>')
   })
 
   it('updates existing files when the configured URL changes', () => {
@@ -42,6 +44,14 @@ describe('frontend SEO file generation', () => {
 
     expect(readFileSync(join(directory, 'robots.txt'), 'utf8')).not.toContain('first.example')
     expect(readFileSync(join(directory, 'sitemap.xml'), 'utf8')).toContain('https://second.example/about')
+  })
+
+  it('keeps runtime container sitemap routes aligned with build-time generation', () => {
+    const entrypoint = readFileSync(join(process.cwd(), 'docker-entrypoint.sh'), 'utf8')
+
+    expect(entrypoint).toContain('<loc>$public_url/build-route</loc>')
+    expect(entrypoint).toContain('<loc>$public_url/optimize-trip</loc>')
+    expect(entrypoint).not.toContain('<loc>$public_url/multi-destination</loc>')
   })
 
   it('removes stale generated files before a runtime-configured container build', () => {

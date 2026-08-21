@@ -63,7 +63,12 @@ cat > "$web_root/sitemap.xml" <<EOF
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>$public_url/multi-destination</loc>
+    <loc>$public_url/build-route</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>$public_url/optimize-trip</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>

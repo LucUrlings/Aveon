@@ -154,7 +154,7 @@ const commitSelection = () => {
 const truncatePath = (index: number) => void router.push({ path: '/explore', query: { path: pathCodes.value.slice(0, index + 1).join(','), date: leaveDate.value } })
 const continueInBuilder = () => {
   if (!canContinueInBuilder.value) return
-  void router.push({ path: '/multi-destination', query: { mode: 'ordered', route: builderPath.value.map(airport => airport.code).join(','), departureDate: leaveDate.value, source: 'explore', prefill: 'true' } })
+  void router.push({ path: '/build-route', query: { route: builderPath.value.map(airport => airport.code).join(','), departureDate: leaveDate.value, source: 'explore', prefill: 'true' } })
 }
 const clearSelection = () => {
   selectedDestination.value = null

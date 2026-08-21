@@ -6,7 +6,7 @@ Most flight tools ask travellers to commit to one route and one pair of dates be
 
 Production: [aveon.lucurlings.nl](https://aveon.lucurlings.nl)
 
-The root URL is the product overview. Use `/search` for flexible one-way and return search, `/explore` to map direct destinations for an exact first leave date and discover onward route suggestions, or `/multi-destination` for ordered and optimized journeys. Existing shared root URLs containing search criteria are redirected to `/search` with their state intact.
+The root URL is the product overview. Use `/search` for flexible one-way and return search, `/explore` to map direct destinations for an exact first leave date and discover onward route suggestions, `/build-route` for an exact ordered itinerary, or `/optimize-trip` for bounded journey optimization. Existing `/multi-destination` links are redirected to the matching standalone page, and shared root URLs containing search criteria are redirected to `/search` with their state intact.
 
 Product roadmap: [Multi-Destination Travel Search Product Plan](docs/multi-destination-search-plan.md)
 
@@ -275,8 +275,8 @@ Important settings:
 | `AIRPORT_CATALOG_REVISION_API_URL` | GitHub commits query for the latest commit affecting `airports.csv` | `airportsdata` commits API |
 | `AIRPORT_CATALOG_REVISION_DOWNLOAD_URL_TEMPLATE` | HTTPS raw-file template pinned with the discovered `{revision}` SHA | `airportsdata` commit-pinned CSV |
 | `AIRPORT_CATALOG_REFRESH_AGE_DAYS` | Age after which the catalogue is checked again | `30` |
-| `SEARCH_ANONYMOUS_MAX_SEARCH_COMBINATIONS` | Guest search limit | `15` |
-| `SEARCH_USER_MAX_SEARCH_COMBINATIONS` | Registered-user search limit | `100` |
+| `SEARCH_ANONYMOUS_MAX_SEARCH_COMBINATIONS` | Guest search limit | `75` |
+| `SEARCH_USER_MAX_SEARCH_COMBINATIONS` | Registered-user search limit | `200` |
 | `SEARCH_EXECUTION_TIMEOUT_MINUTES` | Simple-search worker timeout | `10` |
 | `MULTI_DESTINATION_SEARCH_ENABLED` | Independent multi-destination feature flag | `true` |
 | `MULTI_DESTINATION_ANONYMOUS_MAX_PROVIDER_CALLS` | Guest multi-destination live-call budget | `25` |

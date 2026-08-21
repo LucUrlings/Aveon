@@ -56,7 +56,12 @@ const sitemapContent = (origin: string) => `<?xml version="1.0" encoding="UTF-8"
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>${origin}/multi-destination</loc>
+    <loc>${origin}/build-route</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>${origin}/optimize-trip</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>

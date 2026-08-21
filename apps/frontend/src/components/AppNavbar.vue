@@ -58,7 +58,8 @@ const signOut = async () => {
         <RouterLink to="/" exact-active-class="active">Home</RouterLink>
         <RouterLink to="/search" active-class="active">Search</RouterLink>
         <RouterLink to="/explore" active-class="active">Explore</RouterLink>
-        <RouterLink to="/multi-destination" active-class="active">Multi-destination</RouterLink>
+        <RouterLink to="/build-route" active-class="active">Build route</RouterLink>
+        <RouterLink to="/optimize-trip" active-class="active">Optimize trip</RouterLink>
         <RouterLink to="/how-it-works" active-class="active">How it works</RouterLink>
         <RouterLink to="/about" active-class="active">About</RouterLink>
         <a href="https://github.com/LucUrlings/Aveon" target="_blank" rel="noreferrer">Source <span aria-hidden="true">↗</span></a>

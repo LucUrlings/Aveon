@@ -1,0 +1,7 @@
+.advanced-page { width: min(var(--content-max), 100%); box-sizing: border-box; margin: 0 auto; padding: 48px 24px 72px; }
+.advanced-page header { max-width: 760px; }
+.advanced-page h1 { margin: 0; color: var(--ink-strong); }
+.advanced-page header > p:not(.eyebrow):not(.scope-note) { color: var(--muted); }
+.scope-note { padding: 10px 12px; border-left: 3px solid var(--brand); background: var(--brand-soft); color: var(--ink-strong); }
+.advanced-card { display: block; margin-top: 28px; padding: 22px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-md); }
+@media (max-width: 680px) { .advanced-page { padding: 32px 16px 56px; } .advanced-card { padding: 16px; } }

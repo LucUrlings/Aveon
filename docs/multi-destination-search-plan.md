@@ -114,7 +114,9 @@ The application exposes dedicated entry points:
 
 - `/search` contains `One way` and `Return`.
 - `/explore` maps exact-date direct destinations for the first leg, offers rolling onward route suggestions, and can hand a selected route plus its first leave date to Search or Build my route.
-- `/multi-destination` contains `Build my route` and `Optimize my trip`; Build my route is the default tab.
+- `/build-route` contains `Build my route` for exact ordered flight legs.
+- `/optimize-trip` contains `Optimize my trip` for bounded complete-journey comparison.
+- Legacy `/multi-destination` links redirect to the matching standalone page while preserving relevant query state.
 
 The existing one-way and return experiences remain operational throughout development.
 

@@ -12,7 +12,7 @@ import HeroRouteGlobe from '../features/explore/HeroRouteGlobe.vue'
         <div class="hero-actions">
           <RouterLink class="primary-action" to="/search">Search flights</RouterLink>
           <RouterLink class="secondary-action" to="/explore">Explore destinations</RouterLink>
-          <RouterLink class="secondary-action" to="/multi-destination">Plan multiple destinations</RouterLink>
+          <RouterLink class="secondary-action" to="/build-route">Build a route</RouterLink>
         </div>
         <ul class="hero-proof" aria-label="Aveon product principles">
           <li><strong>Flexible</strong><span>Airports and dates</span></li>
@@ -27,8 +27,8 @@ import HeroRouteGlobe from '../features/explore/HeroRouteGlobe.vue'
     <section class="search-modes" aria-labelledby="search-modes-title">
       <div class="section-heading">
         <p class="home-eyebrow">Choose your starting point</p>
-        <h2 id="search-modes-title">Three ways to discover the right flight.</h2>
-        <p>Search a known route, explore where one airport can take you, or plan a complete multi-destination journey.</p>
+        <h2 id="search-modes-title">Four ways to discover the right flight.</h2>
+        <p>Search a known route, explore where one airport can take you, build an exact itinerary, or ask Aveon to compare complete trips.</p>
       </div>
       <div class="mode-grid">
         <article class="mode-card mode-card--simple">
@@ -47,13 +47,21 @@ import HeroRouteGlobe from '../features/explore/HeroRouteGlobe.vue'
           <ul><li>Current scheduled routes</li><li>Random destination inspiration</li><li>Explicit fare and onward-route actions</li></ul>
           <RouterLink to="/explore">Open route explorer <span aria-hidden="true">→</span></RouterLink>
         </article>
-        <article class="mode-card mode-card--multi">
+        <article class="mode-card mode-card--build">
           <div class="mode-icon" aria-hidden="true">⌁</div>
-          <p class="mode-kicker">Ordered or optimized</p>
-          <h3>Plan multiple destinations</h3>
-          <p>Build exact dated legs or describe destinations and stay rules so Aveon can compare complete journeys within clear limits.</p>
-          <ul><li>Multiple airports per stop</li><li>Stay and endpoint rules</li><li>Transparent bounded coverage</li></ul>
-          <RouterLink to="/multi-destination">Open trip planner <span aria-hidden="true">→</span></RouterLink>
+          <p class="mode-kicker">Exact itinerary</p>
+          <h3>Build my route</h3>
+          <p>Add every flight in the order you want to travel, with dates and flexible airport choices for each leg.</p>
+          <ul><li>Dated flight sequence</li><li>Multiple airports per leg</li><li>Optional return to the start</li></ul>
+          <RouterLink to="/build-route">Open route builder <span aria-hidden="true">→</span></RouterLink>
+        </article>
+        <article class="mode-card mode-card--optimize">
+          <div class="mode-icon" aria-hidden="true">◇</div>
+          <p class="mode-kicker">Bounded comparison</p>
+          <h3>Optimize my trip</h3>
+          <p>Describe your destinations and stay rules so Aveon can compare destination orders and complete journeys within clear limits.</p>
+          <ul><li>Flexible destination order</li><li>Stay and endpoint rules</li><li>Transparent bounded coverage</li></ul>
+          <RouterLink to="/optimize-trip">Open trip optimizer <span aria-hidden="true">→</span></RouterLink>
         </article>
       </div>
     </section>

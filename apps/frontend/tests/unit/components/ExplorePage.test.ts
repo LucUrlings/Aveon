@@ -226,7 +226,7 @@ describe('ExplorePage', () => {
     expect(wrapper.get('.route-tray').text()).toContain('Dublin→Amsterdam')
     await wrapper.get('.destination-browser li button').trigger('click')
     await wrapper.get('.primary-selection').trigger('click')
-    expect(push).toHaveBeenCalledWith({ path: '/multi-destination', query: { mode: 'ordered', route: 'DUB,AMS,JFK', departureDate: expect.any(String), source: 'explore', prefill: 'true' } })
+    expect(push).toHaveBeenCalledWith({ path: '/build-route', query: { route: 'DUB,AMS,JFK', departureDate: expect.any(String), source: 'explore', prefill: 'true' } })
 
     routeState.current.query.path = 'DUB'
     await flushPromises()
@@ -305,6 +305,6 @@ describe('ExplorePage', () => {
     const keepExploring = wrapper.findAll('.selection-actions button').find(button => button.text().includes('Keep exploring'))!
     expect(keepExploring.attributes('disabled')).toBeDefined()
     await wrapper.get('.primary-selection').trigger('click')
-    expect(push).toHaveBeenCalledWith({ path: '/multi-destination', query: { mode: 'ordered', route: 'DUB,AMS', departureDate: expect.any(String), source: 'explore', prefill: 'true' } })
+    expect(push).toHaveBeenCalledWith({ path: '/build-route', query: { route: 'DUB,AMS', departureDate: expect.any(String), source: 'explore', prefill: 'true' } })
   })
 })

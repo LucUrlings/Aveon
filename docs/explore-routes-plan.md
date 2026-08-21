@@ -231,16 +231,16 @@ References:
   - `Explore onward from {destination}` to append that airport to the committed path and load its direct network.
   - `Clear selection` to return to the complete network from the active origin.
 - After at least one leg has already been committed and another destination is selected, show the complete preview such as `DUB → AMS → JFK` and replace the simple-search primary action with:
-  - `Continue in Build my route`, which opens the ordered mode of Multi-destination with the entire preview path prefilled when it is within the ordered-leg limit.
+  - `Continue in Build my route`, which opens the standalone route builder with the entire preview path prefilled when it is within the ordered-leg limit.
   - `Keep exploring from {destination}`, which commits the selected candidate and loads its network.
   - `Clear selection` and `Remove last stop` recovery actions.
-- Do not redirect automatically when any destination is selected. Every Search or Multi-destination transition requires an explicit labeled button.
+- Do not redirect automatically when any destination is selected. Every Search or Build my route transition requires an explicit labeled button.
 - Display committed airports as a breadcrumb/journey tray. Selecting an earlier breadcrumb truncates the path to that airport and reloads its network; browser Back restores the previous committed path.
 - Persist committed Explore state as `/explore?path=DUB,AMS&date=2026-09-18`. The date belongs only to the first leg; the final code is the active origin and an uncommitted selected candidate does not enter the URL.
 - When hydrating a shared path, verify that every next airport appears in the preceding airport's returned direct destinations. Reject invalid, stale, or manually fabricated edges instead of presenting them as observed routes.
-- Hand ordered paths to `/multi-destination?mode=ordered&route=DUB,AMS,JFK&departureDate=2026-09-18&source=explore&prefill=true`.
-- Add Multi-destination route hydration that:
-  - Opens `Build my route`, which remains the default mode.
+- Hand ordered paths to `/build-route?route=DUB,AMS,JFK&departureDate=2026-09-18&source=explore&prefill=true`.
+- Add Build my route hydration that:
+  - Opens the standalone `Build my route` page.
   - Creates one ordered leg for each adjacent airport pair.
   - Prefills only the first leg with the Explore leave date and leaves later dates empty for the traveler.
   - Shows a prominent warning that onward suggestions were not checked for those later dates and may not operate or return fares.

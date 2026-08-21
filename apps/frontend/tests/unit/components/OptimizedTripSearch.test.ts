@@ -150,7 +150,7 @@ describe('OptimizedTripSearch', () => {
   })
 
   it('resumes a session and renders progressive coverage, shared filters, timelines, and warnings before booking', async () => {
-    window.history.replaceState({}, '', '/multi-destination?searchId=optimizer-1')
+    window.history.replaceState({}, '', '/optimize-trip?searchId=optimizer-1')
     getSearch.mockResolvedValue(session({ results: [result], warnings: [{ code: 'bounded', message: 'The best trips found within the search allowance are shown.' }], pagination: { page: 1, pageSize: 10, totalResults: 1, totalPages: 1 } }))
     const wrapper = mount(OptimizedTripSearch)
     await flushPromises()
@@ -169,7 +169,7 @@ describe('OptimizedTripSearch', () => {
 
   it('refreshes ranking leaders when progressive results improve without changing the stored result count', async () => {
     vi.useFakeTimers()
-    window.history.replaceState({}, '', '/multi-destination?searchId=optimizer-1')
+    window.history.replaceState({}, '', '/optimize-trip?searchId=optimizer-1')
     let mainSnapshotCalls = 0
     const pricedResult = (id: string, price: number) => ({
       ...result,
@@ -240,7 +240,7 @@ describe('OptimizedTripSearch', () => {
   })
 
   it('lets the user cancel a running search', async () => {
-    window.history.replaceState({}, '', '/multi-destination?searchId=optimizer-1')
+    window.history.replaceState({}, '', '/optimize-trip?searchId=optimizer-1')
     getSearch.mockResolvedValue(session({ status: 'running', phase: 'buildingItineraries', progress: 65 }))
     const wrapper = mount(OptimizedTripSearch)
     await flushPromises()
@@ -252,7 +252,7 @@ describe('OptimizedTripSearch', () => {
   })
 
   it('loads the next page without replacing already displayed itineraries', async () => {
-    window.history.replaceState({}, '', '/multi-destination?searchId=optimizer-1')
+    window.history.replaceState({}, '', '/optimize-trip?searchId=optimizer-1')
     const secondResult = { ...result, id: 'trip-2', totalPrice: 240 }
     getSearch.mockImplementation((_id, query) => Promise.resolve(query?.page === 2
       ? session({ results: [secondResult], pagination: { page: 2, pageSize: 1, totalResults: 2, totalPages: 2 } })
@@ -267,7 +267,7 @@ describe('OptimizedTripSearch', () => {
 
   it('offers an in-place retry after a polling failure', async () => {
     vi.useFakeTimers()
-    window.history.replaceState({}, '', '/multi-destination?searchId=optimizer-1')
+    window.history.replaceState({}, '', '/optimize-trip?searchId=optimizer-1')
     getSearch.mockResolvedValueOnce(session({ status: 'running', phase: 'searchingEdges', progress: 20 })).mockRejectedValueOnce(new Error('Temporary connection problem')).mockResolvedValue(session())
     const wrapper = mount(OptimizedTripSearch)
     await flushPromises()

@@ -9,11 +9,12 @@ Repository-wide setup, backend configuration, deployment, and product behavior a
 - `/` — product overview with a fast cached random-hub direct-route globe and a page-one preview while a completely cold cache warms in the background.
 - `/search` — flexible one-way and return search across airport groups and dates.
 - `/explore` — interactive direct-route discovery with onward-path building.
-- `/multi-destination` — ordered Build my route and bounded Optimize my trip flows.
+- `/build-route` — ordered Build my route flow with dated flight legs.
+- `/optimize-trip` — bounded Optimize my trip flow for comparing complete journeys.
 - `/how-it-works` — user-facing search and coverage explanation.
 - `/about` — product scope and metasearch limitations.
 
-Shared root URLs containing legacy search query parameters are redirected to `/search` while preserving their state.
+Shared root URLs containing legacy search query parameters are redirected to `/search` while preserving their state. Legacy `/multi-destination` URLs redirect to the matching standalone multi-route page.
 
 ## Main frontend areas
 

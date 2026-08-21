@@ -63,12 +63,31 @@ export const router = createRouter({
     },
     {
       path: '/multi-destination',
-      name: 'multi-destination-search',
-      component: () => import('./pages/MultiDestinationSearchPage.vue'),
+      redirect: (to) => {
+        const { mode, ...query } = to.query
+        const optimizedSearch = mode === 'optimize' || (mode === undefined && typeof to.query.searchId === 'string')
+        return { path: optimizedSearch ? '/optimize-trip' : '/build-route', query, replace: true }
+      },
+    },
+    {
+      path: '/build-route',
+      name: 'build-route',
+      component: () => import('./pages/BuildRoutePage.vue'),
       meta: {
         seo: {
-          title: 'Multi-destination travel search · Aveon',
-          description: 'Build an exact multi-destination route or optimize destination order and stays within transparent search limits.',
+          title: 'Build a multi-destination flight route · Aveon',
+          description: 'Build an exact sequence of dated flights with flexible airport choices for every leg of your multi-destination route.',
+        },
+      },
+    },
+    {
+      path: '/optimize-trip',
+      name: 'optimize-trip',
+      component: () => import('./pages/OptimizeTripPage.vue'),
+      meta: {
+        seo: {
+          title: 'Optimize a multi-destination trip · Aveon',
+          description: 'Compare complete multi-destination journeys, destination orders, and stay rules within transparent search limits.',
         },
       },
     },

@@ -31,7 +31,7 @@ describe('Explore router history', () => {
       routes: [
         { path: '/explore', component: ExplorePage },
         { path: '/search', component: { template: '<div />' } },
-        { path: '/multi-destination', component: { template: '<div />' } },
+        { path: '/build-route', component: { template: '<div />' } },
       ],
     })
     await router.push('/explore?path=DUB')
